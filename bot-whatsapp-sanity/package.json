@@ -15,11 +15,14 @@
     "sanity"
   ],
   "dependencies": {
+    "@sanity/client": "^7.8.2",
     "@sanity/vision": "^4.3.0",
+    "qrcode-terminal": "^0.12.0",
     "react": "^19.1",
     "react-dom": "^19.1",
     "sanity": "^4.3.0",
-    "styled-components": "^6.1.18"
+    "styled-components": "^6.1.18",
+    "whatsapp-web.js": "^1.32.0"
   },
   "devDependencies": {
     "@sanity/eslint-config-studio": "^5.0.2",
@@ -33,5 +36,8 @@
     "printWidth": 100,
     "bracketSpacing": false,
     "singleQuote": true
-  }
+  },
+  "description": "Congratulations, you have now installed the Sanity Content Studio, an open-source real-time content editing environment connected to the Sanity backend.",
+  "author": "",
+  "type": "commonjs"
 }
