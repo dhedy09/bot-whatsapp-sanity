@@ -37,30 +37,79 @@ client.on('ready', () => {
 });
 
 // Event ini adalah inti dari bot, terpanggil setiap kali ada pesan masuk
+// GANTI BLOK LAMA ANDA DENGAN VERSI FINAL INI
 client.on('message', async (message) => {
-  const keyword = message.body.toLowerCase().trim();
-  console.log(`💬 Pesan diterima dari ${message.from}: "${keyword}"`);
+  // --- LOGIKA TRIGGER BARU: HANYA MERESPONS JIKA DI-MENTION ---
+  
+  // Dapatkan semua mention di dalam pesan
+  const mentions = await message.getMentions();
+  // Cek apakah salah satu mention adalah bot kita sendiri
+  const botIsMentioned = mentions.some(contact => contact.id._serialized === client.info.wid._serialized);
 
-  // Query GROQ untuk mencari data di Sanity
-  // Artinya: "Cari semua dokumen (*) yang tipenya 'botReply' DAN field 'keyword'-nya sama dengan pesan dari pengguna"
-  const query = '*[_type == "botReply" && keyword == $keyword][0]';
-  const params = { keyword: keyword };
+  // Abaikan pesan jika bot tidak di-mention
+  if (!botIsMentioned) {
+    return;
+  }
 
+  // Ambil teks pesan dan hapus bagian mention (@1234567890) agar bersih
+  const keyword = message.body.replace(/@\d+/g, '').trim().toLowerCase();
+  console.log(`💬 Bot di-mention dengan perintah: "${keyword}"`);
+
+  // --- Sisa logika perintah tetap sama persis ---
+  
   try {
-    const result = await clientSanity.fetch(query, params);
+    // JIKA PERINTAH ADALAH 'menu'
+    if (keyword === 'menu') {
+      const menuQuery = '*[_type == "botReply"]{keyword}';
+      const allData = await clientSanity.fetch(menuQuery);
+
+      if (allData.length > 0) {
+        let menuMessage = 'Selamat datang di bot Dinasdikbud Perencanaan.\n\nBerikut daftar perintah yang tersedia:\n';
+        allData.forEach((item, index) => {
+          // Kita hilangkan trigger '!bot' karena sudah tidak dipakai
+          menuMessage += `\n${index + 1}. ${item.keyword}`; 
+        });
+        message.reply(menuMessage);
+      } else {
+        message.reply('Maaf, belum ada data perintah yang bisa ditampilkan.');
+      }
+      return; 
+    }
+
+    // JIKA PERINTAH ADALAH 'pengumuman'
+    if (keyword === 'pengumuman') {
+      const pengumumanQuery = `*[_type == "pengumuman"] | order(tanggalPublikasi desc)[0...5]`;
+      const items = await clientSanity.fetch(pengumumanQuery);
+
+      if (items && items.length > 0) {
+        let pengumumanMessage = `📢 *5 PENGUMUMAN TERBARU* 📢\n\n`;
+        items.forEach((item, index) => {
+          const tanggal = new Date(item.tanggalPublikasi).toLocaleDateString('id-ID', {
+            day: '2-digit', month: 'long', year: 'numeric'
+          });
+          pengumumanMessage += `*${index + 1}. ${item.judul}*\n`;
+          pengumumanMessage += `   📅 _${tanggal}_\n\n`;
+        });
+        message.reply(pengumumanMessage);
+      } else {
+        message.reply('Maaf, saat ini tidak ada pengumuman yang tersedia.');
+      }
+      return; 
+    }
+    
+    // LOGIKA LAMA (untuk mengambil jawaban spesifik)
+    const singleQuery = '*[_type == "botReply" && keyword == $keyword][0]';
+    const params = { keyword: keyword };
+    const result = await clientSanity.fetch(singleQuery, params);
 
     if (result) {
-      // Jika data ditemukan di Sanity, kirim jawabannya
-      console.log(`✔️ Keyword ditemukan, membalas dengan: "${result.jawaban}"`);
       message.reply(result.jawaban);
     } else {
-      // Jika tidak ditemukan, abaikan atau kirim pesan default
-      console.log('❌ Keyword tidak ditemukan di Sanity.');
-      // Anda bisa menambahkan balasan default di sini jika mau, misalnya:
-      // message.reply("Maaf, saya tidak mengerti. Coba ketik 'menu'.");
+      message.reply(`Maaf, perintah "${keyword}" tidak ditemukan. Coba mention saya dan ketik "menu" untuk melihat semua pilihan.`);
     }
+
   } catch (error) {
-    console.error('Error saat mengambil data dari Sanity:', error);
+    console.error('Error saat memproses perintah:', error);
     message.reply('Maaf, terjadi sedikit gangguan pada sistem saya.');
   }
 });
