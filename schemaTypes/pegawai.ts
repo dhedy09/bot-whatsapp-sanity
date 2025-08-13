@@ -40,6 +40,20 @@ export default defineType({
       title: 'Jabatan',
       type: 'string',
     }),
+
+    defineField({
+      name: 'tipePegawai',
+      title: 'Level Akses',
+      type: 'string',
+      options: {
+        list: [ // 'list' akan membuat pilihan dropdown
+          {title: 'User', value: 'user'},      // Ganti dari 'Staf Biasa'
+          {title: 'Admin', value: 'admin'}    // Ganti dari 'Kepala Dinas'
+        ],
+        layout: 'radio' // Tampilkan sebagai pilihan radio agar lebih jelas
+      },
+      initialValue: 'user' // Nilai default saat membuat data baru
+    }),
     
     // --- Field 4: Username SIPD ---
     defineField({
@@ -69,6 +83,34 @@ export default defineType({
       type: 'text', // Tipe 'text' lebih cocok untuk catatan atau teks yang lebih panjang.
     }),
     
+    // ... setelah field 'keterangan'
+    
+    // Contoh Field Khusus 1
+    defineField({
+      name: 'userRakortek',
+      title: 'User Rakortek',
+      type: 'string',
+      // 'hidden' akan menyembunyikan field ini jika kondisi terpenuhi
+      // Baca: "Sembunyikan field ini KECUALI tipePegawai adalah 'admin'"
+      hidden: ({parent}) => parent?.tipePegawai !== 'admin',
+    }),
+    
+    // Contoh Field Khusus 2
+    defineField({
+      name: 'sipdRenstra',
+      title: 'User SIPD Renstra',
+      type: 'string',
+      hidden: ({parent}) => parent?.tipePegawai !== 'admin',
+    }),
+        // Contoh Field Khusus 23
+    defineField({
+      name: 'passRenstra',
+      title: 'Password SIPD Renstra',
+      type: 'string',
+      hidden: ({parent}) => parent?.tipePegawai !== 'admin',
+    }),
+    
+    // ... Tambahkan 3 field khusus lainnya dengan pola 'hidden' yang sama ...
     /* ====================================================================
     == CARA MENAMBAH FIELD BARU DI MASA DEPAN ==
     ====================================================================
