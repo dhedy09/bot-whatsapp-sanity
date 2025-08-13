@@ -1,24 +1,8 @@
 // =================================================================
-// ==                      BAGIAN BARU: SERVER WEB                   ==
+// ==              BOT DINASDIKBUD PERENCANAAN v1.3               ==
+// ==        (Versi dengan Fitur 'Kembali ke Menu')             ==
 // =================================================================
-const express = require('express');
-const app = express();
-const port = process.env.PORT || 8080; // Render akan menggunakan port ini
 
-// Endpoint 'health check' untuk menjawab Render
-app.get('/', (req, res) => {
-  res.send('Bot WhatsApp is alive!');
-});
-
-// Menjalankan server web
-app.listen(port, () => {
-  console.log(`Server web berjalan di port ${port}`);
-});
-
-// =================================================================
-// ==              KODE BOT ANDA DIMULAI DARI SINI                  ==
-// ==           (Tidak ada yang berubah dari kode bot Anda)         ==
-// =================================================================
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { createClient } = require('@sanity/client');
@@ -33,35 +17,16 @@ const clientSanity = createClient({
 
 const userState = {};
 
-// ... tempelkan semua sisa kode bot Anda yang sudah berfungsi di sini ...
-// Mulai dari 'const client = new Client(...)' sampai akhir
-
 const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu'
-        ],
-    }
+  authStrategy: new LocalAuth(),
+  puppeteer: { args: ['--no-sandbox'] }
 });
 
-client.on('qr', (qr) => {
-    console.log('--- QR CODE UNTUK WHATSAPP ---');
-    qrcode.generate(qr, { small: true });
-});
-
+client.on('qr', (qr) => console.log('--- QR CODE UNTUK WHATSAPP ---', qrcode.generate(qr, { small: true })));
 client.on('ready', () => console.log('✅ Bot WhatsApp berhasil terhubung dan siap digunakan!'));
 
 client.on('message', async (message) => {
-    // Seluruh logika message handler Anda di sini
-    try {
+  try {
     const chat = await message.getChat();
     const userMessage = message.body.trim();
 
@@ -71,8 +36,9 @@ client.on('message', async (message) => {
     if (userLastState && isNumericChoice) {
       if (userMessage === '0') {
         console.log('↩️  Pengguna memilih 0 untuk kembali ke menu.');
-        delete userState[message.from];
+        delete userState[message.from]; // Menghapus state saat ini
         
+        // Membangun ulang dan mengirim menu utama
         const contact = await message.getContact();
         const userName = contact.pushname || contact.name || 'Pengguna';
         const salamQuery = `*[_type == "botReply" && keyword == "salam_menu_utama"][0]`;
@@ -80,6 +46,7 @@ client.on('message', async (message) => {
         const salamText = salamData ? salamData.jawaban.replace(/\n\n/g, '\n') : 'Berikut adalah menu yang tersedia:';
         const menuUtama = [{ title: 'Daftar Pustaka' }, { title: 'Daftar User SIPD' }];
         
+        // Mengatur state kembali ke menu utama
         userState[message.from] = { type: 'menu_utama', list: menuUtama };
         
         let menuMessage = `👋 Selamat datang *${userName}* di bot perencanaan.\n${salamText}\n\n`;
@@ -95,21 +62,27 @@ client.on('message', async (message) => {
         if (userLastState.type === 'menu_utama') {
             const pilihanJudul = selectedItem.title;
             if (pilihanJudul === 'Daftar Pustaka') {
+              // INI ADALAH MENU BARU, JADI JANGAN HAPUS STATE
+              // State akan di-update di sini dengan daftar kategori nantinya
               const kategoriQuery = `*[_type == "kategoriDokumen"]`;
               const kategoriList = await clientSanity.fetch(kategoriQuery);
               if (!kategoriList || kategoriList.length === 0) {
                 message.reply('Maaf, data untuk pustaka ini belum tersedia.\n\nBalas dengan *0* untuk kembali ke menu utama.');
+                // Atur state agar tombol kembali berfungsi
                 userState[message.from] = { type: 'info', list: [] };
               } else {
                 message.reply('Fitur "Daftar Pustaka" sedang dalam pengembangan lanjut. Terima kasih!\n\nBalas dengan *0* untuk kembali ke menu utama.');
+                 // Atur state agar tombol kembali berfungsi
                 userState[message.from] = { type: 'info', list: [] };
               }
             } else if (pilihanJudul === 'Daftar User SIPD') {
+              // INI ADALAH JAWABAN AKHIR, JADI HAPUS STATE SETELAHNYA
               const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
               if (result) message.reply(result.jawaban);
-              delete userState[message.from];
+              delete userState[message.from]; // <-- STATE DIHAPUS DI SINI
             }
         } else if (userLastState.type === 'pegawai') {
+          // INI ADALAH JAWABAN AKHIR, JADI HAPUS STATE SETELAHNYA
           const pegawai = selectedItem;
           let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*NIP:* ${pegawai.nip || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}\n*Level:* ${pegawai.tipePegawai || 'user'}`;
           if (pegawai.tipePegawai === 'admin') {
@@ -117,13 +90,17 @@ client.on('message', async (message) => {
           }
           detailMessage += `\n\n*Keterangan:* ${pegawai.keterangan || '-'}`;
           message.reply(detailMessage);
-          delete userState[message.from];
+          delete userState[message.from]; // <-- STATE DIHAPUS DI SINI
         }
 
+        // KITA TIDAK LAGI MENGHAPUS STATE SECARA UMUM DI SINI
+        // delete userState[message.from]; // <-- BARIS INI DIHAPUS DARI SINI
         return;
       }
     }
-    
+
+    // ... sisa kode Anda untuk trigger '.' dan '@' tidak perlu diubah ...
+    // Logika di bawah sini sudah benar
     let trigger = '';
     let keyword = '';
 
@@ -131,6 +108,7 @@ client.on('message', async (message) => {
       trigger = '.';
       keyword = userMessage.substring(1).trim().toLowerCase();
     } else if (!chat.isGroup) {
+      // Untuk private chat, kita anggap setiap pesan adalah keyword, kecuali itu angka saat ada state
       if (!userLastState) {
         trigger = 'direct';
         keyword = userMessage.trim().toLowerCase();
@@ -139,6 +117,7 @@ client.on('message', async (message) => {
 
     if (trigger === '') return;
     
+    // Khusus untuk private chat, kita ubah 'menu' menjadi trigger utama jika tidak ada perintah lain
     if (trigger === 'direct' && keyword !== 'menu' && !keyword.startsWith('user')) {
         keyword = 'menu';
     }
@@ -173,12 +152,14 @@ client.on('message', async (message) => {
         detailMessage += `\n\n*Keterangan:* ${pegawai.keterangan || '-'}`;
         return message.reply(detailMessage);
       } 
+      // INI ADALAH MENU BARU, JADI KITA SET STATE
       userState[message.from] = { type: 'pegawai', list: pegawaiDitemukan };
       let pilihanMessage = `Ditemukan beberapa hasil untuk "${kataKunci}".\n\nSilakan balas dengan *nomor* untuk melihat detail:\n\n`;
       pegawaiDitemukan.forEach((pegawai, index) => { pilihanMessage += `${index + 1}. ${pegawai.nama} - *(${pegawai.jabatan})*\n`; });
       return message.reply(pilihanMessage);
     }
     
+    // Perbaikan kecil: jangan kirim pesan 'tidak mengerti' di private chat jika sudah menampilkan menu utama
     if (!chat.isGroup && keyword === 'menu') return;
 
     message.reply('Maaf, saya tidak mengerti perintah itu. Coba `.menu` (di grup). Di chat pribadi, cukup kirim pesan apa saja untuk menampilkan menu.');
@@ -189,4 +170,6 @@ client.on('message', async (message) => {
   }
 });
 
+// ====== BAGIAN 4: Menjalankan Bot ======
+console.log('Memulai bot WhatsApp...');
 client.initialize();
