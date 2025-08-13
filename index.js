@@ -27,7 +27,7 @@ const clientSanity = createClient({
   projectId: 'dk0so8pj',
   dataset: 'production',
   apiVersion: '2025-08-13',
-  token: 'process.env.SANITY_TOKEN',
+  token: 'sk1XUQiUqNVclnlv5ZBluX9AGQRhNYD1TGqJAqi4SpnPPF4I8q7bZisHvDpra702X5OeiuXuZ63OdQxD3Lu3Xuv5idnIfZAefMDETu8Gk9NzVUb79oL55213Ye5j8JPQ4yjD2i4oTK4qnaBQgr6JgD2m4PM754Erb2CHPflQ2BeIh9wYe4Gn',
   useCdn: false,
 });
 
