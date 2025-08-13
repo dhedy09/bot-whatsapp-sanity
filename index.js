@@ -1,41 +1,39 @@
-// =================================================================
-// ==                      BAGIAN BARU: SERVER WEB                   ==
-// =================================================================
+console.log('[LOG 1] Skrip dimulai.');
+
+// Bagian Web Server untuk Render
 const express = require('express');
 const app = express();
-const port = process.env.PORT || 8080; // Render akan menggunakan port ini
+const port = process.env.PORT || 8080;
+app.get('/', (req, res) => res.send('Bot WhatsApp is alive!'));
+app.listen(port, () => console.log(`[LOG 2] Server web berjalan di port ${port}.`));
 
-// Endpoint 'health check' untuk menjawab Render
-app.get('/', (req, res) => {
-  res.send('Bot WhatsApp is alive!');
-});
-
-// Menjalankan server web
-app.listen(port, () => {
-  console.log(`Server web berjalan di port ${port}`);
-});
-
-// =================================================================
-// ==              KODE BOT ANDA DIMULAI DARI SINI                  ==
-// ==           (Tidak ada yang berubah dari kode bot Anda)         ==
-// =================================================================
+// Bagian Bot WhatsApp
+console.log('[LOG 3] Memuat modul-modul bot...');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { createClient } = require('@sanity/client');
+console.log('[LOG 4] Modul bot berhasil dimuat.');
+
+// Cek krusial untuk Sanity Token
+if (!process.env.SANITY_TOKEN) {
+    console.error('FATAL ERROR: SANITY_TOKEN tidak ditemukan di Environment Variables!');
+    // Proses tidak akan dilanjutkan jika token tidak ada
+} else {
+    console.log('[LOG 5] SANITY_TOKEN ditemukan. Mencoba membuat Sanity client...');
+}
 
 const clientSanity = createClient({
   projectId: 'dk0so8pj',
   dataset: 'production',
   apiVersion: '2025-08-13',
-  token: 'sk1XUQiUqNVclnlv5ZBluX9AGQRhNYD1TGqJAqi4SpnPPF4I8q7bZisHvDpra702X5OeiuXuZ63OdQxD3Lu3Xuv5idnIfZAefMDETu8Gk9NzVUb79oL55213Ye5j8JPQ4yjD2i4oTK4qnaBQgr6JgD2m4PM754Erb2CHPflQ2BeIh9wYe4Gn',
+  token: process.env.SANITY_TOKEN,
   useCdn: false,
 });
+console.log('[LOG 6] Sanity client berhasil dibuat.');
 
 const userState = {};
 
-// ... tempelkan semua sisa kode bot Anda yang sudah berfungsi di sini ...
-// Mulai dari 'const client = new Client(...)' sampai akhir
-
+console.log('[LOG 7] Mencoba membuat WhatsApp client...');
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -51,14 +49,19 @@ const client = new Client({
         ],
     }
 });
+console.log('[LOG 8] WhatsApp client berhasil dibuat.');
 
 client.on('qr', (qr) => {
+    console.log('[LOG 9] QR Code diterima. Menampilkan...');
     console.log('--- QR CODE UNTUK WHATSAPP ---');
     qrcode.generate(qr, { small: true });
 });
 
-client.on('ready', () => console.log('✅ Bot WhatsApp berhasil terhubung dan siap digunakan!'));
+client.on('ready', () => {
+    console.log('[LOG 10] ✅ Client sudah siap dan terhubung!');
+});
 
+// ... tempel sisa kode 'client.on('message', ...)' Anda di sini ...
 client.on('message', async (message) => {
     // Seluruh logika message handler Anda di sini
     try {
@@ -189,4 +192,6 @@ client.on('message', async (message) => {
   }
 });
 
+
+console.log('[LOG 11] Mencoba menginisialisasi client...');
 client.initialize();
