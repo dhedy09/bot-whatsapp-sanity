@@ -10,6 +10,10 @@ const { createClient } = require('@sanity/client');
 const qrcode = require('qrcode'); // <-- MODIFIKASI: Menggunakan library baru
 
 const app = express();
+// Endpoint khusus untuk Health Check Render
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
 const port = process.env.PORT || 8080;
 
 // --- MODIFIKASI DIMULAI DI SINI ---
