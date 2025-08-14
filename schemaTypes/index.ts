@@ -1,6 +1,9 @@
 import botReply from './botReply'
 import pengumuman from './pengumuman'
 import pegawai from './pegawai'
-import kategoriDokumen from './kategoriDokumen'
+import kategoriPustaka from './kategoriPustaka'
+import dokumenPustaka from './dokumenPustaka'
+import menuUtamaItem from './menuUtamaItem'
+import nomorTerdaftar from './nomorTerdaftar'
 
-export const schemaTypes = [botReply, pengumuman, pegawai, kategoriDokumen]
+export const schemaTypes = [botReply, pengumuman, pegawai, kategoriPustaka, dokumenPustaka, menuUtamaItem, nomorTerdaftar]
