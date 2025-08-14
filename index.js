@@ -51,7 +51,7 @@ const clientSanity = createClient({
     token: process.env.SANITY_TOKEN,
     useCdn: false,
 });
-
+// ini sesi login
 const client = new Client({
     authStrategy: new LocalAuth({ dataPath: '/data/session' }),
     puppeteer: {
