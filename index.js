@@ -53,7 +53,7 @@ const clientSanity = createClient({
 });
 
 const client = new Client({
-    authStrategy: new LocalAuth()
+    authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
         args: [
