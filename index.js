@@ -81,7 +81,7 @@ client.on('message', async (message) => {
         const salamQuery = `*[_type == "botReply" && keyword == "salam_menu_utama"][0]`;
         const salamData = await clientSanity.fetch(salamQuery);
         const salamText = salamData ? salamData.jawaban.replace(/\n\n/g, '\n') : 'Berikut adalah menu yang tersedia:';
-        const menuUtama = [{ title: 'Daftar Pustaka' }, { title: 'Daftar User SIPD' }];
+        const menuUtama = [{ title: 'Pustaka Data' }, { title: 'Daftar User SIPD' }];
         
         userState[message.from] = { type: 'menu_utama', list: menuUtama };
         
@@ -97,14 +97,14 @@ client.on('message', async (message) => {
 
         if (userLastState.type === 'menu_utama') {
             const pilihanJudul = selectedItem.title;
-            if (pilihanJudul === 'Daftar Pustaka') {
+            if (pilihanJudul === 'Pustaka Data') {
               const kategoriQuery = `*[_type == "kategoriDokumen"]`;
               const kategoriList = await clientSanity.fetch(kategoriQuery);
               if (!kategoriList || kategoriList.length === 0) {
                 message.reply('Maaf, data untuk pustaka ini belum tersedia.\n\nBalas dengan *0* untuk kembali ke menu utama.');
                 userState[message.from] = { type: 'info', list: [] };
               } else {
-                message.reply('Fitur "Daftar Pustaka" sedang dalam pengembangan lanjut. Terima kasih!\n\nBalas dengan *0* untuk kembali ke menu utama.');
+                message.reply('Fitur "Pustaka Data" sedang dalam pengembangan lanjut. Terima kasih!\n\nBalas dengan *0* untuk kembali ke menu utama.');
                 userState[message.from] = { type: 'info', list: [] };
               }
             } else if (pilihanJudul === 'Daftar User SIPD') {
@@ -154,7 +154,7 @@ client.on('message', async (message) => {
         const salamQuery = `*[_type == "botReply" && keyword == "salam_menu_utama"][0]`;
         const salamData = await clientSanity.fetch(salamQuery);
         const salamText = salamData ? salamData.jawaban.replace(/\n\n/g, '\n') : 'Berikut adalah menu yang tersedia:';
-        const menuUtama = [{ title: 'Daftar Pustaka' }, { title: 'Daftar User SIPD' }];
+        const menuUtama = [{ title: 'Pustaka Data' }, { title: 'Daftar User SIPD' }];
         userState[message.from] = { type: 'menu_utama', list: menuUtama };
         let menuMessage = `👋 Selamat datang *${userName}* di bot perencanaan.\n${salamText}\n\n`;
         menuUtama.forEach((item, index) => { menuMessage += `${index + 1}. ${item.title}\n`; });
