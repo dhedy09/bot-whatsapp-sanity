@@ -100,33 +100,56 @@ async function showMainMenu(message) {
     return message.reply(menuMessage);
 }
 
+// ▼▼▼ LALU, TEMPEL KODE YANG BARU DI SINI ▼▼▼
+/**
+ * Menampilkan menu untuk Pustaka Data, termasuk sub-kategori dan dokumen.
+ * Dilengkapi dengan pengaman untuk mencegah infinite loop saat membuat breadcrumb.
+ * @param {import('whatsapp-web.js').Message} message Objek pesan dari whatsapp-web.js
+ * @param {string | null} categoryId ID dari kategori Sanity yang akan ditampilkan, atau null untuk level root.
+ */
 async function showPustakaMenu(message, categoryId) {
     try {
+        // --- LOGIKA BREADCRUMB DENGAN PENGAMAN ---
         const breadcrumbPath = [];
         let currentCatId = categoryId;
-        while (currentCatId) {
-            const parent = await clientSanity.fetch(`*[_type == "kategoriPustaka" && _id == "${currentCatId}"][0]{namaKategori, "parentId": indukKategori._ref}`);
+        let depth = 0; // Counter untuk mencegah infinite loop
+        const maxDepth = 10; // Batas maksimal kedalaman kategori
+
+        while (currentCatId && depth < maxDepth) {
+            const parentQuery = `*[_type == "kategoriPustaka" && _id == "${currentCatId}"][0]{namaKategori, "parentId": indukKategori._ref}`;
+            const parent = await clientSanity.fetch(parentQuery);
+
             if (parent) {
                 breadcrumbPath.unshift(parent.namaKategori);
                 currentCatId = parent.parentId;
             } else {
-                currentCatId = null;
+                currentCatId = null; // Hentikan loop jika kategori tidak ditemukan
             }
+            depth++; // Naikkan counter setiap iterasi
         }
+
         const breadcrumb = breadcrumbPath.length > 0 ? `Pustaka Data > ${breadcrumbPath.join(' > ')}` : 'Pustaka Data';
+
+        // --- LOGIKA UNTUK MENGAMBIL DAFTAR ITEM ---
         const queryFilter = categoryId ? `indukKategori._ref == "${categoryId}"` : '!defined(indukKategori)';
         const subKategoriQuery = `*[_type == "kategoriPustaka" && ${queryFilter}] | order(namaKategori asc)`;
         const dokumenQuery = `*[_type == "dokumenPustaka" && kategoriInduk._ref == "${categoryId}"] | order(namaDokumen asc)`;
+
+        // Ambil data sub-kategori dan dokumen secara paralel
         const [subKategoriList, dokumenList] = await Promise.all([
             clientSanity.fetch(subKategoriQuery),
             categoryId ? clientSanity.fetch(dokumenQuery) : Promise.resolve([])
         ]);
+
         const combinedList = [...subKategoriList, ...dokumenList];
+
+        // --- KIRIM BALASAN KE PENGGUNA ---
         if (combinedList.length === 0) {
             message.reply(`Maaf, belum ada data di dalam kategori ini.\n\nBalas dengan *0* untuk kembali.`);
             userState[message.from] = { type: 'pustaka_data', currentCategoryId: categoryId, list: [] };
             return;
         }
+
         let menuMessage = `*${breadcrumb}*\n\nSilakan pilih salah satu:\n\n`;
         combinedList.forEach((item, index) => {
             const icon = item._type === 'dokumenPustaka' ? '📄' : '📁';
@@ -134,8 +157,11 @@ async function showPustakaMenu(message, categoryId) {
             menuMessage += `${index + 1}. ${icon} ${title}\n`;
         });
         menuMessage += `\nBalas dengan *0* untuk kembali.`;
+
+        // Simpan state pengguna untuk navigasi selanjutnya
         userState[message.from] = { type: 'pustaka_data', currentCategoryId: categoryId, list: combinedList };
         message.reply(menuMessage);
+
     } catch (error) {
         console.error("Error di showPustakaMenu:", error);
         message.reply("Maaf, terjadi kesalahan saat memuat Pustaka Data.");
@@ -174,11 +200,14 @@ client.on('message', async (message) => {
         if (userLastState && isNumericChoice) {
             if (userMessage === '0') {
                 console.log('↩️  Pengguna memilih 0 untuk kembali.');
-                if (userLastState.type === 'pustaka_data') {
-                    if (userLastState.currentCategoryId) {
-                        const parent = await clientSanity.fetch(`*[_type == "kategoriPustaka" && _id == "${userLastState.currentCategoryId}"][0]{"parentId": indukKategori._ref}`);
+                if (userLastState.currentCategoryId) {
+                    const parent = await clientSanity.fetch(`*[_type == "kategoriPustaka" && _id == "${userLastState.currentCategoryId}"][0]{"parentId": indukKategori._ref}`);
+
+                    // Cek jika parent ditemukan dan punya parent ID
+                    if (parent && parent.parentId) {
                         await showPustakaMenu(message, parent.parentId);
                     } else {
+                        // Jika tidak ada parent (level tertinggi), kembali ke menu utama
                         await showMainMenu(message);
                     }
                 } else {
