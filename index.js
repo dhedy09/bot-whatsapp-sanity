@@ -492,10 +492,12 @@ client.on('message', async (message) => {
                         await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
                     } else if (selectedItem.tipeLink === 'perintah_khusus') {
                         if (selectedItem.perintahKhusus === 'mulai_sesi_ai') {
-                            const linkWa = `https://s.id/AI-Panda`;
-                            const replyMessage = `Klik link ini untuk memulai sesi privat dengan Asisten AI:\n\n${linkWa}`;
+                            const nomorBot = '6283870365038'; // <-- GANTI DENGAN NOMOR BOT ANDA YANG BENAR
+                            const teksOtomatis = encodeURIComponent("Halo, saya ingin memulai sesi AI");
+                            const linkWa = `https://wa.me/${nomorBot}?text=${teksOtomatis}`;
+                            const replyMessage = `Untuk memulai sesi privat dengan Asisten AI, silakan klik link di bawah ini. Anda akan diarahkan ke chat pribadi dengan saya.\n\n${linkWa}`;
                             message.reply(replyMessage);
-                        } else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
+                        }else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
                             const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
                             if (result) {
                                 message.reply(result.jawaban + '\n\nBalas dengan *0* untuk kembali.');
