@@ -261,41 +261,62 @@ const tools = {
  * @returns {string} Jawaban dari AI.
  */
 async function getGeminiResponse(prompt, history) {
-    try {
-        const chat = model.startChat({
-            history: history,
-            tools: tools,
-        });
+    const maxRetries = 3; // Coba panggil API maksimal 3 kali
+    const delay = 2000;   // Jeda 2 detik antar percobaan
 
-        const result = await chat.sendMessage(prompt);
-        const call = result.response.functionCalls()?.[0];
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const chat = model.startChat({
+                history: history,
+                tools: tools,
+            });
 
-        if (call) {
-            console.log("AI meminta untuk memanggil fungsi:", call.name, "dengan argumen:", call.args);
-            
-            let functionResponse;
-            if (call.name === 'getCurrentWeather') {
-                functionResponse = await getCurrentWeather(call.args.location);
+            const result = await chat.sendMessage(prompt);
+            const call = result.response.functionCalls()?.[0];
+
+            if (call) {
+                console.log("AI meminta untuk memanggil fungsi:", call.name, "dengan argumen:", call.args);
+                
+                let functionResponse;
+                if (call.name === 'getCurrentWeather') {
+                    functionResponse = await getCurrentWeather(call.args.location);
                 } else if (call.name === 'getLatestNews') {
                     const query = call.args.query;
                     functionResponse = await getLatestNews(query);
                 }
 
-            if (functionResponse) {
-                const result2 = await chat.sendMessage([
-                    { functionResponse: { name: call.name, response: { content: functionResponse } } }
-                ]);
-                return result2.response.text();
+                if (functionResponse) {
+                    const result2 = await chat.sendMessage([
+                        { functionResponse: { name: call.name, response: { content: functionResponse } } }
+                    ]);
+                    return result2.response.text();
+                } else {
+                     return "Maaf, saya tidak mengenali alat yang diminta.";
+                }
+            }
+            
+            // Jika berhasil, langsung kembalikan hasil dan keluar dari loop
+            return result.response.text();
+
+        } catch (error) {
+            // Periksa apakah ini eror 'Service Unavailable' (503) yang bisa dicoba lagi
+            if (error.status === 503) {
+                console.log(`Attempt ${attempt}: Gagal (503), server sibuk. Mencoba lagi dalam ${delay / 1000} detik...`);
+                
+                if (attempt === maxRetries) {
+                    console.error("Gagal setelah percobaan maksimal karena server terus sibuk.");
+                    return "Maaf, Asisten AI sedang sangat sibuk saat ini. Silakan coba lagi beberapa saat lagi.";
+                }
+                
+                // Tunggu sebentar sebelum mencoba lagi
+                await new Promise(resolve => setTimeout(resolve, delay));
+
             } else {
-                 return "Maaf, saya tidak mengenali alat yang diminta.";
+                // Untuk eror lain (misal: API key salah), langsung hentikan dan laporkan
+                console.error("Error saat memanggil API Gemini (bukan 503):", error);
+                return "Maaf, terjadi kesalahan yang tidak terduga saat menghubungi Asisten AI.";
             }
         }
-        
-        return result.response.text();
-
-    } catch (error) {
-        console.error("Error saat memanggil API Gemini dengan tools:", error);
-        return "Maaf, terjadi kesalahan saat menghubungi Asisten AI Gemini.";
     }
 }
 
