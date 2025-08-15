@@ -218,6 +218,109 @@ async function showPustakaMenu(message, categoryId) {
  * @param {Array} history Riwayat percakapan sebelumnya.
  * @returns {string} Jawaban dari AI.
  */
+// ▼▼▼ GANTI FUNGSI LAMA ANDA DENGAN SEMUA KODE DI BAWAH INI ▼▼▼
+
+// 1. Definisikan "alat" yang bisa digunakan oleh AI
+const tools = {
+  functionDeclarations: [
+    {
+      name: "getCurrentWeather",
+      description: "Mendapatkan data cuaca terkini untuk lokasi tertentu.",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          location: {
+            type: "STRING",
+            description: "Nama kota, misalnya: 'Jakarta', 'Tokyo', atau 'Bandung'.",
+          },
+        },
+        required: ["location"],
+      },
+    },
+    {
+      name: "getLatestNews",
+      description: "Mendapatkan berita utama terkini dari sebuah negara.",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          country: {
+            type: "STRING",
+            description: "Kode negara 2 huruf sesuai ISO 3166-1, contoh: 'id' untuk Indonesia, 'us' untuk Amerika Serikat.",
+          },
+        },
+        required: ["country"],
+      },
+    },
+  ],
+};
+
+/**
+ * Mengirim prompt ke API Gemini, menangani function calling, dan mengembalikan respons.
+ * @param {string} prompt Pesan baru dari pengguna.
+ * @param {Array} history Riwayat percakapan sebelumnya.
+ * @returns {string} Jawaban dari AI.
+ */
+async function getGeminiResponse(prompt, history) {
+    try {
+        const chat = model.startChat({
+            history: history,
+            tools: tools,
+        });
+
+        const result = await chat.sendMessage(prompt);
+        const call = result.response.functionCalls()?.[0];
+
+        if (call) {
+            console.log("AI meminta untuk memanggil fungsi:", call.name, "dengan argumen:", call.args);
+            
+            let functionResponse;
+            if (call.name === 'getCurrentWeather') {
+                functionResponse = await getCurrentWeather(call.args.location);
+            } else if (call.name === 'getLatestNews') {
+                // Default ke 'id' jika negara tidak disebutkan
+                const country = call.args.country || 'id';
+                functionResponse = await getLatestNews(country);
+            }
+
+            if (functionResponse) {
+                const result2 = await chat.sendMessage([
+                    { functionResponse: { name: call.name, response: { content: functionResponse } } }
+                ]);
+                return result2.response.text();
+            } else {
+                 return "Maaf, saya tidak mengenali alat yang diminta.";
+            }
+        }
+        
+        return result.response.text();
+
+    } catch (error) {
+        console.error("Error saat memanggil API Gemini dengan tools:", error);
+        return "Maaf, terjadi kesalahan saat menghubungi Asisten AI Gemini.";
+    }
+}
+
+
+// =================================================================
+// BAGIAN 4: EVENT HANDLER CLIENT WHATSAPP
+// =================================================================
+
+client.on('qr', async (qr) => {
+    console.log('--- QR CODE DITERIMA, MEMBUAT GAMBAR ---');
+    try {
+        qrCodeUrl = await qrcode.toDataURL(qr, { scale: 8 });
+        console.log('Gambar QR Code berhasil dibuat. Silakan buka link aplikasi Anda untuk scan.');
+    } catch (err) {
+        console.error('Gagal membuat gambar QR code:', err);
+    }
+});
+
+client.on('ready', () => {
+    console.log('✅ Bot WhatsApp berhasil terhubung dan siap digunakan!');
+    qrCodeUrl = null;
+});
+
+// awal kode message
 client.on('message', async (message) => {
     try {
         const chat = await message.getChat();
@@ -389,267 +492,6 @@ client.on('message', async (message) => {
         console.error('Terjadi error fatal di event message:', error);
         message.reply('Maaf, terjadi kesalahan tak terduga. Silakan coba lagi.');
     }
-});
-
-
-// =================================================================
-// BAGIAN 4: EVENT HANDLER CLIENT WHATSAPP
-// =================================================================
-
-client.on('qr', async (qr) => {
-    console.log('--- QR CODE DITERIMA, MEMBUAT GAMBAR ---');
-    try {
-        qrCodeUrl = await qrcode.toDataURL(qr, { scale: 8 });
-        console.log('Gambar QR Code berhasil dibuat. Silakan buka link aplikasi Anda untuk scan.');
-    } catch (err) {
-        console.error('Gagal membuat gambar QR code:', err);
-    }
-});
-
-client.on('ready', () => {
-    console.log('✅ Bot WhatsApp berhasil terhubung dan siap digunakan!');
-    qrCodeUrl = null;
-});
-
-// awal kode message
-client.on('message', async (message) => {
-    // PERBAIKAN: Struktur try/catch dan urutan logika sudah diperbaiki
-    try {
-        const chat = await message.getChat();
-        const userMessage = message.body.trim();
-        const userMessageLower = userMessage.toLowerCase();
-        const userLastState = userState[message.from] || userState[message.author];
-
-        // BLOK 1: MENANGANI "MODE AI"
-        // BLOK 1: MENANGANI "MODE AI" - VERSI FINAL DENGAN PENGELOLA MEMORI
-        if (userLastState && userLastState.type === 'ai_mode') {
-            const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
-            if (exitCommands.includes(userMessageLower)) {
-                delete userState[message.from];
-                message.reply('Sesi AI telah berakhir. Anda kembali ke mode normal.');
-                await showMainMenu(message);
-                return;
-            }
-
-            try {
-                await chat.sendStateTyping();
-                const aiResponse = await getGeminiResponse(userMessage, userLastState.history);
-
-                // Kirim balasan dari AI ke pengguna
-                message.reply(aiResponse);
-                
-                // Simpan percakapan ini ke dalam memori (history)
-                userLastState.history.push({ role: 'user', parts: [{ text: userMessage }] });
-                userLastState.history.push({ role: 'model', parts: [{ text: aiResponse }] });
-                
-                // ▼▼▼ PENYEMPURNAAN PENGELOLA MEMORI ▼▼▼
-                const MAX_HISTORY = 10; // Atur batas: simpan 5 percakapan (5 user + 5 model)
-                if (userLastState.history.length > MAX_HISTORY) {
-                    // Ambil 10 item terakhir dari array, buang yang lebih lama
-                    userLastState.history = userLastState.history.slice(-MAX_HISTORY);
-                    console.log(`Memori dipangkas menjadi ${userLastState.history.length} item.`); // Log untuk debug
-                }
-                // ▲▲▲ PENYEMPURNAAN SELESAI ▲▲▲
-
-            } catch (error) {
-                console.error("Error di dalam blok AI Mode:", error);
-                message.reply("Maaf, terjadi gangguan. Coba ulangi pertanyaan Anda.");
-            }
-            return;
-        }
-
-        // BLOK 2: MENANGANI PERINTAH TEKS
-        if (userMessageLower === 'halo panda') {
-            console.log(`▶️  Bot dipicu dengan perintah: "Halo Panda"`);
-            await showMainMenu(message);
-            return;
-        }
-
-            // BLOK KODE UNTUK MENGINGAT FAKTA
-        const rememberPrefix = 'ingat ini:';
-        if (userMessage.toLowerCase().startsWith(rememberPrefix)) {
-            console.log('▶️ Bot dipicu dengan perintah "ingat ini:"');
-            
-            const factToRemember = userMessage.substring(rememberPrefix.length).trim();
-            
-            if (!factToRemember) {
-                return message.reply('Silakan berikan fakta yang harus diingat. Contoh: `ingat ini: nama kucing saya Miko`');
-            }
-
-            const userId = message.from;
-            const contact = await message.getContact();
-            const userName = contact.pushname || contact.name || 'Pengguna';
-
-            try {
-                await chat.sendStateTyping();
-                const query = '*[_type == "memoriPengguna" && userId == $userId][0]';
-                const existingMemoryDoc = await clientSanity.fetch(query, { userId });
-
-                if (existingMemoryDoc) {
-                    // Jika dokumen ada, tambahkan memori baru
-                    await clientSanity
-                        .patch(existingMemoryDoc._id)
-                        .append('daftarMemori', [factToRemember])
-                        .commit({ autoGenerateArrayKeys: true });
-                } else {
-                    // Jika tidak ada, buat dokumen baru
-                    const newMemoryDoc = {
-                        _type: 'memoriPengguna',
-                        userId: userId,
-                        namaPengguna: userName,
-                        daftarMemori: [factToRemember]
-                    };
-                    await clientSanity.create(newMemoryDoc);
-                }
-                message.reply('👍 Baik, sudah saya ingat.');
-            } catch (error) {
-                console.error('Gagal menyimpan memori ke Sanity:', error);
-                message.reply('Maaf, ada kesalahan. Saya gagal mengingat fakta tersebut.');
-            }
-            return; 
-        }
-
-        if (userMessageLower.startsWith('cari user ')) {
-            console.log(`▶️  Bot dipicu dengan perintah: "cari user"`);
-            const kataKunci = userMessage.substring('cari user '.length).trim();
-            
-            if (!kataKunci) {
-                return message.reply('Silakan masukkan nama atau jabatan yang ingin dicari.\nContoh: `cari user Kepala Bidang`');
-            }
-
-            const pegawaiQuery = `*[_type == "pegawai" && (nama match $kataKunci || jabatan match $kataKunci)] | order(nama asc)`;
-            const pegawaiDitemukan = await clientSanity.fetch(pegawaiQuery, { kataKunci: `*${kataKunci}*` });
-
-            if (!pegawaiDitemukan || pegawaiDitemukan.length === 0) return message.reply(`Maaf, data untuk "${kataKunci}" tidak ditemukan.`);
-            
-            if (pegawaiDitemukan.length === 1) {
-                const pegawai = pegawaiDitemukan[0];
-                let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*NIP:* ${pegawai.nip || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}\n*Level:* ${pegawai.tipePegawai || 'user'}`;
-                if (pegawai.tipePegawai === 'admin') {
-                    detailMessage += `\n\n🛡️ *Data Khusus Admin*\n*User Rakortek:* ${pegawai.userRakortek || '-'}\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
-                }
-                detailMessage += `\n\n*Keterangan:* ${pegawai.keterangan || '-'}`;
-                return message.reply(detailMessage);
-            }
-
-            userState[message.from] = { type: 'pegawai', list: pegawaiDitemukan };
-            let pilihanMessage = `Ditemukan beberapa hasil untuk "${kataKunci}".\n\nSilakan balas dengan *nomor* untuk melihat detail:\n\n`;
-            pegawaiDitemukan.forEach((pegawai, index) => {
-                pilihanMessage += `${index + 1}. ${pegawai.nama} - *(${pegawai.jabatan})*\n`;
-            });
-            return message.reply(pilihanMessage);
-        }
-        // Pemicu baru untuk mengaktifkan Mode AI dari chat pribadi
-        const aiTriggerCommands = [
-            'tanya ai', 
-            'mode ai', 
-            'sesi ai', 
-            'panda ai',
-            'halo panda ai',
-            'mulai sesi ai',
-            'halo, saya ingin memulai sesi ai'
-        ];
-
-    // DENGAN KODE BARU INI
-        if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
-            console.log('▶️ Memulai Sesi AI dengan pengecekan memori jangka panjang...');
-            await chat.sendStateTyping();
-
-            // 1. Ambil memori jangka panjang dari Sanity
-            const memoryQuery = '*[_type == "memoriPengguna" && userId == $userId][0]';
-            const memoryDoc = await clientSanity.fetch(memoryQuery, { userId: message.from });
-            
-            const longTermMemories = memoryDoc ? memoryDoc.daftarMemori : [];
-
-            // 2. Buat "contekan" atau system prompt untuk AI
-            let systemPromptText = "Anda adalah Panda, asisten AI yang membantu dan ramah.";
-            if (longTermMemories.length > 0) {
-                const memoryFacts = longTermMemories.join('; ');
-                systemPromptText += `\n\nBerikut adalah beberapa fakta penting yang harus kamu ingat tentang pengguna ini: ${memoryFacts}. Gunakan informasi ini untuk memberikan jawaban yang lebih personal.`;
-            }
-
-            // 3. Siapkan riwayat percakapan dengan "contekan" di paling awal
-            const initialHistory = [{
-                role: 'user',
-                parts: [{ text: `(System Prompt: ${systemPromptText}) Mulai percakapan.` }]
-            }, {
-                role: 'model',
-                parts: [{ text: 'Tentu, saya siap.' }]
-            }];
-
-            userState[message.from] = { type: 'ai_mode', history: initialHistory };
-
-            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`);
-            const welcomeMessage = result ? result.jawaban : "Silakan mulai bertanya. Ketik 'selesai' untuk berhenti.";
-            
-            message.reply(welcomeMessage);
-            return;
-        }
-         // akhir Pemicu baru untuk mengaktifkan Mode AI dari chat pribadi
-
-        // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
-        const isNumericChoice = !isNaN(parseInt(userMessage));
-        if (userLastState && isNumericChoice) {
-            if (userMessage === '0') {
-                console.log('↩️  Pengguna memilih 0 untuk kembali.');
-                if (userLastState.type === 'pustaka_data' && userLastState.currentCategoryId) {
-                    const parent = await clientSanity.fetch(`*[_type == "kategoriPustaka" && _id == "${userLastState.currentCategoryId}"][0]{"parentId": indukKategori._ref}`);
-                    await showPustakaMenu(message, parent ? parent.parentId : null);
-                } else {
-                    await showMainMenu(message);
-                }
-                return;
-            }
-
-            const index = parseInt(userMessage) - 1;
-            if (index >= 0 && index < userLastState.list.length) {
-                const selectedItem = userLastState.list[index];
-                
-                if (userLastState.type === 'pustaka_data') {
-                    if (selectedItem._type === 'kategoriPustaka') {
-                        await showPustakaMenu(message, selectedItem._id);
-                    } else if (selectedItem._type === 'dokumenPustaka') {
-                        let detailMessage = `📄 *Detail Dokumen*\n\n*Nama:* ${selectedItem.namaDokumen}\n*Tahun:* ${selectedItem.tahunDokumen || '-'}\n*Deskripsi:* ${selectedItem.deskripsi || '-'}\n\n*Link:* ${selectedItem.linkDokumen}`;
-                        message.reply(detailMessage);
-                        delete userState[message.from];
-                    }
-                } else if (userLastState.type === 'pegawai') {
-                    const pegawai = selectedItem;
-                    let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*NIP:* ${pegawai.nip || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}\n*Level:* ${pegawai.tipePegawai || 'user'}`;
-                    if (pegawai.tipePegawai === 'admin') {
-                        detailMessage += `\n\n🛡️ *Data Khusus Admin*\n*User Rakortek:* ${pegawai.userRakortek || '-'}\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
-                    }
-                    detailMessage += `\n\n*Keterangan:* ${pegawai.keterangan || '-'}`;
-                    message.reply(detailMessage);
-                    delete userState[message.from];
-                } else if (userLastState.type === 'menu_utama') {
-                    if (selectedItem.tipeLink === 'kategori_pustaka') {
-                        await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
-                    } else if (selectedItem.tipeLink === 'perintah_khusus') {
-                        if (selectedItem.perintahKhusus === 'mulai_sesi_ai') {
-                            const nomorBot = '6283870365038';
-                            const teksOtomatis = encodeURIComponent("Halo, saya ingin memulai sesi AI");
-                            // const linkWa = `https://wa.me/${nomorBot}?text=${teksOtomatis}`;
-                            const linkWa = `https://s.id/AI-Panda`;
-                            const replyMessage = `Untuk memulai sesi privat dengan Asisten AI, silakan klik link di bawah ini. Anda akan diarahkan ke chat pribadi dengan saya.\n\n${linkWa}`;
-                            message.reply(replyMessage);
-                        } else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
-                            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
-                            if (result) {
-                                message.reply(result.jawaban + '\n\nBalas dengan *0* untuk kembali ke menu utama.');
-                                userState[message.from] = { type: 'info', list: [] };
-                            }
-                        }
-                    }
-                }
-                return;
-            }
-        }
-
-    } catch (error) {
-        console.error('Terjadi error fatal di event message:', error);
-        message.reply('Maaf, terjadi kesalahan tak terduga. Silakan coba lagi.');
-    }
 });
 // akhir kode message
 
