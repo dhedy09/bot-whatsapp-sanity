@@ -440,10 +440,10 @@ client.on('message', async (message) => {
             const memoryDoc = await clientSanity.fetch(memoryQuery, { userId: message.from });
             const longTermMemories = memoryDoc ? memoryDoc.daftarMemori : [];
 
-            let systemPromptText = "Anda adalah Panda, asisten AI yang membantu dan ramah.";
-            if (longTermMemories.length > 0) {
-                const memoryFacts = longTermMemories.join('; ');
-                systemPromptText += `\n\nFakta penting yang harus kamu ingat tentang pengguna ini: ${memoryFacts}. Gunakan informasi ini untuk jawaban yang lebih personal.`;
+            let systemPromptText = "Anda adalah Panda, asisten AI yang membantu dan ramah. Anda memiliki akses ke alat untuk mendapatkan informasi cuaca dan berita terkini secara real-time. Jika pengguna bertanya tentang cuaca atau berita, Anda wajib menggunakan alat yang tersedia, jangan menjawab dari pengetahuan internal.";
+                        if (longTermMemories.length > 0) {
+                            const memoryFacts = longTermMemories.join('; ');
+                systemPromptText += `\n\nSelain itu, ingat fakta penting tentang pengguna ini: ${memoryFacts}.`;
             }
 
             const initialHistory = [{ role: 'user', parts: [{ text: `(System Prompt: ${systemPromptText})` }] }, { role: 'model', parts: [{ text: 'Tentu, saya siap.' }] }];
