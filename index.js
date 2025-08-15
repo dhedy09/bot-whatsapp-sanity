@@ -77,6 +77,70 @@ const userState = {};
 // =================================================================
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
+/**
+ * Mengambil data cuaca terkini dari OpenWeatherMap API.
+ * @param {string} location Nama kota untuk dicari cuacanya.
+ * @returns {Promise<string>} String yang mendeskripsikan cuaca.
+ */
+async function getCurrentWeather(location) {
+    try {
+        console.log(`Mencari cuaca untuk: ${location}`);
+        const apiKey = process.env.OPENWEATHER_API_KEY;
+        if (!apiKey) throw new Error("OPENWEATHER_API_KEY tidak ditemukan");
+
+        const url = `https://api.openweathermap.org/data/2.5/weather?q=${location}&appid=${apiKey}&units=metric&lang=id`;
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+            return `Maaf, saya tidak bisa menemukan data cuaca untuk ${location}.`;
+        }
+        
+        const data = await response.json();
+        
+        const weatherDescription = `Cuaca di ${data.name}: ${data.weather[0].description}, suhu ${data.main.temp}°C, terasa seperti ${data.main.feels_like}°C.`;
+        return weatherDescription;
+
+    } catch (error) {
+        console.error("Error di getCurrentWeather:", error);
+        return "Maaf, terjadi kesalahan saat mengambil data cuaca.";
+    }
+}
+
+/**
+ * Mengambil berita utama terkini dari NewsAPI.org.
+ * @param {string} country Kode negara (misal: 'id' untuk Indonesia).
+ * @returns {Promise<string>} String berisi daftar judul berita.
+ */
+async function getLatestNews(country = 'id') {
+    try {
+        console.log(`Mencari berita utama untuk negara: ${country}`);
+        const apiKey = process.env.NEWS_API_KEY;
+        if (!apiKey) throw new Error("NEWS_API_KEY tidak ditemukan");
+
+        const url = `https://newsapi.org/v2/top-headlines?country=${country}&apiKey=${apiKey}&pageSize=5`;
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            return "Maaf, saya tidak bisa mengambil berita terkini.";
+        }
+        
+        const data = await response.json();
+        
+        if (data.articles.length === 0) {
+            return "Tidak ada berita utama yang ditemukan saat ini.";
+        }
+
+        let newsDescription = "Berikut 5 berita utama terkini:\n";
+        data.articles.forEach((article, index) => {
+            newsDescription += `${index + 1}. ${article.title}\n`;
+        });
+        return newsDescription;
+        
+    } catch (error) {
+        console.error("Error di getLatestNews:", error);
+        return "Maaf, terjadi kesalahan saat mengambil data berita.";
+    }
+}
 
 async function showMainMenu(message) {
     // ... (Fungsi ini sudah benar, tidak ada perubahan)
@@ -154,26 +218,178 @@ async function showPustakaMenu(message, categoryId) {
  * @param {Array} history Riwayat percakapan sebelumnya.
  * @returns {string} Jawaban dari AI.
  */
-async function getGeminiResponse(prompt, history) {
-    try {
-        // Gemini menggunakan format history yang sedikit berbeda ('model' bukan 'assistant')
-        const chat = model.startChat({
-            history: history,
-            generationConfig: {
-                maxOutputTokens: 500, // Batasi panjang jawaban agar tidak terlalu panjang
-            },
-        });
+client.on('message', async (message) => {
+    try {
+        const chat = await message.getChat();
+        const userMessage = message.body.trim();
+        const userMessageLower = userMessage.toLowerCase();
+        const userLastState = userState[message.from] || userState[message.author];
 
-        const result = await chat.sendMessage(prompt);
-        const response = await result.response;
-        const text = response.text();
-        return text;
+        // BLOK 1: MENANGANI "MODE AI"
+        if (userLastState && userLastState.type === 'ai_mode') {
+            const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
+            if (exitCommands.includes(userMessageLower)) {
+                delete userState[message.from];
+                message.reply('Sesi AI telah berakhir. Anda kembali ke mode normal.');
+                await showMainMenu(message);
+                return;
+            }
 
-    } catch (error) {
-        console.error("Error saat memanggil API Gemini:", error);
-        return "Maaf, terjadi kesalahan saat menghubungi Asisten AI Gemini. Coba lagi beberapa saat.";
-    }
-}
+            try {
+                await chat.sendStateTyping();
+                const aiResponse = await getGeminiResponse(userMessage, userLastState.history);
+
+                message.reply(aiResponse);
+                
+                userLastState.history.push({ role: 'user', parts: [{ text: userMessage }] });
+                userLastState.history.push({ role: 'model', parts: [{ text: aiResponse }] });
+                
+                const MAX_HISTORY = 10;
+                if (userLastState.history.length > MAX_HISTORY) {
+                    userLastState.history = userLastState.history.slice(-MAX_HISTORY);
+                }
+            } catch (error) {
+                console.error("Error di dalam blok AI Mode:", error);
+                message.reply("Maaf, terjadi gangguan. Coba ulangi pertanyaan Anda.");
+            }
+            return;
+        }
+
+        // BLOK 2: MENANGANI PERINTAH TEKS
+        if (userMessageLower === 'halo panda') {
+            await showMainMenu(message);
+            return;
+        }
+
+        const rememberPrefix = 'ingat ini:';
+        if (userMessage.toLowerCase().startsWith(rememberPrefix)) {
+            const factToRemember = userMessage.substring(rememberPrefix.length).trim();
+            if (!factToRemember) {
+                return message.reply('Silakan berikan fakta yang harus diingat. Contoh: `ingat ini: nama kucing saya Miko`');
+            }
+            const userId = message.from;
+            const contact = await message.getContact();
+            const userName = contact.pushname || contact.name || 'Pengguna';
+            try {
+                await chat.sendStateTyping();
+                const query = '*[_type == "memoriPengguna" && userId == $userId][0]';
+                const existingMemoryDoc = await clientSanity.fetch(query, { userId });
+                if (existingMemoryDoc) {
+                    await clientSanity.patch(existingMemoryDoc._id).append('daftarMemori', [factToRemember]).commit({ autoGenerateArrayKeys: true });
+                } else {
+                    const newMemoryDoc = { _type: 'memoriPengguna', userId, namaPengguna: userName, daftarMemori: [factToRemember] };
+                    await clientSanity.create(newMemoryDoc);
+                }
+                message.reply('👍 Baik, sudah saya ingat.');
+            } catch (error) {
+                console.error('Gagal menyimpan memori ke Sanity:', error);
+                message.reply('Maaf, ada kesalahan. Saya gagal mengingat fakta tersebut.');
+            }
+            return; 
+        }
+
+        if (userMessageLower.startsWith('cari user ')) {
+            const kataKunci = userMessage.substring('cari user '.length).trim();
+            if (!kataKunci) {
+                return message.reply('Silakan masukkan nama atau jabatan. Contoh: `cari user Kepala Bidang`');
+            }
+            const pegawaiQuery = `*[_type == "pegawai" && (nama match $kataKunci || jabatan match $kataKunci)]`;
+            const pegawaiDitemukan = await clientSanity.fetch(pegawaiQuery, { kataKunci: `*${kataKunci}*` });
+            if (!pegawaiDitemukan || pegawaiDitemukan.length === 0) return message.reply(`Maaf, data untuk "${kataKunci}" tidak ditemukan.`);
+            if (pegawaiDitemukan.length === 1) {
+                const pegawai = pegawaiDitemukan[0];
+                let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}`;
+                if (pegawai.tipePegawai === 'admin') {
+                    detailMessage += `\n\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
+                }
+                return message.reply(detailMessage);
+            }
+            userState[message.from] = { type: 'pegawai', list: pegawaiDitemukan };
+            let pilihanMessage = `Ditemukan beberapa hasil untuk "${kataKunci}". Balas dengan *nomor*:\n\n`;
+            pegawaiDitemukan.forEach((p, i) => { pilihanMessage += `${i + 1}. ${p.nama} - *(${p.jabatan})*\n`; });
+            return message.reply(pilihanMessage);
+        }
+        
+        const aiTriggerCommands = ['tanya ai', 'mode ai', 'sesi ai', 'panda ai'];
+        if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
+            await chat.sendStateTyping();
+            const memoryQuery = '*[_type == "memoriPengguna" && userId == $userId][0]';
+            const memoryDoc = await clientSanity.fetch(memoryQuery, { userId: message.from });
+            const longTermMemories = memoryDoc ? memoryDoc.daftarMemori : [];
+
+            let systemPromptText = "Anda adalah Panda, asisten AI yang membantu dan ramah.";
+            if (longTermMemories.length > 0) {
+                const memoryFacts = longTermMemories.join('; ');
+                systemPromptText += `\n\nFakta penting yang harus kamu ingat tentang pengguna ini: ${memoryFacts}. Gunakan informasi ini untuk jawaban yang lebih personal.`;
+            }
+
+            const initialHistory = [{ role: 'user', parts: [{ text: `(System Prompt: ${systemPromptText})` }] }, { role: 'model', parts: [{ text: 'Tentu, saya siap.' }] }];
+            userState[message.from] = { type: 'ai_mode', history: initialHistory };
+            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`);
+            const welcomeMessage = result ? result.jawaban : "Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti.";
+            message.reply(welcomeMessage);
+            return;
+        }
+
+        // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
+        const isNumericChoice = !isNaN(parseInt(userMessage));
+        if (userLastState && isNumericChoice) {
+            if (userMessage === '0') {
+                if (userLastState.type === 'pustaka_data' && userLastState.currentCategoryId) {
+                    const parent = await clientSanity.fetch(`*[_type == "kategoriPustaka" && _id == "${userLastState.currentCategoryId}"][0]{"parentId": indukKategori._ref}`);
+                    await showPustakaMenu(message, parent ? parent.parentId : null);
+                } else {
+                    await showMainMenu(message);
+                }
+                return;
+            }
+
+            const index = parseInt(userMessage) - 1;
+            if (index >= 0 && index < userLastState.list.length) {
+                const selectedItem = userLastState.list[index];
+                
+                if (userLastState.type === 'pustaka_data') {
+                    if (selectedItem._type === 'kategoriPustaka') {
+                        await showPustakaMenu(message, selectedItem._id);
+                    } else if (selectedItem._type === 'dokumenPustaka') {
+                        let detailMessage = `📄 *Dokumen:* ${selectedItem.namaDokumen}\n\n*Link:* ${selectedItem.linkDokumen}`;
+                        message.reply(detailMessage);
+                        delete userState[message.from];
+                    }
+                } else if (userLastState.type === 'pegawai') {
+                    const pegawai = selectedItem;
+                    let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}`;
+                    if (pegawai.tipePegawai === 'admin') {
+                        detailMessage += `\n\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
+                    }
+                    message.reply(detailMessage);
+                    delete userState[message.from];
+                } else if (userLastState.type === 'menu_utama') {
+                    if (selectedItem.tipeLink === 'kategori_pustaka') {
+                        await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
+                    } else if (selectedItem.tipeLink === 'perintah_khusus') {
+                        if (selectedItem.perintahKhusus === 'mulai_sesi_ai') {
+                            const linkWa = `https://s.id/AI-Panda`;
+                            const replyMessage = `Klik link ini untuk memulai sesi privat dengan Asisten AI:\n\n${linkWa}`;
+                            message.reply(replyMessage);
+                        } else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
+                            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
+                            if (result) {
+                                message.reply(result.jawaban + '\n\nBalas dengan *0* untuk kembali.');
+                                userState[message.from] = { type: 'info', list: [] };
+                            }
+                        }
+                    }
+                }
+                return;
+            }
+        }
+
+    } catch (error) {
+        console.error('Terjadi error fatal di event message:', error);
+        message.reply('Maaf, terjadi kesalahan tak terduga. Silakan coba lagi.');
+    }
+});
 
 
 // =================================================================
