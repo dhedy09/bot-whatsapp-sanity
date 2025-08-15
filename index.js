@@ -111,26 +111,26 @@ async function getCurrentWeather(location) {
  * @param {string} country Kode negara (misal: 'id' untuk Indonesia).
  * @returns {Promise<string>} String berisi daftar judul berita.
  */
-async function getLatestNews(country = 'id') {
+async function getLatestNews(query) {
     try {
-        console.log(`Mencari berita utama untuk negara: ${country}`);
+        console.log(`Mencari berita untuk query: ${query}`);
         const apiKey = process.env.NEWS_API_KEY;
         if (!apiKey) throw new Error("NEWS_API_KEY tidak ditemukan");
 
-        const url = `https://newsapi.org/v2/top-headlines?country=${country}&apiKey=${apiKey}&pageSize=5`;
+        const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&apiKey=${apiKey}&pageSize=5&sortBy=relevancy&language=id`;
 
         const response = await fetch(url);
         if (!response.ok) {
-            return "Maaf, saya tidak bisa mengambil berita terkini.";
+            return `Maaf, saya tidak bisa mengambil berita terkait ${query}.`;
         }
         
         const data = await response.json();
         
         if (data.articles.length === 0) {
-            return "Tidak ada berita utama yang ditemukan saat ini.";
+            return `Tidak ada berita yang ditemukan untuk topik "${query}".`;
         }
 
-        let newsDescription = "Berikut 5 berita utama terkini:\n";
+        let newsDescription = `Berikut 5 berita teratas terkait "${query}":\n`;
         data.articles.forEach((article, index) => {
             newsDescription += `${index + 1}. ${article.title}\n`;
         });
@@ -239,16 +239,16 @@ const tools = {
     },
     {
       name: "getLatestNews",
-      description: "Mendapatkan berita utama terkini dari sebuah negara.",
+      description: "Mendapatkan berita terkini berdasarkan topik, kata kunci, atau nama lokasi.",
       parameters: {
         type: "OBJECT",
         properties: {
-          country: {
+          query: {
             type: "STRING",
-            description: "Kode negara 2 huruf sesuai ISO 3166-1, contoh: 'id' untuk Indonesia, 'us' untuk Amerika Serikat.",
+            description: "Topik berita yang ingin dicari, contoh: 'pemilu 2029', 'teknologi', atau 'Sulawesi Barat'.",
           },
         },
-        required: ["country"],
+        required: ["query"],
       },
     },
   ],
@@ -276,11 +276,10 @@ async function getGeminiResponse(prompt, history) {
             let functionResponse;
             if (call.name === 'getCurrentWeather') {
                 functionResponse = await getCurrentWeather(call.args.location);
-            } else if (call.name === 'getLatestNews') {
-                // Default ke 'id' jika negara tidak disebutkan
-                const country = call.args.country || 'id';
-                functionResponse = await getLatestNews(country);
-            }
+                } else if (call.name === 'getLatestNews') {
+                    const query = call.args.query;
+                    functionResponse = await getLatestNews(query);
+                }
 
             if (functionResponse) {
                 const result2 = await chat.sendMessage([
