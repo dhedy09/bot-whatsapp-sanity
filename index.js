@@ -56,8 +56,8 @@ const clientSanity = createClient({
 });
 
 const client = new Client({
-    // authStrategy: new LocalAuth({ dataPath: '/data/session' }),
-    authStrategy: new LocalAuth(),
+    authStrategy: new LocalAuth({ dataPath: '/data/session' }),
+    // authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
         args: [
