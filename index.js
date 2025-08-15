@@ -249,6 +249,50 @@ client.on('message', async (message) => {
             return;
         }
 
+            // BLOK KODE UNTUK MENGINGAT FAKTA
+        const rememberPrefix = 'ingat ini:';
+        if (userMessage.toLowerCase().startsWith(rememberPrefix)) {
+            console.log('▶️ Bot dipicu dengan perintah "ingat ini:"');
+            
+            const factToRemember = userMessage.substring(rememberPrefix.length).trim();
+            
+            if (!factToRemember) {
+                return message.reply('Silakan berikan fakta yang harus diingat. Contoh: `ingat ini: nama kucing saya Miko`');
+            }
+
+            const userId = message.from;
+            const contact = await message.getContact();
+            const userName = contact.pushname || contact.name || 'Pengguna';
+
+            try {
+                await chat.sendStateTyping();
+                const query = '*[_type == "memoriPengguna" && userId == $userId][0]';
+                const existingMemoryDoc = await clientSanity.fetch(query, { userId });
+
+                if (existingMemoryDoc) {
+                    // Jika dokumen ada, tambahkan memori baru
+                    await clientSanity
+                        .patch(existingMemoryDoc._id)
+                        .append('daftarMemori', [factToRemember])
+                        .commit({ autoGenerateArrayKeys: true });
+                } else {
+                    // Jika tidak ada, buat dokumen baru
+                    const newMemoryDoc = {
+                        _type: 'memoriPengguna',
+                        userId: userId,
+                        namaPengguna: userName,
+                        daftarMemori: [factToRemember]
+                    };
+                    await clientSanity.create(newMemoryDoc);
+                }
+                message.reply('👍 Baik, sudah saya ingat.');
+            } catch (error) {
+                console.error('Gagal menyimpan memori ke Sanity:', error);
+                message.reply('Maaf, ada kesalahan. Saya gagal mengingat fakta tersebut.');
+            }
+            return; 
+        }
+
         if (userMessageLower.startsWith('cari user ')) {
             console.log(`▶️  Bot dipicu dengan perintah: "cari user"`);
             const kataKunci = userMessage.substring('cari user '.length).trim();
@@ -290,11 +334,38 @@ client.on('message', async (message) => {
             'halo, saya ingin memulai sesi ai'
         ];
 
+    // DENGAN KODE BARU INI
         if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
+            console.log('▶️ Memulai Sesi AI dengan pengecekan memori jangka panjang...');
+            await chat.sendStateTyping();
+
+            // 1. Ambil memori jangka panjang dari Sanity
+            const memoryQuery = '*[_type == "memoriPengguna" && userId == $userId][0]';
+            const memoryDoc = await clientSanity.fetch(memoryQuery, { userId: message.from });
+            
+            const longTermMemories = memoryDoc ? memoryDoc.daftarMemori : [];
+
+            // 2. Buat "contekan" atau system prompt untuk AI
+            let systemPromptText = "Anda adalah Panda, asisten AI yang membantu dan ramah.";
+            if (longTermMemories.length > 0) {
+                const memoryFacts = longTermMemories.join('; ');
+                systemPromptText += `\n\nBerikut adalah beberapa fakta penting yang harus kamu ingat tentang pengguna ini: ${memoryFacts}. Gunakan informasi ini untuk memberikan jawaban yang lebih personal.`;
+            }
+
+            // 3. Siapkan riwayat percakapan dengan "contekan" di paling awal
+            const initialHistory = [{
+                role: 'user',
+                parts: [{ text: `(System Prompt: ${systemPromptText}) Mulai percakapan.` }]
+            }, {
+                role: 'model',
+                parts: [{ text: 'Tentu, saya siap.' }]
+            }];
+
+            userState[message.from] = { type: 'ai_mode', history: initialHistory };
+
             const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`);
             const welcomeMessage = result ? result.jawaban : "Silakan mulai bertanya. Ketik 'selesai' untuk berhenti.";
             
-            userState[message.from] = { type: 'ai_mode', history: [] };
             message.reply(welcomeMessage);
             return;
         }

@@ -5,5 +5,14 @@ import kategoriPustaka from './kategoriPustaka'
 import dokumenPustaka from './dokumenPustaka'
 import menuUtamaItem from './menuUtamaItem'
 import nomorTerdaftar from './nomorTerdaftar'
+import memoriPengguna from './memoriPengguna'
 
-export const schemaTypes = [botReply, pengumuman, pegawai, kategoriPustaka, dokumenPustaka, menuUtamaItem, nomorTerdaftar]
+export const schemaTypes = [
+    botReply, 
+    pengumuman, 
+    pegawai, 
+    kategoriPustaka, 
+    dokumenPustaka, 
+    menuUtamaItem, 
+    nomorTerdaftar, 
+    memoriPengguna]
