@@ -279,9 +279,18 @@ client.on('message', async (message) => {
             });
             return message.reply(pilihanMessage);
         }
-
         // Pemicu baru untuk mengaktifkan Mode AI dari chat pribadi
-        if (!chat.isGroup && userMessageLower === "halo, saya ingin memulai sesi ai") {
+        const aiTriggerCommands = [
+            'tanya ai', 
+            'mode ai', 
+            'sesi ai', 
+            'panda ai',
+            'halo panda ai',
+            'mulai sesi ai',
+            'halo, saya ingin memulai sesi ai'
+        ];
+
+        if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
             const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`);
             const welcomeMessage = result ? result.jawaban : "Silakan mulai bertanya. Ketik 'selesai' untuk berhenti.";
             
@@ -289,6 +298,7 @@ client.on('message', async (message) => {
             message.reply(welcomeMessage);
             return;
         }
+         // akhir Pemicu baru untuk mengaktifkan Mode AI dari chat pribadi
 
         // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
         const isNumericChoice = !isNaN(parseInt(userMessage));
