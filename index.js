@@ -433,7 +433,15 @@ client.on('message', async (message) => {
             return message.reply(pilihanMessage);
         }
         
-        const aiTriggerCommands = ['tanya ai', 'mode ai', 'sesi ai', 'panda ai', 'Halo, saya ingin memulai sesi AI'];
+        const aiTriggerCommands = [
+            'tanya ai', 
+            'mode ai', 
+            'sesi ai', 
+            'panda ai',
+            'halo panda ai',
+            'mulai sesi ai',
+            'halo, saya ingin memulai sesi ai' // Pastikan ini diketik bersih
+        ];
         if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
             await chat.sendStateTyping();
             const memoryQuery = '*[_type == "memoriPengguna" && userId == $userId][0]';
