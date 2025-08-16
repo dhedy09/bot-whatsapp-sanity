@@ -13,6 +13,7 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 const app = express();
 const { google } = require('googleapis');
 const { Readable } = require('stream');
+const { evaluate } = require('mathjs');
 const FOLDER_DRIVE_ID = '17LsEyvyF06v3dPN7wMv_3NOiaajY8sQk'; // Ganti dengan ID folder Google Drive Anda
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
@@ -87,10 +88,8 @@ const userState = {};
  */
 function evaluateMathExpression(expression) {
     try {
-        // Impor mathjs di dalam fungsi agar lebih rapi
-        const { evaluate } = require('mathjs');
         const result = evaluate(expression);
-
+        
         // Memformat hasil agar tidak terlalu panjang (jika desimal)
         if (typeof result === 'number' && !Number.isInteger(result)) {
             return result.toFixed(4).toString();
@@ -99,7 +98,6 @@ function evaluateMathExpression(expression) {
         return result.toString();
     } catch (error) {
         console.error("Math.js error:", error.message);
-        // Mengembalikan pesan yang ramah untuk AI
         return `Ekspresi '${expression}' tidak valid.`;
     }
 }
@@ -375,25 +373,32 @@ async function getGeminiResponse(prompt, history) {
             const call = result.response.functionCalls()?.[0];
 
             if (call) {
-                console.log("AI meminta untuk memanggil fungsi:", call.name, "dengan argumen:", call.args);
-                
-                let functionResponse;
-                if (call.name === 'getCurrentWeather') {
-                    functionResponse = await getCurrentWeather(call.args.location);
-                } else if (call.name === 'getLatestNews') {
-                    const query = call.args.query;
-                    functionResponse = await getLatestNews(query);
-                }
+                // LOGGING BARU: Untuk melihat apa yang diminta AI
+                console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
+                
+                let functionResponse;
+                if (call.name === 'getCurrentWeather') {
+                    functionResponse = await getCurrentWeather(call.args.location);
+                } else if (call.name === 'getLatestNews') {
+                    functionResponse = await getLatestNews(call.args.query);
+                } else if (call.name === 'calculate') {
+                    functionResponse = evaluateMathExpression(call.args.expression);
+                } else {
+                    // Jika nama fungsi tidak ada dalam daftar kita
+                    console.error(`❌ Nama fungsi tidak dikenali: ${call.name}`);
+                    // Kita sengaja set null agar memicu pesan error yang kita buat
+                    functionResponse = null; 
+                }
 
-                if (functionResponse) {
-                    const result2 = await chat.sendMessage([
-                        { functionResponse: { name: call.name, response: { content: functionResponse } } }
-                    ]);
-                    return result2.response.text();
-                } else {
-                     return "Maaf, saya tidak mengenali alat yang diminta.";
-                }
-            }
+                if (functionResponse) {
+                    const result2 = await chat.sendMessage([
+                        { functionResponse: { name: call.name, response: { content: functionResponse } } }
+                    ]);
+                    return result2.response.text();
+                } else {
+                     return "Maaf, saya tidak mengenali alat yang diminta.";
+                }
+            }
             
             // Jika berhasil, langsung kembalikan hasil dan keluar dari loop
             return result.response.text();
@@ -703,9 +708,9 @@ client.on('message', async (message) => {
             if (!pegawaiDitemukan || pegawaiDitemukan.length === 0) return message.reply(`Maaf, data untuk "${kataKunci}" tidak ditemukan.`);
             if (pegawaiDitemukan.length === 1) {
                 const pegawai = pegawaiDitemukan[0];
-                let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}`;
+                let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*NIP:* ${pegawai.nip || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}\n*Level:* ${pegawai.tipePegawai || 'user'}`;
                 if (pegawai.tipePegawai === 'admin') {
-                    detailMessage += `\n\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
+                    detailMessage += `\n\n🛡️ *Data Khusus Admin*\n*User Rakortek:* ${pegawai.userRakortek || '-'}\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
                 }
                 return message.reply(detailMessage);
             }
