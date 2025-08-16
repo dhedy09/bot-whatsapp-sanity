@@ -553,24 +553,25 @@ client.on('message', async (message) => {
                 const userName = contact.pushname || userId;
 
                 try {
-                    // Gunakan Sanity untuk membuat/memperbarui dokumen memori
+                    // LANGKAH 1: Pastikan dokumen untuk user ini sudah ada.
+                    // createIfNotExists akan membuat dokumen HANYA jika belum ada.
+                    await clientSanity.createIfNotExists({
+                        _id: sanitizedId,
+                        _type: 'memoriPengguna',
+                        userId: userId,
+                        namaPengguna: userName,
+                        daftarMemori: []
+                    });
+
+                    // LANGKAH 2: Setelah dokumen dijamin ada, tambahkan memori baru.
+                    // Perintah .patch().append() sekarang akan selalu berhasil.
                     await clientSanity
-                        .patch(sanitizedId) // <-- GUNAKAN ID YANG SUDAH BERSIH
-                        .setIfMissing({
-                            _type: 'memoriPengguna',
-                            userId: userId,
-                            namaPengguna: userName,
-                            daftarMemori: []
-                        })
-                        .append('daftarMemori', [memoryToSave]) // Tambahkan memori baru ke dalam array
+                        .patch(sanitizedId)
+                        .append('daftarMemori', [memoryToSave])
                         .commit({ autoGenerateArrayKeys: true });
 
                     message.reply("Baik, saya akan mengingatnya.");
                     console.log(`Memori baru disimpan untuk user ${userName}: "${memoryToSave}"`);
-
-                } catch (error) {
-                    console.error("Gagal menyimpan memori ke Sanity:", error);
-                    message.reply("Maaf, terjadi kesalahan saat saya mencoba mengingat informasi ini.");
                 }
                 return; // Hentikan proses agar perintah "ingat ini:" tidak dikirim ke AI
             }
