@@ -14,6 +14,7 @@ const app = express();
 const { google } = require('googleapis');
 const { Readable } = require('stream');
 const { evaluate } = require('mathjs');
+const axios = require('axios');
 const FOLDER_DRIVE_ID = '17LsEyvyF06v3dPN7wMv_3NOiaajY8sQk'; // Ganti dengan ID folder Google Drive Anda
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
@@ -806,6 +807,32 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 }
 
 // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
+
+        // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
+
+        // BLOK BARU: FITUR CUACA INTERAKTIF
+        // Bagian 1: Memicu permintaan cuaca
+        if (userMessageLower === 'cuaca') {
+            userState[message.from] = { type: 'menunggu_lokasi_cuaca' };
+            message.reply('Tentu, ingin tahu prakiraan cuaca di kota atau daerah mana?');
+            return;
+        }
+
+        // Bagian 2: Menangani jawaban lokasi dari pengguna dan MEMANGGIL FUNGSI ANDA
+        if (userLastState && userLastState.type === 'menunggu_lokasi_cuaca') {
+            const lokasi = userMessage;
+            message.reply(`⏳ Sedang mencari prakiraan cuaca untuk *${lokasi}*, mohon tunggu...`);
+
+            // Memanggil fungsi `getCurrentWeather` Anda yang sudah ada!
+            const weatherResult = await getCurrentWeather(lokasi); 
+
+            message.reply(weatherResult);
+
+            delete userState[message.from]; // Hapus state setelah selesai
+            return;
+        }
+
+        // ▲▲▲ AKHIR DARI BLOK BARU  CUACA▲▲▲
 
         // ▼▼▼ TAMBAHKAN BLOK PENJAGA INI ▼▼▼
         if (userLastState && (userLastState.type === 'menu_utama' || userLastState.type === 'pustaka_data' || userLastState.type === 'pegawai')) {
