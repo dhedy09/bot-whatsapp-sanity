@@ -450,17 +450,17 @@ async function uploadKeDrive(media, namaFileKustom) {
         stream.push(null);
 
         const response = await drive.files.create({
-            requestBody: {
-                name: namaFileKustom,
-                parents: [FOLDER_DRIVE_ID]
-            },
-            media: {
-                mimeType: media.mimetype,
-                body: stream,
-            },
-            fields: 'id',
-            supportsAllDrives: true // <-- BARIS PENTING INI DITAMBAHKAN
-        });
+            requestBody: {
+                name: namaFileKustom,
+                parents: [FOLDER_DRIVE_ID]
+            },
+            media: {
+                mimeType: media.mimetype,
+                body: stream,
+            },
+            fields: 'id',
+            supportsAllDrives: true, // <-- BARIS PENTING INI DITAMBAHKAN
+        });
 
         console.log(`✅ File berhasil diunggah ke Drive. ID: ${response.data.id}`);
         return response.data.id; // Kembalikan ID file di Drive
@@ -517,33 +517,60 @@ client.on('ready', () => {
 });
 
 // awal kode message
-// awal kode message
 client.on('message', async (message) => {
-    try {
-        const chat = await message.getChat();
-        const userMessage = message.body.trim();
-        const userMessageLower = userMessage.toLowerCase();
-        const userLastState = userState[message.from] || userState[message.author];
+    try {
+        const chat = await message.getChat();
+        const userMessage = message.body.trim();
+        const userMessageLower = userMessage.toLowerCase();
+        const userLastState = userState[message.from] || userState[message.author];
 
-        // =================================================================
-        // PRIORITAS #1: PERINTAH-PERINTAH KHUSUS
-        // Semua perintah teks diperiksa di sini SEBELUM mode AI.
-        // =================================================================
+        // BLOK 2: MENANGANI PERINTAH TEKS
+        if (userMessageLower === 'halo panda') {
+            await showMainMenu(message);
+            return;
+        }
 
-        if (userMessageLower === 'halo panda') {
-            await showMainMenu(message);
-            return;
-        }
+        // ▼▼▼ BLOK BARU UNTUK MENAMPILKAN DAFTAR PERINTAH ▼▼▼
+        const commandKeywords = ['help', 'menu bantuan'];
+        if (commandKeywords.includes(userMessageLower)) {
+            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "daftar_perintah"][0]`);
+            if (result && result.jawaban) {
+                return message.reply(result.jawaban);
+            } else {
+                return message.reply("Maaf, daftar perintah belum diatur di Sanity.");
+            }
+        }
+        // ▲▲▲ BATAS AKHIR BLOK BARU ▲▲▲
 
-        const commandKeywords = ['help', 'menu bantuan'];
-        if (commandKeywords.includes(userMessageLower)) {
-            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "daftar_perintah"][0]`);
-            if (result && result.jawaban) {
-                return message.reply(result.jawaban);
-            } else {
-                return message.reply("Maaf, daftar perintah belum diatur di Sanity.");
-            }
-        }
+        // BLOK 1: MENANGANI "MODE AI"
+        if (userLastState && userLastState.type === 'ai_mode') {
+            const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
+            if (exitCommands.includes(userMessageLower)) {
+                delete userState[message.from];
+                message.reply('Sesi AI telah berakhir. Anda kembali ke mode normal.');
+                await showMainMenu(message);
+                return;
+            }
+
+            try {
+                await chat.sendStateTyping();
+                const aiResponse = await getGeminiResponse(userMessage, userLastState.history);
+
+                message.reply(aiResponse);
+                
+                userLastState.history.push({ role: 'user', parts: [{ text: userMessage }] });
+                userLastState.history.push({ role: 'model', parts: [{ text: aiResponse }] });
+                
+                const MAX_HISTORY = 10;
+                if (userLastState.history.length > MAX_HISTORY) {
+                    userLastState.history = userLastState.history.slice(-MAX_HISTORY);
+                }
+            } catch (error) {
+                console.error("Error di dalam blok AI Mode:", error);
+                message.reply("Maaf, terjadi gangguan. Coba ulangi pertanyaan Anda.");
+            }
+            return;
+        }
 
         const rememberPrefix = 'ingat ini:';
         if (userMessage.toLowerCase().startsWith(rememberPrefix)) {
@@ -569,195 +596,230 @@ client.on('message', async (message) => {
                 console.error('Gagal menyimpan memori ke Sanity:', error);
                 message.reply('Maaf, ada kesalahan. Saya gagal mengingat fakta tersebut.');
             }
-            return;
+            return; 
         }
 
-        const simpanPrefix = 'panda simpan ';
-        if (userMessageLower.startsWith(simpanPrefix)) {
-            if (!message.hasQuotedMsg) return message.reply('❌ Perintah ini hanya berfungsi jika Anda membalas file yang ingin disimpan.');
-            const quotedMsg = await message.getQuotedMessage();
-            if (!quotedMsg.hasMedia) return message.reply('❌ Anda harus membalas sebuah file (PDF, Dokumen, Gambar), bukan pesan teks.');
-            const namaFile = userMessage.substring(simpanPrefix.length).trim();
-            if (!namaFile) return message.reply('❌ Silakan berikan nama untuk file Anda.\nContoh: `panda simpan Laporan Keuangan`');
-            
-            try {
-                message.reply('⏳ Sedang memproses, mohon tunggu...');
-                const media = await quotedMsg.downloadMedia();
-                const driveId = await uploadKeDrive(media, namaFile);
-                if (!driveId) return message.reply(' Gagal mengunggah file ke Google Drive.');
-                
-                const contact = await message.getContact();
-                const dataFile = {
-                    namaFile: namaFile,
-                    googleDriveId: driveId,
-                    diunggahOleh: contact.pushname || message.author,
-                    groupId: chat.isGroup ? chat.id._serialized : 'pribadi',
-                    tipeFile: media.mimetype,
-                };
-                await simpanDataFileKeSanity(dataFile);
-                return message.reply(`✅ Berhasil! File dengan nama *"${namaFile}"* telah diarsipkan.`);
-            } catch (error) {
-                console.error("Error di blok simpan file:", error);
-                return message.reply(' Gagal memproses file. Terjadi kesalahan tak terduga.');
-            }
-        }
+        // ▼▼▼ TAMBAHKAN BLOK BARU UNTUK SIMPAN FILE DI SINI ▼▼▼
+        const simpanPrefix = 'panda simpan ';
+        if (userMessageLower.startsWith(simpanPrefix)) {
+            // Pemeriksaan 1: Apakah ini sebuah balasan?
+            if (!message.hasQuotedMsg) {
+                return message.reply('❌ Perintah ini hanya berfungsi jika Anda membalas file yang ingin disimpan.');
+            }
+
+            const quotedMsg = await message.getQuotedMessage();
+
+            // Pemeriksaan 2: Apakah yang dibalas adalah file?
+            if (!quotedMsg.hasMedia) {
+                return message.reply('❌ Anda harus membalas sebuah file (PDF, Dokumen, Gambar), bukan pesan teks.');
+            }
+
+            const namaFile = userMessage.substring(simpanPrefix.length).trim();
+
+            // Pemeriksaan 3: Apakah nama file diberikan?
+            if (!namaFile) {
+                return message.reply('❌ Silakan berikan nama untuk file Anda.\nContoh: `panda simpan Laporan Keuangan`');
+            }
+
+            try {
+                message.reply('⏳ Sedang memproses, mohon tunggu...');
+                const media = await quotedMsg.downloadMedia();
+                
+                // Langkah 1: Upload ke Google Drive
+                const driveId = await uploadKeDrive(media, namaFile);
+                if (!driveId) {
+                    return message.reply(' Gagal mengunggah file ke Google Drive.');
+                }
+
+                // Langkah 2: Simpan informasi ke Sanity
+                const contact = await message.getContact();
+                const dataFile = {
+                    namaFile: namaFile,
+                    googleDriveId: driveId,
+                    diunggahOleh: contact.pushname || message.author,
+                    groupId: chat.isGroup ? chat.id._serialized : 'pribadi',
+                    tipeFile: media.mimetype,
+                };
+                await simpanDataFileKeSanity(dataFile);
+
+                return message.reply(`✅ Berhasil! File dengan nama *"${namaFile}"* telah diarsipkan.`);
+
+            } catch (error) {
+                console.error("Error di blok simpan file:", error);
+                return message.reply(' Gagal memproses file. Terjadi kesalahan tak terduga.');
+            }
+
+        }
+        // ▲▲▲ BATAS AKHIR BLOK BARU SIMPAN FILE▲▲▲
+
+// ▼▼▼ BLOK BARU UNTUK MENCARI & MENGIRIM FILE ▼▼▼
+        const cariPrefix = 'cari file ';
+        if (userMessageLower.startsWith(cariPrefix)) {
+            const kataKunci = userMessage.substring(cariPrefix.length).trim();
+            if (!kataKunci) {
+                return message.reply('Silakan masukkan kata kunci. Contoh: `cari file laporan`');
+            }
+
+            const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
+            const hasilPencarian = await cariFileDiSanity(kataKunci, groupId);
+
+            if (hasilPencarian.length === 0) {
+                return message.reply(`Tidak ada file yang ditemukan dengan kata kunci "${kataKunci}" di arsip grup ini.`);
+            }
+
+            let replyMessage = `Ditemukan ${hasilPencarian.length} file:\n\n`;
+            hasilPencarian.forEach(file => {
+                replyMessage += `📄 *${file.namaFile}*\n`;
+            });
+            replyMessage += `\nUntuk mengambil, balas dengan:\n\`kirim file <nama file lengkap>\``;
+            return message.reply(replyMessage);
+        }
+
+        const kirimPrefix = 'kirim file ';
+        if (userMessageLower.startsWith(kirimPrefix)) {
+            const namaFile = userMessage.substring(kirimPrefix.length).trim();
+            if (!namaFile) {
+                return message.reply('Silakan masukkan nama file lengkap. Contoh: `kirim file Laporan Keuangan 2025`');
+            }
+
+            const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
+            
+            // Query untuk mencari nama file yang persis
+            const query = `*[_type == "fileArsip" && namaFile == $namaFile && groupId == $groupId][0]`;
+            const fileData = await clientSanity.fetch(query, { namaFile, groupId });
+
+            if (!fileData) {
+                return message.reply(`File dengan nama persis "${namaFile}" tidak ditemukan di arsip grup ini.`);
+            }
+            
+            message.reply(`⏳ Sedang mengambil file *"${namaFile}"* dari arsip, mohon tunggu...`);
+            await kirimFileDariDrive(fileData.googleDriveId, fileData.namaFile, message.from);
+            return;
+        }
+        // ▲▲▲ BATAS AKHIR BLOK BARU  PEMANGGIL FILE▲▲▲
+
+        if (userMessageLower.startsWith('cari user ')) {
+            const kataKunci = userMessage.substring('cari user '.length).trim();
+            if (!kataKunci) {
+                return message.reply('Silakan masukkan nama atau jabatan. Contoh: `cari user Kepala Bidang`');
+            }
+            const pegawaiQuery = `*[_type == "pegawai" && (nama match $kataKunci || jabatan match $kataKunci)]`;
+            const pegawaiDitemukan = await clientSanity.fetch(pegawaiQuery, { kataKunci: `*${kataKunci}*` });
+            if (!pegawaiDitemukan || pegawaiDitemukan.length === 0) return message.reply(`Maaf, data untuk "${kataKunci}" tidak ditemukan.`);
+            if (pegawaiDitemukan.length === 1) {
+                const pegawai = pegawaiDitemukan[0];
+                let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*NIP:* ${pegawai.nip || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}\n*Level:* ${pegawai.tipePegawai || 'user'}`;
+                if (pegawai.tipePegawai === 'admin') {
+                    detailMessage += `\n\n🛡️ *Data Khusus Admin*\n*User Rakortek:* ${pegawai.userRakortek || '-'}\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
+                }
+                return message.reply(detailMessage);
+            }
+            userState[message.from] = { type: 'pegawai', list: pegawaiDitemukan };
+            let pilihanMessage = `Ditemukan beberapa hasil untuk "${kataKunci}". Balas dengan *nomor*:\n\n`;
+            pegawaiDitemukan.forEach((p, i) => { pilihanMessage += `${i + 1}. ${p.nama} - *(${p.jabatan})*\n`; });
+            return message.reply(pilihanMessage);
+        }
         
-        const cariPrefix = 'cari file ';
-        if (userMessageLower.startsWith(cariPrefix)) {
-            const kataKunci = userMessage.substring(cariPrefix.length).trim();
-            if (!kataKunci) return message.reply('Silakan masukkan kata kunci. Contoh: `cari file laporan`');
-            const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
-            const hasilPencarian = await cariFileDiSanity(kataKunci, groupId);
-            if (hasilPencarian.length === 0) return message.reply(`Tidak ada file yang ditemukan dengan kata kunci "${kataKunci}" di arsip ini.`);
-            
-            let replyMessage = `Ditemukan ${hasilPencarian.length} file:\n\n`;
-            hasilPencarian.forEach(file => { replyMessage += `📄 *${file.namaFile}*\n`; });
-            replyMessage += `\nUntuk mengambil, balas dengan:\n\`kirim file <nama file lengkap>\``;
-            return message.reply(replyMessage);
-        }
+        const aiTriggerCommands = [
+            'tanya ai', 
+            'mode ai', 
+            'sesi ai', 
+            'panda ai',
+            'halo panda ai',
+            'mulai sesi ai',
+            'halo, saya ingin memulai sesi ai' // Pastikan ini diketik bersih
+        ];
+        if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
+            await chat.sendStateTyping();
+            const memoryQuery = '*[_type == "memoriPengguna" && userId == $userId][0]';
+            const memoryDoc = await clientSanity.fetch(memoryQuery, { userId: message.from });
+            const longTermMemories = memoryDoc ? memoryDoc.daftarMemori : [];
 
-        const kirimPrefix = 'kirim file ';
-        if (userMessageLower.startsWith(kirimPrefix)) {
-            const namaFile = userMessage.substring(kirimPrefix.length).trim();
-            if (!namaFile) return message.reply('Silakan masukkan nama file lengkap. Contoh: `kirim file Laporan Keuangan 2025`');
-            const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
-            const query = `*[_type == "fileArsip" && namaFile == $namaFile && groupId == $groupId][0]`;
-            const fileData = await clientSanity.fetch(query, { namaFile, groupId });
-            if (!fileData) return message.reply(`File dengan nama persis "${namaFile}" tidak ditemukan di arsip ini.`);
-            
-            message.reply(`⏳ Sedang mengambil file *"${namaFile}"* dari arsip, mohon tunggu...`);
-            await kirimFileDariDrive(fileData.googleDriveId, fileData.namaFile, message.from);
-            return;
-        }
+            let systemPromptText = "Anda adalah Panda, asisten AI yang membantu dan ramah. Anda memiliki akses ke alat untuk mendapatkan informasi cuaca dan berita terkini secara real-time. Jika pengguna bertanya tentang cuaca atau berita, Anda wajib menggunakan alat yang tersedia, jangan menjawab dari pengetahuan internal.";
+                        if (longTermMemories.length > 0) {
+                            const memoryFacts = longTermMemories.join('; ');
+                systemPromptText += `\n\nSelain itu, ingat fakta penting tentang pengguna ini: ${memoryFacts}.`;
+            }
 
-        if (userMessageLower.startsWith('cari user ')) {
-            const kataKunci = userMessage.substring('cari user '.length).trim();
-            if (!kataKunci) return message.reply('Silakan masukkan nama atau jabatan. Contoh: `cari user Kepala Bidang`');
-            const pegawaiQuery = `*[_type == "pegawai" && (nama match $kataKunci || jabatan match $kataKunci)]`;
-            const pegawaiDitemukan = await clientSanity.fetch(pegawaiQuery, { kataKunci: `*${kataKunci}*` });
-            if (!pegawaiDitemukan || pegawaiDitemukan.length === 0) return message.reply(`Maaf, data untuk "${kataKunci}" tidak ditemukan.`);
-            
-            if (pegawaiDitemukan.length === 1) {
-                const pegawai = pegawaiDitemukan[0];
-                let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}`;
-                if (pegawai.usernameSipd) detailMessage += `\n*Username SIPD:* ${pegawai.usernameSipd}`;
-                if (pegawai.tipePegawai === 'admin') {
-                    if (pegawai.passwordSipd) detailMessage += `\n*Password SIPD:* ${pegawai.passwordSipd}`;
-                    if (pegawai.passwordPenatausahaan) detailMessage += `\n*Pass Penatausahaan:* ${pegawai.passwordPenatausahaan}`;
-                    if (pegawai.userRakortek) detailMessage += `\n*User Rakortek:* ${pegawai.userRakortek}`;
-                    if (pegawai.sipdRenstra) detailMessage += `\n*User Renstra:* ${pegawai.sipdRenstra}`;
-                    if (pegawai.passRenstra) detailMessage += `\n*Password Renstra:* ${pegawai.passRenstra}`;
-                }
-                return message.reply(detailMessage);
-            }
-            
-            userState[message.from] = { type: 'pegawai', list: pegawaiDitemukan };
-            let pilihanMessage = `Ditemukan beberapa hasil untuk "${kataKunci}". Balas dengan *nomor*:\n\n`;
-            pegawaiDitemukan.forEach((p, i) => { pilihanMessage += `${i + 1}. ${p.nama} - *(${p.jabatan})*\n`; });
-            return message.reply(pilihanMessage);
-        }
+            const initialHistory = [{ role: 'user', parts: [{ text: `(System Prompt: ${systemPromptText})` }] }, { role: 'model', parts: [{ text: 'Tentu, saya siap.' }] }];
+            userState[message.from] = { type: 'ai_mode', history: initialHistory };
+            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`);
+            const welcomeMessage = result ? result.jawaban : "Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti.";
+            message.reply(welcomeMessage);
+            return;
+        }
 
-        const aiTriggerCommands = ['tanya ai', 'mode ai', 'sesi ai', 'panda ai', 'halo panda ai', 'mulai sesi ai', 'halo, saya ingin memulai sesi ai'];
-        if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
-            await chat.sendStateTyping();
-            const memoryQuery = '*[_type == "memoriPengguna" && userId == $userId][0]';
-            const memoryDoc = await clientSanity.fetch(memoryQuery, { userId: message.from });
-            const longTermMemories = memoryDoc ? memoryDoc.daftarMemori : [];
-            let systemPromptText = "Anda adalah Panda, asisten AI yang membantu dan ramah..."; // Isi prompt Anda
-            if (longTermMemories.length > 0) {
-                const memoryFacts = longTermMemories.join('; ');
-                systemPromptText += `\n\nSelain itu, ingat fakta penting tentang pengguna ini: ${memoryFacts}.`;
-            }
-            const initialHistory = [{ role: 'user', parts: [{ text: `(System Prompt: ${systemPromptText})` }] }, { role: 'model', parts: [{ text: 'Tentu, saya siap.' }] }];
-            userState[message.from] = { type: 'ai_mode', history: initialHistory };
-            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`);
-            const welcomeMessage = result ? result.jawaban : "Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti.";
-            message.reply(welcomeMessage);
-            return;
-        }
+// BLOK 3: MENANGANI PILIHAN MENU NUMERIK
 
-        // =================================================================
-        // PRIORITAS #2: BLOK MODE AI
-        // Jika tidak ada perintah khusus yang cocok, baru periksa mode AI.
-        // =================================================================
-        if (userLastState && userLastState.type === 'ai_mode') {
-            const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
-            if (exitCommands.includes(userMessageLower)) {
-                delete userState[message.from];
-                message.reply('Sesi AI telah berakhir. Anda kembali ke mode normal.');
-                await showMainMenu(message);
-                return;
-            }
-            try {
-                await chat.sendStateTyping();
-                const aiResponse = await getGeminiResponse(userMessage, userLastState.history);
-                message.reply(aiResponse);
-                userLastState.history.push({ role: 'user', parts: [{ text: userMessage }] });
-                userLastState.history.push({ role: 'model', parts: [{ text: aiResponse }] });
-                const MAX_HISTORY = 10;
-                if (userLastState.history.length > MAX_HISTORY) {
-                    userLastState.history = userLastState.history.slice(-MAX_HISTORY);
-                }
-            } catch (error) {
-                console.error("Error di dalam blok AI Mode:", error);
-                message.reply("Maaf, terjadi gangguan. Coba ulangi pertanyaan Anda.");
-            }
-            return;
-        }
+        // ▼▼▼ TAMBAHKAN BLOK PENJAGA INI ▼▼▼
+        if (userLastState && (userLastState.type === 'menu_utama' || userLastState.type === 'pustaka_data' || userLastState.type === 'pegawai')) {
+            if (message.hasMedia) {
+                // Pengguna mengirim file saat bot sedang dalam mode menu. Abaikan saja.
+                return;
+            }
+        }
+        // ▲▲▲ BATAS AKHIR BLOK PENJAGA ▲▲▲
 
-        // =================================================================
-        // PRIORITAS #3: BLOK MENU NUMERIK
-        // Jika tidak ada perintah dan bukan mode AI, baru periksa menu.
-        // =================================================================
-        if (userLastState && (userLastState.type === 'menu_utama' || userLastState.type === 'pustaka_data' || userLastState.type === 'pegawai')) {
-            if (message.hasMedia) { return; } // Abaikan file saat mode menu
+        // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
+        const isNumericChoice = !isNaN(parseInt(userMessage));
+        if (userLastState && isNumericChoice) {
+            if (userMessage === '0') {
+                if (userLastState.type === 'pustaka_data' && userLastState.currentCategoryId) {
+                    const parent = await clientSanity.fetch(`*[_type == "kategoriPustaka" && _id == "${userLastState.currentCategoryId}"][0]{"parentId": indukKategori._ref}`);
+                    await showPustakaMenu(message, parent ? parent.parentId : null);
+                } else {
+                    await showMainMenu(message);
+                }
+                return;
+            }
 
-            const isNumericChoice = !isNaN(parseInt(userMessage));
-            if (isNumericChoice) {
-                if (userMessage === '0') {
-                    if (userLastState.type === 'pustaka_data' && userLastState.currentCategoryId) {
-                        const parent = await clientSanity.fetch(`*[_type == "kategoriPustaka" && _id == "${userLastState.currentCategoryId}"][0]{"parentId": indukKategori._ref}`);
-                        await showPustakaMenu(message, parent ? parent.parentId : null);
-                    } else {
-                        await showMainMenu(message);
-                    }
-                    return;
-                }
+            const index = parseInt(userMessage) - 1;
+            if (index >= 0 && index < userLastState.list.length) {
+                const selectedItem = userLastState.list[index];
+                
+                if (userLastState.type === 'pustaka_data') {
+                    if (selectedItem._type === 'kategoriPustaka') {
+                        await showPustakaMenu(message, selectedItem._id);
+                    } else if (selectedItem._type === 'dokumenPustaka') {
+                        let detailMessage = `📄 *Detail Dokumen*\n\n*Nama:* ${selectedItem.namaDokumen}\n*Tahun:* ${selectedItem.tahunDokumen || '-'}\n*Deskripsi:* ${selectedItem.deskripsi || '-'}\n\n*Link:* ${selectedItem.linkDokumen}`;
+                        message.reply(detailMessage);
+                        delete userState[message.from];
+                    }
+                } else if (userLastState.type === 'pegawai') {
+                    const pegawai = selectedItem;
+                    let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}`;
+                    if (pegawai.tipePegawai === 'admin') {
+                        detailMessage += `\n\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
+                    }
+                    message.reply(detailMessage);
+                    delete userState[message.from];
+                } else if (userLastState.type === 'menu_utama') {
+                    if (selectedItem.tipeLink === 'kategori_pustaka') {
+                        await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
+                    } else if (selectedItem.tipeLink === 'perintah_khusus') {
+                        if (selectedItem.perintahKhusus === 'mulai_sesi_ai') {
+                            const nomorBot = '6287849305181'; // <-- GANTI DENGAN NOMOR BOT ANDA YANG BENAR
+                            const teksOtomatis = encodeURIComponent("Halo, saya ingin memulai sesi AI");
+                            const linkWa = `https://wa.me/${nomorBot}?text=${teksOtomatis}`;
+                            const replyMessage = `Untuk memulai sesi privat dengan Asisten AI, silakan klik link di bawah ini. Anda akan diarahkan ke chat pribadi dengan saya.\n\n${linkWa}`;
+                            message.reply(replyMessage);
+                        }else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
+                            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
+                            if (result) {
+                                message.reply(result.jawaban + '\n\nBalas dengan *0* untuk kembali.');
+                                userState[message.from] = { type: 'info', list: [] };
+                            }
+                        }
+                    }
+                }
+                return;
+            }
+        }
 
-                const index = parseInt(userMessage) - 1;
-                if (index >= 0 && index < userLastState.list.length) {
-                    const selectedItem = userLastState.list[index];
-                    
-                    if (userLastState.type === 'pustaka_data') {
-                        if (selectedItem._type === 'kategoriPustaka') {
-                            await showPustakaMenu(message, selectedItem._id);
-                        } else if (selectedItem._type === 'dokumenPustaka') {
-                            let detailMessage = `📄 *Detail Dokumen*...`; // Isi detail dokumen Anda
-                            message.reply(detailMessage);
-                            delete userState[message.from];
-                        }
-                    } else if (userLastState.type === 'pegawai') {
-                        const pegawai = selectedItem;
-                        let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}`;
-                        if (pegawai.usernameSipd) detailMessage += `\n*Username SIPD:* ${pegawai.usernameSipd}`;
-                        if (pegawai.tipePegawai === 'admin') {
-                            if (pegawai.passwordSipd) detailMessage += `\n*Password SIPD:* ${pegawai.passwordSipd}`;
-                            // ... tambahkan field admin lainnya ...
-                        }
-                        message.reply(detailMessage);
-                        delete userState[message.from];
-                    } else if (userLastState.type === 'menu_utama') {
-                        // ... logika menu utama Anda ...
-                    }
-                    return;
-                }
-            }
-        }
-
-    } catch (error) {
-        console.error('Terjadi error fatal di event message:', error);
-        message.reply('Maaf, terjadi kesalahan tak terduga. Silakan coba lagi.');
-    }
+    } catch (error) {
+        console.error('Terjadi error fatal di event message:', error);
+        message.reply('Maaf, terjadi kesalahan tak terduga. Silakan coba lagi.');
+    }
 });
 // akhir kode message
 
