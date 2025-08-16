@@ -80,22 +80,6 @@ const userState = {};
 // =================================================================
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
-
-// BLOK 3: MENANGANI PILIHAN MENU NUMERIK
-
-        // ▼▼▼ TAMBAHKAN BLOK PENJAGA INI ▼▼▼
-        if (userLastState && (userLastState.type === 'menu_utama' || userLastState.type === 'pustaka_data' || userLastState.type === 'pegawai')) {
-            if (message.hasMedia) {
-                // Pengguna mengirim file saat bot sedang dalam mode menu. Abaikan saja.
-                return;
-            }
-        }
-        // ▲▲▲ BATAS AKHIR BLOK PENJAGA ▲▲▲
-
-        const isNumericChoice = !isNaN(parseInt(userMessage));
-        if (userLastState && isNumericChoice) {
-            // ... sisa kode BLOK 3 Anda berlanjut seperti biasa ...
-        }
 /**
  * Mengambil data cuaca terkini dari OpenWeatherMap API.
  * @param {string} location Nama kota untuk dicari cuacanya.
@@ -603,6 +587,23 @@ client.on('message', async (message) => {
             message.reply(welcomeMessage);
             return;
         }
+
+// BLOK 3: MENANGANI PILIHAN MENU NUMERIK
+
+        // ▼▼▼ TAMBAHKAN BLOK PENJAGA INI ▼▼▼
+        if (userLastState && (userLastState.type === 'menu_utama' || userLastState.type === 'pustaka_data' || userLastState.type === 'pegawai')) {
+            if (message.hasMedia) {
+                // Pengguna mengirim file saat bot sedang dalam mode menu. Abaikan saja.
+                return;
+            }
+        }
+        // ▲▲▲ BATAS AKHIR BLOK PENJAGA ▲▲▲
+
+        const isNumericChoice = !isNaN(parseInt(userMessage));
+        if (userLastState && isNumericChoice) {
+            // ... sisa kode BLOK 3 Anda berlanjut seperti biasa ...
+        }
+        // AKHIR BLOK 3: MENANGANI PILIHAN MENU UTAMA
 
         // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
         const isNumericChoice = !isNaN(parseInt(userMessage));
