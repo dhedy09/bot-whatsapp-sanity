@@ -630,14 +630,10 @@ client.on('message', async (message) => {
             
             if (pegawaiDitemukan.length === 1) {
                 const pegawai = pegawaiDitemukan[0];
-                let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}`;
+                let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*NIP:* ${pegawai.nip || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}\n*Level:* ${pegawai.tipePegawai || 'user'}`;
                 if (pegawai.usernameSipd) detailMessage += `\n*Username SIPD:* ${pegawai.usernameSipd}`;
                 if (pegawai.tipePegawai === 'admin') {
-                    if (pegawai.passwordSipd) detailMessage += `\n*Password SIPD:* ${pegawai.passwordSipd}`;
-                    if (pegawai.passwordPenatausahaan) detailMessage += `\n*Pass Penatausahaan:* ${pegawai.passwordPenatausahaan}`;
-                    if (pegawai.userRakortek) detailMessage += `\n*User Rakortek:* ${pegawai.userRakortek}`;
-                    if (pegawai.sipdRenstra) detailMessage += `\n*User Renstra:* ${pegawai.sipdRenstra}`;
-                    if (pegawai.passRenstra) detailMessage += `\n*Password Renstra:* ${pegawai.passRenstra}`;
+                detailMessage += `\n\n🛡️ *Data Khusus Admin*\n*User Rakortek:* ${pegawai.userRakortek || '-'}\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
                 }
                 return message.reply(detailMessage);
             }
