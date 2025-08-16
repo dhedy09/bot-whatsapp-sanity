@@ -824,15 +824,33 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
                         message.reply(detailMessage);
                         delete userState[message.from];
                     }
-                } else if (userLastState.type === 'pegawai') {
-                    const pegawai = selectedItem;
-                    let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*NIP:* ${pegawai.nip || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}\n*Level:* ${pegawai.tipePegawai || 'user'}`;
-                    if (pegawai.tipePegawai === 'admin') {
-                        detailMessage += `\n\n🛡️ *Data Khusus Admin*\n*User Rakortek:* ${pegawai.userRakortek || '-'}\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
-                    }
-                    message.reply(detailMessage);
-                    delete userState[message.from];
-                } else if (userLastState.type === 'menu_utama') {
+                    } else if (userLastState.type === 'pegawai') {
+                        const pegawai = selectedItem;
+
+                        let detailMessage = `👤 *Profil Pegawai*\n\n`;
+                        detailMessage += `*Nama:* ${pegawai.nama || '-'}\n`;
+                        detailMessage += `*NIP:* \`\`\`${pegawai.nip || '-'}\`\`\`\n`;
+                        detailMessage += `*Jabatan:* ${pegawai.jabatan || '-'}\n`;
+                        detailMessage += `*Level:* ${pegawai.tipePegawai || 'user'}\n\n`;
+
+                        detailMessage += `🔑 *Akun & Kredensial*\n`;
+                        detailMessage += `*Username SIPD:* \`\`\`${pegawai.usernameSipd || '-'}\`\`\`\n`;
+                        detailMessage += `*Password SIPD:* \`\`\`${pegawai.passwordSipd || '-'}\`\`\`\n`;
+                        detailMessage += `*Password Penatausahaan:* \`\`\`${pegawai.passwordPenatausahaan || '-'}\`\`\`\n\n`;
+
+                        detailMessage += `📝 *Keterangan*\n${pegawai.keterangan || '-'}`;
+
+                        if (pegawai.tipePegawai === 'admin') {
+                            detailMessage += `\n\n🛡️ *Data Khusus Admin*\n`;
+                            detailMessage += `*User Rakortek:* \`\`\`${pegawai.userRakortek || '-'}\`\`\`\n`;
+                            detailMessage += `*User Renstra:* \`\`\`${pegawai.sipdRenstra || '-'}\`\`\`\n`;
+                            detailMessage += `*Password Renstra:* \`\`\`${pegawai.passRenstra || '-'}\`\`\``;
+                        }
+
+                        message.reply(detailMessage);
+                        delete userState[message.from];
+                        return; // Tambahkan return untuk konsistensi
+                    }else if (userLastState.type === 'menu_utama') {
                     if (selectedItem.tipeLink === 'kategori_pustaka') {
                         await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
                     } else if (selectedItem.tipeLink === 'perintah_khusus') {
