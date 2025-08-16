@@ -750,8 +750,10 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
     // ▼▼▼ BAGIAN BARU: MENGAMBIL MEMORI JANGKA PANJANG ▼▼▼
     let initialHistory = []; // Siapkan history kosong
     try {
-        const memoryQuery = `*[_type == "memoriPengguna" && userId == $userId][0]`;
-        const memoryDoc = await clientSanity.fetch(memoryQuery, { userId: message.from });
+        const userId = message.from;
+        const sanitizedId = userId.replace(/[@.]/g, '-'); // <-- TAMBAHKAN BARIS INI
+        const memoryQuery = `*[_type == "memoriPengguna" && _id == $id][0]`; // <-- UBAH QUERY-NYA
+        const memoryDoc = await clientSanity.fetch(memoryQuery, { id: sanitizedId }); // <-- GUNAKAN ID BERSIH
         
         // Cek jika ada memori yang tersimpan untuk user ini
         if (memoryDoc && memoryDoc.daftarMemori && memoryDoc.daftarMemori.length > 0) {
