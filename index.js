@@ -743,25 +743,47 @@ client.on('message', async (message) => {
             'mulai sesi ai',
             'halo, saya ingin memulai sesi ai' // Pastikan ini diketik bersih
         ];
-        if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
-            await chat.sendStateTyping();
-            const memoryQuery = '*[_type == "memoriPengguna" && userId == $userId][0]';
-            const memoryDoc = await clientSanity.fetch(memoryQuery, { userId: message.from });
-            const longTermMemories = memoryDoc ? memoryDoc.daftarMemori : [];
+if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
+    await chat.sendStateTyping();
 
-            let systemPromptText = "Anda adalah Panda, asisten AI yang membantu dan ramah. Anda memiliki akses ke alat untuk mendapatkan informasi cuaca dan berita terkini secara real-time. Jika pengguna bertanya tentang cuaca atau berita, Anda wajib menggunakan alat yang tersedia, jangan menjawab dari pengetahuan internal.";
-                        if (longTermMemories.length > 0) {
-                            const memoryFacts = longTermMemories.join('; ');
-                systemPromptText += `\n\nSelain itu, ingat fakta penting tentang pengguna ini: ${memoryFacts}.`;
-            }
+    // ▼▼▼ BAGIAN BARU: MENGAMBIL MEMORI JANGKA PANJANG ▼▼▼
+    let initialHistory = []; // Siapkan history kosong
+    try {
+        const memoryQuery = `*[_type == "memoriPengguna" && userId == $userId][0]`;
+        const memoryDoc = await clientSanity.fetch(memoryQuery, { userId: message.from });
+        
+        // Cek jika ada memori yang tersimpan untuk user ini
+        if (memoryDoc && memoryDoc.daftarMemori && memoryDoc.daftarMemori.length > 0) {
+            const longTermMemories = memoryDoc.daftarMemori;
+            
+            // Buat 'contekan' awal untuk AI dari memori yang ada
+            let memoryContext = "Berikut adalah beberapa fakta penting yang harus kamu ingat tentang pengguna ini:\n";
+            longTermMemories.forEach(fact => {
+                memoryContext += `- ${fact}\n`;
+            });
 
-            const initialHistory = [{ role: 'user', parts: [{ text: `(System Prompt: ${systemPromptText})` }] }, { role: 'model', parts: [{ text: 'Tentu, saya siap.' }] }];
-            userState[message.from] = { type: 'ai_mode', history: initialHistory };
-            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`);
-            const welcomeMessage = result ? result.jawaban : "Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti.";
-            message.reply(welcomeMessage);
-            return;
-        }
+            // Masukkan contekan ini sebagai pesan pertama dalam sejarah percakapan
+            initialHistory.push({ role: "user", parts: [{ text: `(Sistem: Kamu harus mengingat konteks berikut tentang saya: ${memoryContext})` }] });
+            initialHistory.push({ role: "model", parts: [{ text: "Tentu, saya sudah mengingatnya. Siap untuk memulai percakapan." }] });
+            
+            console.log(`INFO: Memuat ${longTermMemories.length} memori untuk user ${message.from}`);
+        }
+        } catch (error) {
+            console.error("Gagal mengambil memori jangka panjang:", error);
+            // Jika gagal, tidak apa-apa, sesi akan dimulai tanpa memori
+        }
+        // ▲▲▲ AKHIR BAGIAN BARU ▲▲▲
+
+        // Inisialisasi state dengan history yang mungkin sudah berisi memori
+        userState[message.from] = { type: 'ai_mode', history: initialHistory };
+        
+        // Kirim pesan selamat datang seperti biasa
+        const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`);
+        const welcomeMessage = result ? result.jawaban : "Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti.";
+        message.reply(welcomeMessage);
+        
+        return;
+    }
 
 // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
 
