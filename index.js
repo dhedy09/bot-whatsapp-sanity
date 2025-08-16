@@ -599,12 +599,6 @@ client.on('message', async (message) => {
         }
         // ▲▲▲ BATAS AKHIR BLOK PENJAGA ▲▲▲
 
-        const isNumericChoice = !isNaN(parseInt(userMessage));
-        if (userLastState && isNumericChoice) {
-            // ... sisa kode BLOK 3 Anda berlanjut seperti biasa ...
-        }
-        // AKHIR BLOK 3: MENANGANI PILIHAN MENU UTAMA
-
         // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
         const isNumericChoice = !isNaN(parseInt(userMessage));
         if (userLastState && isNumericChoice) {
