@@ -36,3 +36,11 @@ yarn-error.log*
 
 # Typescript
 *.tsbuildinfo
+
+# File konfigurasi dan kunci rahasia
+.env
+credentials.json
+
+# Folder sesi WhatsApp
+/session/
+/data/
