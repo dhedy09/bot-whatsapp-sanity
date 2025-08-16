@@ -10,21 +10,20 @@ export default defineType({
       name: 'userId',
       title: 'User ID (WhatsApp)',
       type: 'string',
-      readOnly: true,
     }),
     defineField({
       name: 'namaPengguna',
       title: 'Nama Pengguna',
       type: 'string',
-      readOnly: true,
     }),
     defineField({
       name: 'daftarMemori',
       title: 'Daftar Memori',
       type: 'array',
-      of: [{type: 'string'}], // Ini sudah benar
+      of: [{type: 'text'}] // Array berisi teks panjang
     })
   ],
+  // Tampilkan nama pengguna di daftar agar mudah dibaca
   preview: {
     select: {
       title: 'namaPengguna',
