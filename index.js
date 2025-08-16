@@ -850,7 +850,6 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
                         message.reply(detailMessage);
                         delete userState[message.from];
                         return;
-                    }
                     }else if (userLastState.type === 'menu_utama') {
                     if (selectedItem.tipeLink === 'kategori_pustaka') {
                         await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
