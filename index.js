@@ -500,7 +500,7 @@ client.on('message', async (message) => {
                         await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
                     } else if (selectedItem.tipeLink === 'perintah_khusus') {
                         if (selectedItem.perintahKhusus === 'mulai_sesi_ai') {
-                            const nomorBot = '6283870365038'; // <-- GANTI DENGAN NOMOR BOT ANDA YANG BENAR
+                            const nomorBot = '6287849305181'; // <-- GANTI DENGAN NOMOR BOT ANDA YANG BENAR
                             const teksOtomatis = encodeURIComponent("Halo, saya ingin memulai sesi AI");
                             const linkWa = `https://wa.me/${nomorBot}?text=${teksOtomatis}`;
                             const replyMessage = `Untuk memulai sesi privat dengan Asisten AI, silakan klik link di bawah ini. Anda akan diarahkan ke chat pribadi dengan saya.\n\n${linkWa}`;
