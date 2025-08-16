@@ -534,6 +534,47 @@ client.on('message', async (message) => {
                 return;
             }
 
+            // ▼▼▼ TAMBAHKAN BLOK BARU PENGINGAT DI SINI ▼▼▼
+            // BLOK BARU: MENYIMPAN MEMORI JANGKA PANJANG
+            const memoryTrigger = 'ingat ini:';
+            if (userMessageLower.startsWith(memoryTrigger)) {
+                // Ambil teks yang ingin disimpan
+                const memoryToSave = userMessage.substring(memoryTrigger.length).trim();
+
+                // Pastikan ada sesuatu untuk disimpan
+                if (!memoryToSave) {
+                    message.reply("Silakan berikan informasi yang ingin saya ingat setelah 'ingat ini:'.\nContoh: `ingat ini: saya suka kopi hitam`");
+                    return;
+                }
+
+                const userId = message.from;
+                const contact = await message.getContact();
+                const userName = contact.pushname || userId;
+
+                try {
+                    // Gunakan Sanity untuk membuat/memperbarui dokumen memori
+                    await clientSanity
+                        .patch(userId) // Gunakan ID WhatsApp sebagai ID Dokumen unik
+                        .setIfMissing({
+                            _type: 'memoriPengguna',
+                            userId: userId,
+                            namaPengguna: userName,
+                            daftarMemori: []
+                        })
+                        .append('daftarMemori', [memoryToSave]) // Tambahkan memori baru ke dalam array
+                        .commit({ autoGenerateArrayKeys: true });
+
+                    message.reply("Baik, saya akan mengingatnya.");
+                    console.log(`Memori baru disimpan untuk user ${userName}: "${memoryToSave}"`);
+
+                } catch (error) {
+                    console.error("Gagal menyimpan memori ke Sanity:", error);
+                    message.reply("Maaf, terjadi kesalahan saat saya mencoba mengingat informasi ini.");
+                }
+                return; // Hentikan proses agar perintah "ingat ini:" tidak dikirim ke AI
+            }
+            // ▲▲▲ AKHIR BLOK BARU PENGINGAT▲▲▲
+
             try {
                 await chat.sendStateTyping();
                 const aiResponse = await getGeminiResponse(userMessage, userLastState.history);
@@ -571,33 +612,6 @@ client.on('message', async (message) => {
             }
         }
         // ▲▲▲ BATAS AKHIR BLOK BARU ▲▲▲
-
-        const rememberPrefix = 'ingat ini:';
-        if (userMessage.toLowerCase().startsWith(rememberPrefix)) {
-            const factToRemember = userMessage.substring(rememberPrefix.length).trim();
-            if (!factToRemember) {
-                return message.reply('Silakan berikan fakta yang harus diingat. Contoh: `ingat ini: nama kucing saya Miko`');
-            }
-            const userId = message.from;
-            const contact = await message.getContact();
-            const userName = contact.pushname || contact.name || 'Pengguna';
-            try {
-                await chat.sendStateTyping();
-                const query = '*[_type == "memoriPengguna" && userId == $userId][0]';
-                const existingMemoryDoc = await clientSanity.fetch(query, { userId });
-                if (existingMemoryDoc) {
-                    await clientSanity.patch(existingMemoryDoc._id).append('daftarMemori', [factToRemember]).commit({ autoGenerateArrayKeys: true });
-                } else {
-                    const newMemoryDoc = { _type: 'memoriPengguna', userId, namaPengguna: userName, daftarMemori: [factToRemember] };
-                    await clientSanity.create(newMemoryDoc);
-                }
-                message.reply('👍 Baik, sudah saya ingat.');
-            } catch (error) {
-                console.error('Gagal menyimpan memori ke Sanity:', error);
-                message.reply('Maaf, ada kesalahan. Saya gagal mengingat fakta tersebut.');
-            }
-            return; 
-        }
 
         // ▼▼▼ TAMBAHKAN BLOK BARU UNTUK SIMPAN FILE DI SINI ▼▼▼
         const simpanPrefix = 'panda simpan ';
