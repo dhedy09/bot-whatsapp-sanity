@@ -80,6 +80,22 @@ const userState = {};
 // =================================================================
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
+
+// BLOK 3: MENANGANI PILIHAN MENU NUMERIK
+
+        // ▼▼▼ TAMBAHKAN BLOK PENJAGA INI ▼▼▼
+        if (userLastState && (userLastState.type === 'menu_utama' || userLastState.type === 'pustaka_data' || userLastState.type === 'pegawai')) {
+            if (message.hasMedia) {
+                // Pengguna mengirim file saat bot sedang dalam mode menu. Abaikan saja.
+                return;
+            }
+        }
+        // ▲▲▲ BATAS AKHIR BLOK PENJAGA ▲▲▲
+
+        const isNumericChoice = !isNaN(parseInt(userMessage));
+        if (userLastState && isNumericChoice) {
+            // ... sisa kode BLOK 3 Anda berlanjut seperti biasa ...
+        }
 /**
  * Mengambil data cuaca terkini dari OpenWeatherMap API.
  * @param {string} location Nama kota untuk dicari cuacanya.
@@ -331,8 +347,11 @@ async function getGeminiResponse(prompt, history) {
  */
 async function uploadKeDrive(media, namaFileKustom) {
     try {
+        // Mengambil kredensial dari environment variable
+        const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+
         const auth = new google.auth.GoogleAuth({
-            keyFile: './credentials.json', // Pastikan file credentials.json ada di folder ini
+            credentials, // Gunakan kredensial yang sudah di-parse
             scopes: ['https://www.googleapis.com/auth/drive'],
         });
 
