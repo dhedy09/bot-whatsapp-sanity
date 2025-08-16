@@ -548,13 +548,14 @@ client.on('message', async (message) => {
                 }
 
                 const userId = message.from;
+                const sanitizedId = userId.replace(/[@.]/g, '-'); // <-- TAMBAHKAN BARIS INI
                 const contact = await message.getContact();
                 const userName = contact.pushname || userId;
 
                 try {
                     // Gunakan Sanity untuk membuat/memperbarui dokumen memori
                     await clientSanity
-                        .patch(userId) // Gunakan ID WhatsApp sebagai ID Dokumen unik
+                        .patch(sanitizedId) // <-- GUNAKAN ID YANG SUDAH BERSIH
                         .setIfMissing({
                             _type: 'memoriPengguna',
                             userId: userId,
