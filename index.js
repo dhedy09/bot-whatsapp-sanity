@@ -826,9 +826,9 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
                     }
                 } else if (userLastState.type === 'pegawai') {
                     const pegawai = selectedItem;
-                    let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}`;
-                    if (pegawai.tipePegawai === 'admin') {
-                        detailMessage += `\n\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
+                    let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*NIP:* ${pegawai.nip || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}\n*Level:* ${pegawai.tipePegawai || 'user'}`;
+                    if (pegawai.tipePegawai === 'admin') {
+                        detailMessage += `\n\n🛡️ *Data Khusus Admin*\n*User Rakortek:* ${pegawai.userRakortek || '-'}\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
                     }
                     message.reply(detailMessage);
                     delete userState[message.from];
