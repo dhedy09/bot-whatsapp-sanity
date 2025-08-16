@@ -555,6 +555,18 @@ client.on('message', async (message) => {
             return;
         }
 
+        // ▼▼▼ BLOK BARU UNTUK MENAMPILKAN DAFTAR PERINTAH ▼▼▼
+        const commandKeywords = ['help', 'menu bantuan'];
+        if (commandKeywords.includes(userMessageLower)) {
+            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "daftar_perintah"][0]`);
+            if (result && result.jawaban) {
+                return message.reply(result.jawaban);
+            } else {
+                return message.reply("Maaf, daftar perintah belum diatur di Sanity.");
+            }
+        }
+        // ▲▲▲ BATAS AKHIR BLOK BARU ▲▲▲
+
         const rememberPrefix = 'ingat ini:';
         if (userMessage.toLowerCase().startsWith(rememberPrefix)) {
             const factToRemember = userMessage.substring(rememberPrefix.length).trim();
