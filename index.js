@@ -524,26 +524,32 @@ client.on('message', async (message) => {
         const userMessageLower = userMessage.toLowerCase();
         const userLastState = userState[message.from] || userState[message.author];
 
+        console.log(`\n--- [START] Pesan Diterima: "${userMessage}" ---`);
+        console.log(`[INFO] State Pengguna Saat Ini: ${userLastState ? userLastState.type : 'Tidak Ada State'}`);
+
         // =================================================================
         // PRIORITAS #1: PERINTAH-PERINTAH KHUSUS
         // =================================================================
+        console.log('[DEBUG] Memeriksa Perintah Khusus...');
 
         if (userMessageLower === 'halo panda') {
+            console.log('[DEBUG] Perintah "halo panda" terdeteksi.');
             await showMainMenu(message);
             return;
         }
 
         const commandKeywords = ['help', 'menu bantuan'];
         if (commandKeywords.includes(userMessageLower)) {
+            console.log('[DEBUG] Perintah Bantuan terdeteksi.');
             const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "daftar_perintah"][0]`);
             return message.reply(result ? result.jawaban : "Daftar perintah belum diatur.");
         }
 
         const rememberPrefix = 'ingat ini:';
         if (userMessageLower.startsWith(rememberPrefix)) {
+            console.log('[DEBUG] Perintah "ingat ini:" terdeteksi. Menjalankan...');
             const factToRemember = userMessage.substring(rememberPrefix.length).trim();
             if (!factToRemember) return message.reply('Silakan berikan fakta yang harus diingat.');
-            
             const userId = message.from;
             const contact = await message.getContact();
             const userName = contact.pushname || contact.name || 'Pengguna';
@@ -556,15 +562,17 @@ client.on('message', async (message) => {
                     const newDoc = { _type: 'memoriPengguna', userId, namaPengguna: userName, daftarMemori: [factToRemember] };
                     await clientSanity.create(newDoc);
                 }
+                console.log('[SUCCESS] Memori berhasil disimpan ke Sanity.');
                 return message.reply('👍 Baik, sudah saya ingat.');
             } catch (error) {
-                console.error('Gagal menyimpan memori ke Sanity:', error);
+                console.error('[ERROR] Gagal menyimpan memori ke Sanity:', error);
                 return message.reply('Maaf, ada kesalahan. Saya gagal mengingat fakta tersebut.');
             }
         }
 
         const simpanPrefix = 'panda simpan ';
         if (userMessageLower.startsWith(simpanPrefix)) {
+            console.log('[DEBUG] Perintah "panda simpan" terdeteksi.');
             if (!message.hasQuotedMsg) return message.reply('❌ Perintah ini hanya berfungsi jika Anda membalas file yang ingin disimpan.');
             const quotedMsg = await message.getQuotedMessage();
             if (!quotedMsg.hasMedia) return message.reply('❌ Anda harus membalas sebuah file, bukan pesan teks.');
@@ -595,6 +603,7 @@ client.on('message', async (message) => {
         
         const cariPrefix = 'cari file ';
         if (userMessageLower.startsWith(cariPrefix)) {
+            console.log('[DEBUG] Perintah "cari file" terdeteksi.');
             const kataKunci = userMessage.substring(cariPrefix.length).trim();
             if (!kataKunci) return message.reply('Silakan masukkan kata kunci.');
             const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
@@ -609,6 +618,7 @@ client.on('message', async (message) => {
 
         const kirimPrefix = 'kirim file ';
         if (userMessageLower.startsWith(kirimPrefix)) {
+            console.log('[DEBUG] Perintah "kirim file" terdeteksi.');
             const namaFile = userMessage.substring(kirimPrefix.length).trim();
             if (!namaFile) return message.reply('Silakan masukkan nama file lengkap.');
             const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
@@ -622,6 +632,7 @@ client.on('message', async (message) => {
         }
 
         if (userMessageLower.startsWith('cari user ')) {
+            console.log('[DEBUG] Perintah "cari user" terdeteksi.');
             const kataKunci = userMessage.substring('cari user '.length).trim();
             if (!kataKunci) return message.reply('Silakan masukkan nama atau jabatan.');
             const pegawaiQuery = `*[_type == "pegawai" && (nama match $kataKunci || jabatan match $kataKunci)]`;
@@ -630,10 +641,14 @@ client.on('message', async (message) => {
             
             if (pegawaiDitemukan.length === 1) {
                 const pegawai = pegawaiDitemukan[0];
-                let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*NIP:* ${pegawai.nip || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}\n*Level:* ${pegawai.tipePegawai || 'user'}`;
+                let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}`;
                 if (pegawai.usernameSipd) detailMessage += `\n*Username SIPD:* ${pegawai.usernameSipd}`;
                 if (pegawai.tipePegawai === 'admin') {
-                detailMessage += `\n\n🛡️ *Data Khusus Admin*\n*User Rakortek:* ${pegawai.userRakortek || '-'}\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
+                    if (pegawai.passwordSipd) detailMessage += `\n*Password SIPD:* ${pegawai.passwordSipd}`;
+                    if (pegawai.passwordPenatausahaan) detailMessage += `\n*Pass Penatausahaan:* ${pegawai.passwordPenatausahaan}`;
+                    if (pegawai.userRakortek) detailMessage += `\n*User Rakortek:* ${pegawai.userRakortek}`;
+                    if (pegawai.sipdRenstra) detailMessage += `\n*User Renstra:* ${pegawai.sipdRenstra}`;
+                    if (pegawai.passRenstra) detailMessage += `\n*Password Renstra:* ${pegawai.passRenstra}`;
                 }
                 return message.reply(detailMessage);
             }
@@ -646,6 +661,7 @@ client.on('message', async (message) => {
 
         const aiTriggerCommands = ['tanya ai', 'mode ai', 'sesi ai', 'panda ai'];
         if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
+            console.log('[DEBUG] Perintah Pemicu AI terdeteksi.');
             const memoryQuery = '*[_type == "memoriPengguna" && userId == $userId][0]';
             const memoryDoc = await clientSanity.fetch(memoryQuery, { userId: message.from });
             const longTermMemories = memoryDoc ? memoryDoc.daftarMemori : [];
@@ -662,10 +678,11 @@ client.on('message', async (message) => {
         // =================================================================
         // PRIORITAS #2: PENANGANAN BERBASIS STATE (AI & MENU)
         // =================================================================
+        console.log('[DEBUG] Tidak ada perintah khusus yang cocok. Memeriksa state...');
 
         if (userLastState) {
-            // JIKA PENGGUNA SEDANG DALAM MODE AI
             if (userLastState.type === 'ai_mode') {
+                console.log('[DEBUG] Masuk ke logika Mode AI.');
                 const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
                 if (exitCommands.includes(userMessageLower)) {
                     delete userState[message.from];
@@ -678,10 +695,9 @@ client.on('message', async (message) => {
                 return message.reply(aiResponse);
             }
 
-            // JIKA PENGGUNA SEDANG DALAM MODE MENU NUMERIK
             if (['menu_utama', 'pustaka_data', 'pegawai'].includes(userLastState.type)) {
+                console.log('[DEBUG] Masuk ke logika Menu Numerik.');
                 if (message.hasMedia) return;
-
                 const isNumericChoice = !isNaN(parseInt(userMessage));
                 if (!isNumericChoice) return;
 
@@ -743,9 +759,14 @@ client.on('message', async (message) => {
                 }
             }
         }
+
+        console.log('[DEBUG] Tidak ada kondisi yang cocok. Mengakhiri proses.');
+
     } catch (error) {
-        console.error('Terjadi error fatal di event message:', error);
+        console.error('[FATAL] Terjadi error fatal di event message:', error);
         message.reply('Maaf, terjadi kesalahan tak terduga.');
+    } finally {
+        console.log(`--- [END] Proses Pesan Selesai ---`);
     }
 });
 // akhir kode message
