@@ -81,6 +81,75 @@ const userState = {};
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
 /**
+ * Mengambil file dari Google Drive dan mengirimkannya sebagai media.
+ * @param {string} fileId ID file di Google Drive.
+ * @param {string} fileName Nama file yang akan ditampilkan ke pengguna.
+ * @param {string} userChatId ID chat tujuan.
+ */
+async function kirimFileDariDrive(fileId, fileName, userChatId) {
+    try {
+        // Otentikasi sama seperti saat upload
+        const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+        const auth = new google.auth.GoogleAuth({
+            credentials,
+            scopes: ['https://www.googleapis.com/auth/drive.readonly'],
+        });
+        const drive = google.drive({ version: 'v3', auth });
+
+        // Mengunduh file dari Drive sebagai stream
+        const response = await drive.files.get(
+            { fileId: fileId, alt: 'media', supportsAllDrives: true },
+            { responseType: 'stream' }
+        );
+
+        // Mengumpulkan data dari stream menjadi satu buffer
+        const chunks = [];
+        for await (const chunk of response.data) {
+            chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+        const base64data = buffer.toString('base64');
+
+        // Membuat objek MessageMedia dari data base64
+        const { MessageMedia } = require('whatsapp-web.js');
+        const media = new MessageMedia(
+            response.headers['content-type'],
+            base64data,
+            fileName
+        );
+
+        // Mengirim file ke pengguna
+        await client.sendMessage(userChatId, media, { caption: `Ini file yang Anda minta: *${fileName}*` });
+        return true;
+
+    } catch (error) {
+        console.error("Error saat mengirim file dari Drive:", error);
+        await client.sendMessage(userChatId, `Maaf, terjadi kesalahan saat mencoba mengambil file "${fileName}".`);
+        return false;
+    }
+}
+
+/**
+ * Mencari file di Sanity berdasarkan kata kunci dan ID grup.
+ * @param {string} kataKunci Kata kunci untuk pencarian.
+ * @param {string} groupId ID grup saat ini.
+ * @returns {Promise<Array>} Daftar file yang cocok.
+ */
+async function cariFileDiSanity(kataKunci, groupId) {
+    try {
+        // Query untuk mencari file yang namanya cocok DAN berada di grup yang sama
+        const query = `*[_type == "fileArsip" && namaFile match $kataKunci && groupId == $groupId]`;
+        const params = { kataKunci: `*${kataKunci}*`, groupId: groupId };
+        const files = await clientSanity.fetch(query, params);
+        return files || [];
+    } catch (error) {
+        console.error("Error saat mencari file di Sanity:", error);
+        return [];
+    }
+}
+
+
+/**
  * Mengambil data cuaca terkini dari OpenWeatherMap API.
  * @param {string} location Nama kota untuk dicari cuacanya.
  * @returns {Promise<string>} String yang mendeskripsikan cuaca.
@@ -536,7 +605,53 @@ client.on('message', async (message) => {
             }
 
         }
-        // ▲▲▲ BATAS AKHIR BLOK BARU ▲▲▲
+        // ▲▲▲ BATAS AKHIR BLOK BARU SIMPAN FILE▲▲▲
+
+// ▼▼▼ BLOK BARU UNTUK MENCARI & MENGIRIM FILE ▼▼▼
+        const cariPrefix = 'cari file ';
+        if (userMessageLower.startsWith(cariPrefix)) {
+            const kataKunci = userMessage.substring(cariPrefix.length).trim();
+            if (!kataKunci) {
+                return message.reply('Silakan masukkan kata kunci. Contoh: `cari file laporan`');
+            }
+
+            const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
+            const hasilPencarian = await cariFileDiSanity(kataKunci, groupId);
+
+            if (hasilPencarian.length === 0) {
+                return message.reply(`Tidak ada file yang ditemukan dengan kata kunci "${kataKunci}" di arsip grup ini.`);
+            }
+
+            let replyMessage = `Ditemukan ${hasilPencarian.length} file:\n\n`;
+            hasilPencarian.forEach(file => {
+                replyMessage += `📄 *${file.namaFile}*\n`;
+            });
+            replyMessage += `\nUntuk mengambil, balas dengan:\n\`kirim file <nama file lengkap>\``;
+            return message.reply(replyMessage);
+        }
+
+        const kirimPrefix = 'kirim file ';
+        if (userMessageLower.startsWith(kirimPrefix)) {
+            const namaFile = userMessage.substring(kirimPrefix.length).trim();
+            if (!namaFile) {
+                return message.reply('Silakan masukkan nama file lengkap. Contoh: `kirim file Laporan Keuangan 2025`');
+            }
+
+            const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
+            
+            // Query untuk mencari nama file yang persis
+            const query = `*[_type == "fileArsip" && namaFile == $namaFile && groupId == $groupId][0]`;
+            const fileData = await clientSanity.fetch(query, { namaFile, groupId });
+
+            if (!fileData) {
+                return message.reply(`File dengan nama persis "${namaFile}" tidak ditemukan di arsip grup ini.`);
+            }
+            
+            message.reply(`⏳ Sedang mengambil file *"${namaFile}"* dari arsip, mohon tunggu...`);
+            await kirimFileDariDrive(fileData.googleDriveId, fileData.namaFile, message.from);
+            return;
+        }
+        // ▲▲▲ BATAS AKHIR BLOK BARU  PEMANGGIL FILE▲▲▲
 
         if (userMessageLower.startsWith('cari user ')) {
             const kataKunci = userMessage.substring('cari user '.length).trim();
