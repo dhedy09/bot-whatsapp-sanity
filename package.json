@@ -22,6 +22,7 @@
     "dotenv": "^17.2.1",
     "express": "^4.19.2",
     "googleapis": "^156.0.0",
+    "mathjs": "^14.6.0",
     "qrcode": "^1.5.4",
     "react": "^19.1",
     "react-dom": "^19.1",

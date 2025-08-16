@@ -81,6 +81,30 @@ const userState = {};
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
 /**
+ * Mengevaluasi ekspresi matematika menggunakan math.js.
+ * @param {string} expression Ekspresi yang akan dihitung, contoh: "5 * (2 + 3)".
+ * @returns {string} Hasil perhitungan atau pesan error.
+ */
+function evaluateMathExpression(expression) {
+    try {
+        // Impor mathjs di dalam fungsi agar lebih rapi
+        const { evaluate } = require('mathjs');
+        const result = evaluate(expression);
+
+        // Memformat hasil agar tidak terlalu panjang (jika desimal)
+        if (typeof result === 'number' && !Number.isInteger(result)) {
+            return result.toFixed(4).toString();
+        }
+        
+        return result.toString();
+    } catch (error) {
+        console.error("Math.js error:", error.message);
+        // Mengembalikan pesan yang ramah untuk AI
+        return `Ekspresi '${expression}' tidak valid.`;
+    }
+}
+
+/**
  * Mengambil file dari Google Drive dan mengirimkannya sebagai media.
  * @param {string} fileId ID file di Google Drive.
  * @param {string} fileName Nama file yang akan ditampilkan ke pengguna.
@@ -189,7 +213,7 @@ async function getLatestNews(query) {
         const apiKey = process.env.NEWS_API_KEY;
         if (!apiKey) throw new Error("NEWS_API_KEY tidak ditemukan");
 
-        const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&apiKey=${apiKey}&pageSize=5&sortBy=relevancy&language=id`;
+        const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&apiKey=${apiKey}&pageSize=5&sortBy=relevancy`;
 
         const response = await fetch(url);
         if (!response.ok) {
@@ -300,27 +324,31 @@ const tools = {
       description: "Mendapatkan data cuaca terkini untuk lokasi tertentu.",
       parameters: {
         type: "OBJECT",
-        properties: {
-          location: {
-            type: "STRING",
-            description: "Nama kota, misalnya: 'Jakarta', 'Tokyo', atau 'Bandung'.",
-          },
-        },
+        properties: { location: { type: "STRING", description: "Nama kota." } },
         required: ["location"],
       },
     },
     {
       name: "getLatestNews",
-      description: "Mendapatkan berita terkini berdasarkan topik, kata kunci, atau nama lokasi.",
+      description: "Mendapatkan berita terkini berdasarkan topik atau kata kunci.",
+      parameters: {
+        type: "OBJECT",
+        properties: { query: { type: "STRING", description: "Topik berita." } },
+        required: ["query"],
+      },
+    },
+    { 
+      name: "calculate",
+      description: "Mengevaluasi ekspresi matematika atau formula Excel. Gunakan ini untuk semua perhitungan, konversi, atau operasi matematika.",
       parameters: {
         type: "OBJECT",
         properties: {
-          query: {
+          expression: {
             type: "STRING",
-            description: "Topik berita yang ingin dicari, contoh: 'pemilu 2029', 'teknologi', atau 'Sulawesi Barat'.",
+            description: "Ekspresi matematika yang akan dihitung. Contoh: '100 / (5 * 2)' atau 'sqrt(16) + 2^3'.",
           },
         },
-        required: ["query"],
+        required: ["expression"],
       },
     },
   ],
