@@ -450,17 +450,17 @@ async function uploadKeDrive(media, namaFileKustom) {
         stream.push(null);
 
         const response = await drive.files.create({
-            requestBody: {
-                name: namaFileKustom,
-                parents: [FOLDER_DRIVE_ID]
-            },
-            media: {
-                mimeType: media.mimetype,
-                body: stream,
-            },
-            fields: 'id',
-            supportsAllDrives: true, // <-- BARIS PENTING INI DITAMBAHKAN
-        });
+            requestBody: {
+                name: namaFileKustom,
+                parents: [FOLDER_DRIVE_ID]
+            },
+            media: {
+                mimeType: media.mimetype,
+                body: stream,
+            },
+            fields: 'id',
+            supportsAllDrives: true // <-- BARIS PENTING INI DITAMBAHKAN
+        });
 
         console.log(`✅ File berhasil diunggah ke Drive. ID: ${response.data.id}`);
         return response.data.id; // Kembalikan ID file di Drive
