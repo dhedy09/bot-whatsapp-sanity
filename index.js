@@ -747,49 +747,46 @@ client.on('message', async (message) => {
             'mulai sesi ai',
             'halo, saya ingin memulai sesi ai' // Pastikan ini diketik bersih
         ];
+// GANTI BLOK aiTriggerCommands ANDA DENGAN YANG INI SECARA KESELURUHAN
 if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
     await chat.sendStateTyping();
 
     // ▼▼▼ BAGIAN BARU: MENGAMBIL MEMORI JANGKA PANJANG ▼▼▼
-    let initialHistory = []; // Siapkan history kosong
+    let initialHistory = [];
     try {
         const userId = message.from;
-        const sanitizedId = userId.replace(/[@.]/g, '-'); // <-- TAMBAHKAN BARIS INI
-        const memoryQuery = `*[_type == "memoriPengguna" && _id == $id][0]`; // <-- UBAH QUERY-NYA
-        const memoryDoc = await clientSanity.fetch(memoryQuery, { id: sanitizedId }); // <-- GUNAKAN ID BERSIH
-        
-        // Cek jika ada memori yang tersimpan untuk user ini
+        const sanitizedId = userId.replace(/[@.]/g, '-');
+        const memoryQuery = `*[_type == "memoriPengguna" && _id == $id][0]`;
+        const memoryDoc = await clientSanity.fetch(memoryQuery, { id: sanitizedId });
+
         if (memoryDoc && memoryDoc.daftarMemori && memoryDoc.daftarMemori.length > 0) {
             const longTermMemories = memoryDoc.daftarMemori;
             
-            // Buat 'contekan' awal untuk AI dari memori yang ada
-            let memoryContext = "Berikut adalah beberapa fakta penting yang harus kamu ingat tentang pengguna ini:\n";
+            let memoryContext = "Ini adalah beberapa fakta penting tentang saya (pengguna) yang harus selalu kamu ingat di sepanjang percakapan ini:\n";
             longTermMemories.forEach(fact => {
                 memoryContext += `- ${fact}\n`;
             });
 
-            // Masukkan contekan ini sebagai pesan pertama dalam sejarah percakapan
-            initialHistory.push({ role: "user", parts: [{ text: `(Sistem: Kamu harus mengingat konteks berikut tentang saya: ${memoryContext})` }] });
-            initialHistory.push({ role: "model", parts: [{ text: "Tentu, saya sudah mengingatnya. Siap untuk memulai percakapan." }] });
+            // Masukkan konteks ini sebagai "instruksi sistem" di awal sejarah percakapan
+            initialHistory.push({ role: "user", parts: [{ text: memoryContext }] });
+            initialHistory.push({ role: "model", parts: [{ text: "Baik, saya telah menerima dan mengingat semua fakta tersebut. Saya siap untuk memulai percakapan." }] });
             
-            console.log(`INFO: Memuat ${longTermMemories.length} memori untuk user ${message.from}`);
+            console.log(`INFO: Memuat ${longTermMemories.length} memori untuk user ${userId}`);
         }
-        } catch (error) {
-            console.error("Gagal mengambil memori jangka panjang:", error);
-            // Jika gagal, tidak apa-apa, sesi akan dimulai tanpa memori
-        }
-        // ▲▲▲ AKHIR BAGIAN BARU ▲▲▲
-
-        // Inisialisasi state dengan history yang mungkin sudah berisi memori
-        userState[message.from] = { type: 'ai_mode', history: initialHistory };
-        
-        // Kirim pesan selamat datang seperti biasa
-        const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`);
-        const welcomeMessage = result ? result.jawaban : "Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti.";
-        message.reply(welcomeMessage);
-        
-        return;
+    } catch (error) {
+        console.error("Gagal mengambil memori jangka panjang:", error);
     }
+    // ▲▲▲ AKHIR BAGIAN BARU ▲▲▲
+
+    // Inisialisasi state dengan history yang mungkin sudah berisi memori
+    userState[message.from] = { type: 'ai_mode', history: initialHistory };
+    
+    const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`);
+    const welcomeMessage = result ? result.jawaban : "Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti.";
+    message.reply(welcomeMessage);
+    
+    return;
+}
 
 // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
 
