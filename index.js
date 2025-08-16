@@ -724,14 +724,31 @@ client.on('message', async (message) => {
             const pegawaiQuery = `*[_type == "pegawai" && (nama match $kataKunci || jabatan match $kataKunci)]`;
             const pegawaiDitemukan = await clientSanity.fetch(pegawaiQuery, { kataKunci: `*${kataKunci}*` });
             if (!pegawaiDitemukan || pegawaiDitemukan.length === 0) return message.reply(`Maaf, data untuk "${kataKunci}" tidak ditemukan.`);
-            if (pegawaiDitemukan.length === 1) {
-                const pegawai = pegawaiDitemukan[0];
-                let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*NIP:* ${pegawai.nip || '-'}\n*Jabatan:* ${pegawai.jabatan || '-'}\n*Level:* ${pegawai.tipePegawai || 'user'}`;
-                if (pegawai.tipePegawai === 'admin') {
-                    detailMessage += `\n\n🛡️ *Data Khusus Admin*\n*User Rakortek:* ${pegawai.userRakortek || '-'}\n*User Renstra:* ${pegawai.sipdRenstra || '-'}\n*Password Renstra:* ${pegawai.passRenstra || '-'}`;
-                }
-                return message.reply(detailMessage);
-            }
+            if (pegawaiDitemukan.length === 1) {
+                const pegawai = pegawaiDitemukan[0];
+
+                let detailMessage = `👤 *Profil Pegawai*\n\n`;
+                detailMessage += `*Nama:* ${pegawai.nama || '-'}\n`;
+                detailMessage += `*NIP:* \`\`\`${pegawai.nip || '-'}\`\`\`\n`;
+                detailMessage += `*Jabatan:* ${pegawai.jabatan || '-'}\n`;
+                detailMessage += `*Level:* ${pegawai.tipePegawai || 'user'}\n\n`;
+
+                detailMessage += `🔑 *Akun & Kredensial*\n`;
+                detailMessage += `*Username SIPD:* \`\`\`${pegawai.usernameSipd || '-'}\`\`\`\n`;
+                detailMessage += `*Password SIPD:* \`\`\`${pegawai.passwordSipd || '-'}\`\`\`\n`;
+                detailMessage += `*Password Penatausahaan:* \`\`\`${pegawai.passwordPenatausahaan || '-'}\`\`\`\n\n`;
+
+                detailMessage += `📝 *Keterangan*\n${pegawai.keterangan || '-'}`;
+
+                if (pegawai.tipePegawai === 'admin') {
+                    detailMessage += `\n\n🛡️ *Data Khusus Admin*\n`;
+                    detailMessage += `*User Rakortek:* \`\`\`${pegawai.userRakortek || '-'}\`\`\`\n`;
+                    detailMessage += `*User Renstra:* \`\`\`${pegawai.sipdRenstra || '-'}\`\`\`\n`;
+                    detailMessage += `*Password Renstra:* \`\`\`${pegawai.passRenstra || '-'}\`\`\``;
+                }
+                
+                return message.reply(detailMessage);
+            }
             userState[message.from] = { type: 'pegawai', list: pegawaiDitemukan };
             let pilihanMessage = `Ditemukan beberapa hasil untuk "${kataKunci}". Balas dengan *nomor*:\n\n`;
             pegawaiDitemukan.forEach((p, i) => { pilihanMessage += `${i + 1}. ${p.nama} - *(${p.jabatan})*\n`; });
