@@ -534,27 +534,26 @@ client.on('message', async (message) => {
                 return;
             }
 
-            // ▼▼▼ TAMBAHKAN BLOK BARU PENGINGAT DI SINI ▼▼▼
-            // BLOK BARU: MENYIMPAN MEMORI JANGKA PANJANG
-            const memoryTrigger = 'ingat ini:';
-            if (userMessageLower.startsWith(memoryTrigger)) {
-                // Ambil teks yang ingin disimpan
-                const memoryToSave = userMessage.substring(memoryTrigger.length).trim();
+            // ▼▼▼ PASTE BLOK BARU INI DI TEMPAT YANG SAMA ▼▼▼
+            // BLOK BARU: MENYIMPAN MEMORI JANGKA PANJANG (VERSI PERBAIKAN)
+            const memoryTriggers = ['ingat ini:', 'ingat saya:'];
+            const trigger = memoryTriggers.find(t => userMessageLower.startsWith(t));
 
-                // Pastikan ada sesuatu untuk disimpan
+            if (trigger) {
+                const memoryToSave = userMessage.substring(trigger.length).trim();
+
                 if (!memoryToSave) {
-                    message.reply("Silakan berikan informasi yang ingin saya ingat setelah 'ingat ini:'.\nContoh: `ingat ini: saya suka kopi hitam`");
+                    message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
                     return;
                 }
 
-                const userId = message.from;
-                const sanitizedId = userId.replace(/[@.]/g, '-'); // <-- TAMBAHKAN BARIS INI
-                const contact = await message.getContact();
-                const userName = contact.pushname || userId;
-
                 try {
+                    const userId = message.from;
+                    const sanitizedId = userId.replace(/[@.]/g, '-');
+                    const contact = await message.getContact();
+                    const userName = contact.pushname || userId;
+
                     // LANGKAH 1: Pastikan dokumen untuk user ini sudah ada.
-                    // createIfNotExists akan membuat dokumen HANYA jika belum ada.
                     await clientSanity.createIfNotExists({
                         _id: sanitizedId,
                         _type: 'memoriPengguna',
@@ -564,7 +563,6 @@ client.on('message', async (message) => {
                     });
 
                     // LANGKAH 2: Setelah dokumen dijamin ada, tambahkan memori baru.
-                    // Perintah .patch().append() sekarang akan selalu berhasil.
                     await clientSanity
                         .patch(sanitizedId)
                         .append('daftarMemori', [memoryToSave])
@@ -572,10 +570,14 @@ client.on('message', async (message) => {
 
                     message.reply("Baik, saya akan mengingatnya.");
                     console.log(`Memori baru disimpan untuk user ${userName}: "${memoryToSave}"`);
+
+                } catch (error) {
+                    console.error("Gagal menyimpan memori ke Sanity:", error);
+                    message.reply("Maaf, terjadi kesalahan saat saya mencoba mengingat informasi ini.");
                 }
-                return; // Hentikan proses agar perintah "ingat ini:" tidak dikirim ke AI
+                return; // Hentikan proses agar tidak dikirim ke AI
             }
-            // ▲▲▲ AKHIR BLOK BARU PENGINGAT▲▲▲
+            // ▲▲▲ AKHIR BLOK BARU ▲▲▲
 
             try {
                 await chat.sendStateTyping();
