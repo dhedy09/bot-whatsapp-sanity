@@ -6,6 +6,7 @@ import dokumenPustaka from './dokumenPustaka'
 import menuUtamaItem from './menuUtamaItem'
 import nomorTerdaftar from './nomorTerdaftar'
 import memoriPengguna from './memoriPengguna'
+import fileArsip from './fileArsip'
 
 export const schemaTypes = [
     botReply, 
@@ -15,4 +16,5 @@ export const schemaTypes = [
     dokumenPustaka, 
     menuUtamaItem, 
     nomorTerdaftar, 
-    memoriPengguna]
+    memoriPengguna,
+    fileArsip]

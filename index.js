@@ -11,6 +11,8 @@ const qrcode = require('qrcode');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 const app = express();
+const { Readable } = require('stream');
+const FOLDER_DRIVE_ID = '17LsEyvyF06v3dPN7wMv_3NOiaajY8sQk'; // Ganti dengan ID folder Google Drive Anda
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
@@ -320,6 +322,73 @@ async function getGeminiResponse(prompt, history) {
     }
 }
 
+/**
+ * Mengunggah file media ke folder Google Drive yang ditentukan.
+ * @param {MessageMedia} media Objek media dari whatsapp-web.js (berisi data base64, mimetype, dll).
+ * @param {string} namaFileKustom Nama file yang akan digunakan saat menyimpan di Drive.
+ * @returns {Promise<string|null>} Mengembalikan ID file di Google Drive jika berhasil, atau null jika gagal.
+ */
+async function uploadKeDrive(media, namaFileKustom) {
+    try {
+        const auth = new google.auth.GoogleAuth({
+            keyFile: './credentials.json', // Pastikan file credentials.json ada di folder ini
+            scopes: ['https://www.googleapis.com/auth/drive'],
+        });
+
+        const drive = google.drive({ version: 'v3', auth });
+
+        // Ubah data base64 dari media menjadi buffer, lalu stream
+        const buffer = Buffer.from(media.data, 'base64');
+        const stream = new Readable();
+        stream.push(buffer);
+        stream.push(null);
+
+        const response = await drive.files.create({
+            requestBody: {
+                name: namaFileKustom, // Gunakan nama file dari perintah pengguna
+                parents: [FOLDER_DRIVE_ID] // Tentukan folder tujuan
+            },
+            media: {
+                mimeType: media.mimetype,
+                body: stream,
+            },
+            fields: 'id', // Minta ID dari file yang baru dibuat
+        });
+
+        console.log(`✅ File berhasil diunggah ke Drive. ID: ${response.data.id}`);
+        return response.data.id; // Kembalikan ID file di Drive
+
+    } catch (error) {
+        console.error("Error saat mengunggah ke Google Drive:", error);
+        return null;
+    }
+}
+
+/**
+ * Menyimpan metadata file ke Sanity.io.
+ * @param {object} dataFile Informasi file yang akan disimpan.
+ * @returns {Promise<boolean>} True jika berhasil, false jika gagal.
+ */
+async function simpanDataFileKeSanity(dataFile) {
+    try {
+        const doc = {
+            _type: 'fileArsip',
+            namaFile: dataFile.namaFile,
+            googleDriveId: dataFile.googleDriveId,
+            diunggahOleh: dataFile.diunggahOleh,
+            groupId: dataFile.groupId,
+            tipeFile: dataFile.tipeFile,
+            tanggalUnggah: new Date().toISOString(),
+        };
+        await clientSanity.create(doc);
+        console.log(`✅ Info file "${dataFile.namaFile}" berhasil disimpan ke Sanity.`);
+        return true;
+    } catch (error) {
+        console.error("Error saat menyimpan info file ke Sanity:", error);
+        return false;
+    }
+}
+
 
 // =================================================================
 // BAGIAN 4: EVENT HANDLER CLIENT WHATSAPP
@@ -410,6 +479,59 @@ client.on('message', async (message) => {
             }
             return; 
         }
+
+        // ▼▼▼ TAMBAHKAN BLOK BARU UNTUK SIMPAN FILE DI SINI ▼▼▼
+        const simpanPrefix = 'panda simpan ';
+        if (userMessageLower.startsWith(simpanPrefix)) {
+            // Pemeriksaan 1: Apakah ini sebuah balasan?
+            if (!message.hasQuotedMsg) {
+                return message.reply('❌ Perintah ini hanya berfungsi jika Anda membalas file yang ingin disimpan.');
+            }
+
+            const quotedMsg = await message.getQuotedMessage();
+
+            // Pemeriksaan 2: Apakah yang dibalas adalah file?
+            if (!quotedMsg.hasMedia) {
+                return message.reply('❌ Anda harus membalas sebuah file (PDF, Dokumen, Gambar), bukan pesan teks.');
+            }
+
+            const namaFile = userMessage.substring(simpanPrefix.length).trim();
+
+            // Pemeriksaan 3: Apakah nama file diberikan?
+            if (!namaFile) {
+                return message.reply('❌ Silakan berikan nama untuk file Anda.\nContoh: `panda simpan Laporan Keuangan`');
+            }
+
+            try {
+                message.reply('⏳ Sedang memproses, mohon tunggu...');
+                const media = await quotedMsg.downloadMedia();
+                
+                // Langkah 1: Upload ke Google Drive
+                const driveId = await uploadKeDrive(media, namaFile);
+                if (!driveId) {
+                    return message.reply(' Gagal mengunggah file ke Google Drive.');
+                }
+
+                // Langkah 2: Simpan informasi ke Sanity
+                const contact = await message.getContact();
+                const dataFile = {
+                    namaFile: namaFile,
+                    googleDriveId: driveId,
+                    diunggahOleh: contact.pushname || message.author,
+                    groupId: chat.isGroup ? chat.id._serialized : 'pribadi',
+                    tipeFile: media.mimetype,
+                };
+                await simpanDataFileKeSanity(dataFile);
+
+                return message.reply(`✅ Berhasil! File dengan nama *"${namaFile}"* telah diarsipkan.`);
+
+            } catch (error) {
+                console.error("Error di blok simpan file:", error);
+                return message.reply(' Gagal memproses file. Terjadi kesalahan tak terduga.');
+            }
+
+        }
+        // ▲▲▲ BATAS AKHIR BLOK BARU ▲▲▲
 
         if (userMessageLower.startsWith('cari user ')) {
             const kataKunci = userMessage.substring('cari user '.length).trim();
