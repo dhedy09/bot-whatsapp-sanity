@@ -524,6 +524,24 @@ client.on('message', async (message) => {
         const userMessageLower = userMessage.toLowerCase();
         const userLastState = userState[message.from] || userState[message.author];
 
+        // BLOK 2: MENANGANI PERINTAH TEKS
+        if (userMessageLower === 'halo panda') {
+            await showMainMenu(message);
+            return;
+        }
+
+        // ▼▼▼ BLOK BARU UNTUK MENAMPILKAN DAFTAR PERINTAH ▼▼▼
+        const commandKeywords = ['help', 'menu bantuan'];
+        if (commandKeywords.includes(userMessageLower)) {
+            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "daftar_perintah"][0]`);
+            if (result && result.jawaban) {
+                return message.reply(result.jawaban);
+            } else {
+                return message.reply("Maaf, daftar perintah belum diatur di Sanity.");
+            }
+        }
+        // ▲▲▲ BATAS AKHIR BLOK BARU ▲▲▲
+
         // BLOK 1: MENANGANI "MODE AI"
         if (userLastState && userLastState.type === 'ai_mode') {
             const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
@@ -553,24 +571,6 @@ client.on('message', async (message) => {
             }
             return;
         }
-
-        // BLOK 2: MENANGANI PERINTAH TEKS
-        if (userMessageLower === 'halo panda') {
-            await showMainMenu(message);
-            return;
-        }
-
-        // ▼▼▼ BLOK BARU UNTUK MENAMPILKAN DAFTAR PERINTAH ▼▼▼
-        const commandKeywords = ['help', 'menu bantuan'];
-        if (commandKeywords.includes(userMessageLower)) {
-            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "daftar_perintah"][0]`);
-            if (result && result.jawaban) {
-                return message.reply(result.jawaban);
-            } else {
-                return message.reply("Maaf, daftar perintah belum diatur di Sanity.");
-            }
-        }
-        // ▲▲▲ BATAS AKHIR BLOK BARU ▲▲▲
 
         const rememberPrefix = 'ingat ini:';
         if (userMessage.toLowerCase().startsWith(rememberPrefix)) {
