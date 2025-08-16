@@ -5,7 +5,7 @@
 require('dotenv').config();
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const express = require('express');
-const { Client, LocalAuth, List } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const { createClient } = require('@sanity/client');
 const qrcode = require('qrcode');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -142,59 +142,27 @@ async function getLatestNews(query) {
     }
 }
 
-// awal show main menu
-    async function showMainMenu(message) {
+async function showMainMenu(message) {
+    // ... (Fungsi ini sudah benar, tidak ada perubahan)
     const contact = await message.getContact();
     const userName = contact.pushname || contact.name || 'Pengguna';
-
     const salamQuery = `*[_type == "botReply" && keyword == "salam_menu_utama"][0]`;
     const menuQuery = `*[_type == "menuUtamaItem"] | order(urutanTampilan asc)`;
-
-    try {
-        const [salamData, menuItems] = await Promise.all([
-            clientSanity.fetch(salamQuery),
-            clientSanity.fetch(menuQuery)
-        ]);
-
-        if (!menuItems || menuItems.length === 0) {
-            return message.reply('Maaf, menu utama belum diatur.');
-        }
-
-        const salamText = salamData ? salamData.jawaban.replace(/\n\n/g, '\n') : 'Silakan pilih salah satu opsi di bawah ini.';
-        
-        const menuRows = menuItems.map(item => ({
-            id: `main-menu_${item._id}`, // ID unik untuk menu utama
-            title: item.namaMenu,
-            description: item.deskripsiSingkat || ''
-        }));
-
-        const sections = [{
-            title: "Menu Utama",
-            rows: menuRows
-        }];
-
-        const list = new List(
-            `👋 Halo *${userName}*,\n${salamText}`,
-            "Lihat Menu",
-            sections,
-            "Pilih Opsi",
-            "Panda Bot"
-        );
-        
-        // Simpan state untuk validasi di langkah selanjutnya
-        userState[message.from] = { type: 'menu_utama_list', items: menuItems };
-
-        return client.sendMessage(message.from, list);
-
-    } catch (error) {
-        console.error("Error saat membuat menu utama (List):", error);
-        // Sistem darurat (fallback): Kirim menu teks biasa jika List gagal
-        const menuItemsText = menuItems.map(item => `${item.urutanTampilan}. ${item.namaMenu}`).join('\n');
-        userState[message.from] = { type: 'menu_utama', list: menuItems }; // State untuk menu teks
-        return message.reply(`👋 Halo *${userName}*,\nMaaf, menu interaktif sedang bermasalah. Silakan balas dengan angka:\n\n${menuItemsText}`);
+    const [salamData, menuItems] = await Promise.all([
+        clientSanity.fetch(salamQuery),
+        clientSanity.fetch(menuQuery)
+    ]);
+    const salamText = salamData ? salamData.jawaban.replace(/\n\n/g, '\n') : 'Berikut adalah menu yang tersedia:';
+    if (!menuItems || menuItems.length === 0) {
+        return message.reply('Maaf, menu utama belum diatur. Silakan hubungi admin.');
     }
+    userState[message.from] = { type: 'menu_utama', list: menuItems };
+    let menuMessage = `👋 Selamat datang *${userName}* di bot perencanaan.\n${salamText}\n\n`;
+    menuItems.forEach((item) => {
+        menuMessage += `${item.urutanTampilan}. ${item.namaMenu}\n`;
+    });
+    return message.reply(menuMessage);
 }
-// akhir show main menu
 
 
 async function showPustakaMenu(message, categoryId) {
@@ -494,39 +462,10 @@ client.on('message', async (message) => {
             return;
         }
 
-      // BLOK 3: MENANGANI INPUT DARI PENGGUNA (LIST & ANGKA)
-        if (message.type === 'list_response' && userLastState && userLastState.type === 'menu_utama_list') {
-            console.log(`▶️ Pengguna memilih dari List Menu Utama: ${message.body}`);
-            const docId = message.selectedRowId.split('_')[1]; // Ekstrak ID dokumen Sanity
-            const selectedItem = userLastState.items.find(item => item._id === docId);
-
-            if (selectedItem) {
-                if (selectedItem.tipeLink === 'kategori_pustaka') {
-                    await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
-                } else if (selectedItem.tipeLink === 'perintah_khusus') {
-                    if (selectedItem.perintahKhusus === 'mulai_sesi_ai') {
-                        const nomorBot = '6287849305181'; // GANTI DENGAN NOMOR BOT ANDA
-                        const teksOtomatis = encodeURIComponent("Halo, saya ingin memulai sesi AI");
-                        const linkWa = `https://wa.me/${nomorBot}?text=${teksOtomatis}`;
-                        const replyMessage = `Klik link ini untuk memulai sesi privat dengan Asisten AI:\n\n${linkWa}`;
-                        message.reply(replyMessage);
-                    } else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
-                        const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
-                        if (result) {
-                            message.reply(result.jawaban + '\n\nKetik "halo panda" untuk kembali ke menu utama.');
-                            userState[message.from] = null; // Reset state
-                        }
-                    }
-                }
-            }
-            return; // Hentikan proses
-        }
-
+        // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
         const isNumericChoice = !isNaN(parseInt(userMessage));
         if (userLastState && isNumericChoice) {
-            // Logika ini sekarang hanya untuk sub-menu (pustaka, pegawai) yang masih pakai angka
             if (userMessage === '0') {
-                console.log('↩️ Pengguna memilih 0 untuk kembali.');
                 if (userLastState.type === 'pustaka_data' && userLastState.currentCategoryId) {
                     const parent = await clientSanity.fetch(`*[_type == "kategoriPustaka" && _id == "${userLastState.currentCategoryId}"][0]{"parentId": indukKategori._ref}`);
                     await showPustakaMenu(message, parent ? parent.parentId : null);
@@ -537,7 +476,7 @@ client.on('message', async (message) => {
             }
 
             const index = parseInt(userMessage) - 1;
-            if (userLastState.list && index >= 0 && index < userLastState.list.length) {
+            if (index >= 0 && index < userLastState.list.length) {
                 const selectedItem = userLastState.list[index];
                 
                 if (userLastState.type === 'pustaka_data') {
@@ -546,7 +485,7 @@ client.on('message', async (message) => {
                     } else if (selectedItem._type === 'dokumenPustaka') {
                         let detailMessage = `📄 *Detail Dokumen*\n\n*Nama:* ${selectedItem.namaDokumen}\n*Tahun:* ${selectedItem.tahunDokumen || '-'}\n*Deskripsi:* ${selectedItem.deskripsi || '-'}\n\n*Link:* ${selectedItem.linkDokumen}`;
                         message.reply(detailMessage);
-                        // Opsi: kembali ke menu sebelumnya atau menu utama setelah lihat dokumen
+                        delete userState[message.from];
                     }
                 } else if (userLastState.type === 'pegawai') {
                     const pegawai = selectedItem;
@@ -556,6 +495,24 @@ client.on('message', async (message) => {
                     }
                     message.reply(detailMessage);
                     delete userState[message.from];
+                } else if (userLastState.type === 'menu_utama') {
+                    if (selectedItem.tipeLink === 'kategori_pustaka') {
+                        await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
+                    } else if (selectedItem.tipeLink === 'perintah_khusus') {
+                        if (selectedItem.perintahKhusus === 'mulai_sesi_ai') {
+                            const nomorBot = '6287849305181'; // <-- GANTI DENGAN NOMOR BOT ANDA YANG BENAR
+                            const teksOtomatis = encodeURIComponent("Halo, saya ingin memulai sesi AI");
+                            const linkWa = `https://wa.me/${nomorBot}?text=${teksOtomatis}`;
+                            const replyMessage = `Untuk memulai sesi privat dengan Asisten AI, silakan klik link di bawah ini. Anda akan diarahkan ke chat pribadi dengan saya.\n\n${linkWa}`;
+                            message.reply(replyMessage);
+                        }else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
+                            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
+                            if (result) {
+                                message.reply(result.jawaban + '\n\nBalas dengan *0* untuk kembali.');
+                                userState[message.from] = { type: 'info', list: [] };
+                            }
+                        }
+                    }
                 }
                 return;
             }
