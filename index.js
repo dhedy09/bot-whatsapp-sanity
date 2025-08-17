@@ -344,43 +344,47 @@ async function cariFileDiSanity(kataKunci, groupId) {
 }
 
 
+// ▼▼▼ AWAL FUNGSI CUACA ▼▼▼
+
 /**
  * Mengambil data cuaca terkini dari OpenWeatherMap API.
- * Jika berhasil, mengembalikan string deskripsi cuaca.
- * Jika gagal, akan melempar (throw) sebuah error.
- * @param {string} location Nama kota untuk dicari cuacanya.
- * @returns {Promise<string>} String yang mendeskripsikan cuaca.
+ * @param {string} location Nama kota untuk pencarian cuaca.
+ * @returns {Promise<object>} Data cuaca dalam format JSON.
  */
 async function getCurrentWeather(location) {
+    console.log(`[Tool] Menjalankan getCurrentWeather untuk lokasi: ${location}`);
     try {
-        console.log(`Mencari cuaca untuk: ${location}`);
         const apiKey = process.env.OPENWEATHER_API_KEY;
         if (!apiKey) {
-            throw new Error("OPENWEATHER_API_KEY tidak ditemukan di environment variables.");
+            return { error: "OPENWEATHER_API_KEY tidak diatur di server." };
         }
+        const apiUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(location)}&appid=${apiKey}&units=metric&lang=id`;
+        
+        const response = await axios.get(apiUrl);
+        const data = response.data;
 
-        const url = `https://api.openweathermap.org/data/2.5/weather?q=${location}&appid=${apiKey}&units=metric&lang=id`;
-        
-        const response = await fetch(url);
-        
-        // Jika respons tidak sukses (misal: 404 Not Found, 401 Unauthorized)
-        if (!response.ok) {
-            // Lemparkan error agar ditangkap oleh blok catch di logika interaksi.
-            // Ini akan mencegah masalah balasan ganda.
-            throw new Error(`Lokasi tidak ditemukan atau terjadi kesalahan API (Status: ${response.status})`);
-        }
-        
-        const data = await response.json();
-        
-        const weatherDescription = `Cuaca di ${data.name}: ${data.weather[0].description}, suhu ${data.main.temp}°C, terasa seperti ${data.main.feels_like}°C.`;
-        return weatherDescription;
+        // Kita ambil dan susun informasi penting untuk dikirim ke AI
+        const weatherInfo = {
+            kota: data.name,
+            suhu: `${data.main.temp}°C`,
+            terasa_seperti: `${data.main.feels_like}°C`,
+            kondisi: data.weather[0].description,
+            kelembapan: `${data.main.humidity}%`,
+            kecepatan_angin: `${data.wind.speed} m/s`
+        };
+        return weatherInfo;
 
     } catch (error) {
-        console.error("Error di dalam fungsi getCurrentWeather:", error.message);
-        // Lemparkan kembali error tersebut agar bisa ditangani oleh kode yang memanggil fungsi ini.
-        throw error;
+        if (error.response && error.response.status === 404) {
+            console.error(`[Cuaca] Kota tidak ditemukan: ${location}`);
+            return { error: `Maaf, saya tidak dapat menemukan data cuaca untuk kota "${location}".` };
+        }
+        console.error("Error saat mengambil data cuaca:", error.message);
+        return { error: "Gagal mengambil data cuaca dari server OpenWeatherMap." };
     }
 }
+
+// ▲▲▲ AKHIR DARI FUNGSI CUACA▲▲▲
 
 // ▼▼▼ FUNGSI BERITA ▼▼▼
 
