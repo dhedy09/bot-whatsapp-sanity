@@ -744,6 +744,7 @@ client.on('ready', () => {
 // awal kode message
 client.on('message', async (message) => {
     try {
+        const chat = await message.getChat();
         const userMessage = message.body.trim();
         const userMessageLower = userMessage.toLowerCase();
         const userLastState = userState[message.from] || userState[message.author];
