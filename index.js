@@ -894,24 +894,20 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
     return;
 }
 
-// BLOK 3: MENANGANI PILIHAN MENU NUMERIK
+        // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
 
-        // ▼▼▼ TAMBAHKAN BLOK BARU INI admin▼▼▼
-
-        // BLOK BARU: MENAMBAH PEGAWAI (HANYA ADMIN)
         // BLOK BARU: MENAMBAH PEGAWAI DENGAN PANDUAN OTOMATIS
         if (userMessageLower.startsWith('tambah pegawai')) {
+            // BAGIAN INI SENGAJA DINONAKTIFKAN SEMENTARA UNTUK MENDAFTARKAN ADMIN PERTAMA
             // const isUserAdmin = await isAdmin(message.from);
             // if (!isUserAdmin) {
             //     message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
             //     return;
             // }
 
-            // Ambil semua teks setelah 'tambah pegawai'
             const argsString = userMessage.substring('tambah pegawai'.length).trim();
-
-            // JIKA KOSONG, TAMPILKAN PANDUAN
             if (!argsString) {
+                // ... (bagian panduan tetap sama, tidak perlu diubah) ...
                 let panduanMessage = `📝 *Panduan Menambah Pegawai Baru*\n\n`;
                 panduanMessage += `Gunakan format berikut dengan data dipisahkan oleh koma:\n`;
                 panduanMessage += `\`\`\`tambah pegawai <Nama>, <NIP>, <Jabatan>, <Level>\`\`\`\n\n`;
@@ -922,16 +918,13 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
                 panduanMessage += `• *NIP:* Jika tidak ada, isi dengan \`-\` atau \`0\`.\n`;
                 panduanMessage += `• *Jabatan:* Posisi pegawai.\n`;
                 panduanMessage += `• *Level:* Hak akses, harus \`user\` atau \`admin\`.`;
-                
                 message.reply(panduanMessage);
                 return;
             }
 
-            // JIKA TIDAK KOSONG, LANJUTKAN PROSES
             message.reply('⏳ Memproses data, mohon tunggu...');
             try {
                 const args = argsString.split(',').map(arg => arg.trim());
-
                 if (args.length !== 4) {
                     message.reply('Format salah. Jumlah argumen tidak sesuai. Ketik `tambah pegawai` untuk melihat panduan.');
                     return;
@@ -939,13 +932,17 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
                 const [nama, nip, jabatan, level] = args;
                 const levelLower = level.toLowerCase();
-
                 if (levelLower !== 'user' && levelLower !== 'admin') {
                     message.reply('Format salah. Nilai <Level> harus `user` atau `admin`.');
                     return;
                 }
 
+                // --- PERBAIKAN UTAMA ADA DI SINI ---
+                // Membuat ID Dokumen dari nomor HP pengirim
+                const sanitizedId = message.from.replace(/[@.]/g, '-');
+
                 const newPegawaiDoc = {
+                    _id: sanitizedId, // Secara eksplisit mengatur ID Dokumen
                     _type: 'pegawai',
                     nama: nama,
                     nip: nip,
@@ -953,18 +950,18 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
                     tipePegawai: levelLower
                 };
 
-                await clientSanity.create(newPegawaiDoc);
-                message.reply(`✅ Pegawai baru dengan nama *${nama}* berhasil ditambahkan.`);
+                // Menggunakan createOrReplace untuk memastikan data dibuat atau diperbarui dengan ID yang benar
+                await clientSanity.createOrReplace(newPegawaiDoc);
+                message.reply(`✅ Pegawai baru dengan nama *${nama}* berhasil ditambahkan/diperbarui.`);
 
             } catch (error) {
                 console.error("Gagal menambah pegawai baru:", error);
                 message.reply("Maaf, terjadi kesalahan di server saat mencoba menambah pegawai.");
             }
-
             return;
         }
 
-        // ▲▲▲ AKHIR DARI BLOK BARU  admin▲▲▲
+        // ▲▲▲ AKHIR DARI KODE PENGGANTI  admin▲▲▲
 
 // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
