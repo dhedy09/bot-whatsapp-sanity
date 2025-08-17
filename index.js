@@ -1028,8 +1028,20 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
             // --- PERBAIKAN UTAMA ADA DI SINI ---
             // Dapatkan ID pengirim, baik dari grup (author) maupun chat pribadi (from)
             const authorId = message.author || message.from;
+
+                // --- TAMBAHKAN LOG UNTUK DEBUGGING ---
+                console.log("--- DEBUGGING ADMIN DI GRUP ---");
+                console.log("ID Grup (message.from):", message.from);
+                console.log("ID Pengirim (message.author):", message.author);
+                console.log("ID yang akan dicek (authorId):", authorId);
+                // ------------------------------------
             
             const isUserAdmin = await isAdmin(authorId);
+
+            // --- TAMBAHKAN LOG KEDUA ---
+            console.log("Hasil pengecekan isAdmin:", isUserAdmin);
+            console.log("-----------------------------");
+            // ---------------------------
             if (!isUserAdmin) {
                 message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
                 return;
