@@ -8,6 +8,7 @@ import nomorTerdaftar from './nomorTerdaftar'
 import memoriPengguna from './memoriPengguna'
 import fileArsip from './fileArsip'
 import perintahBantuan from './perintahBantuan'
+import pengingat from './pengingat'
 
 export const schemaTypes = [
     botReply, 
@@ -19,5 +20,6 @@ export const schemaTypes = [
     nomorTerdaftar, 
     memoriPengguna,
     fileArsip,
-    perintahBantuan
+    perintahBantuan,
+    pengingat
 ]

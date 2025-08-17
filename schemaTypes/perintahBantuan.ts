@@ -41,10 +41,11 @@ export default defineType({
       isAdmin: 'isAdminOnly',
     },
     prepare({title, subtitle, isAdmin}) {
+      // ▼▼▼ BAGIAN INI SUDAH DIPERBAIKI ▼▼▼
       return {
         title: title,
         subtitle: subtitle,
-        media: isAdmin ? '🔑' : '✨', // Emoji untuk membedakan di preview
+        // Baris 'media' yang menyebabkan error sudah dihapus
       }
     },
   },
