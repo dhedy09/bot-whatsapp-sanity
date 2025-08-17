@@ -90,7 +90,7 @@ async function showDokumenDetail(message, documentId) {
     message.reply(`Anda memilih dokumen dengan ID: ${documentId}. Fitur detail akan segera dikembangkan.`);
 }
 
-// ▲▲▲ AKHIR DARI FUNGSI BARU ▲▲▲
+// ▲▲▲ AKHIR DARI FUNGSI BARU ▲▲▲   
 /**
  * Mengevaluasi ekspresi matematika menggunakan math.js.
  * @param {string} expression Ekspresi yang akan dihitung, contoh: "5 * (2 + 3)".
