@@ -873,9 +873,12 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
         // BLOK BARU: FITUR INFO GEMPA BMKG
+        // BLOK BARU: FITUR INFO GEMPA BMKG (PERBAIKAN URUTAN)
         if (userMessageLower === 'gempa' || userMessageLower === 'info gempa') {
+            // LANGKAH 1: Kirim pesan "sedang mencari" terlebih dahulu.
             message.reply('⏳ Sedang mengambil data gempa terkini dari BMKG, mohon tunggu...');
             
+            // LANGKAH 2: Baru ambil datanya dan kirim hasilnya.
             try {
                 const gempaResult = await getInfoGempa(); 
                 message.reply(gempaResult);
