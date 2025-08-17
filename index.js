@@ -1015,7 +1015,7 @@ if (userMessageLower.startsWith('ingatkan')) {
             return;
         }
         const target = pegawaiDitemukan[0];
-        const targetNomorHp = target._id.replace(/-/g, '.');
+        const targetNomorHp = target._id.replace('-c-us', '@c.us');
         const targetNama = target.nama;
 
         // --- MENGGUNAKAN FUNGSI PARSER BARU KITA ---
