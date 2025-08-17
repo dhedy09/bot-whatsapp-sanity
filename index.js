@@ -15,9 +15,12 @@ const { google } = require('googleapis');
 const { Readable } = require('stream');
 const { evaluate } = require('mathjs');
 const axios = require('axios');
-const { Chrono, Parsers } = require('chrono-node');// ▼▼▼ awal GANTI DENGAN BLOK INI ▼▼▼
-const chronoId = new Chrono();
-chronoId.parsers.push(new Parsers.IDStandartParser());// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
+
+const chrono = require('chrono-node'); // Impor seluruh library untuk keamanan
+const chronoId = new chrono.Chrono();   // Buat instance baru dari chrono
+// Menggunakan nama yang benar: IDStandardParser (dengan 'd')
+chronoId.parsers.push(new chrono.Parsers.IDStandardParser());
+
 const FOLDER_DRIVE_ID = '17LsEyvyF06v3dPN7wMv_3NOiaajY8sQk'; // Ganti dengan ID folder Google Drive Anda
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
