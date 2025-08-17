@@ -694,18 +694,6 @@ client.on('message', async (message) => {
             return;
         }
 
-        // ▼▼▼ BLOK BARU UNTUK MENAMPILKAN DAFTAR PERINTAH ▼▼▼
-        const commandKeywords = ['help', 'menu bantuan'];
-        if (commandKeywords.includes(userMessageLower)) {
-            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "daftar_perintah"][0]`);
-            if (result && result.jawaban) {
-                return message.reply(result.jawaban);
-            } else {
-                return message.reply("Maaf, daftar perintah belum diatur di Sanity.");
-            }
-        }
-        // ▲▲▲ BATAS AKHIR BLOK BARU ▲▲▲
-
         // ▼▼▼ TAMBAHKAN BLOK BARU UNTUK SIMPAN FILE DI SINI ▼▼▼
         const simpanPrefix = 'panda simpan ';
         if (userMessageLower.startsWith(simpanPrefix)) {
@@ -895,10 +883,43 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 }
 
         // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
+        // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
-        // BLOK BARU: MENAMBAH PEGAWAI DENGAN PANDUAN OTOMATIS
+        // AWAL BLOK  MENU BANTUAN (HELP)
+        if (userMessageLower === 'help' || userMessageLower === 'bantuan') {
+            // Bagian 1: Siapkan pesan bantuan untuk pengguna umum
+            let helpMessage = `*MENU BANTUAN* 📚\n\n`;
+            helpMessage += `Berikut adalah daftar perintah yang bisa Anda gunakan:\n\n`;
+            helpMessage += `*✨ Perintah Umum*\n`;
+            helpMessage += `--------------------\n`;
+            helpMessage += `• *menu* - Menampilkan menu utama.\n`;
+            helpMessage += `• *pustaka data* - Menampilkan menu pustaka data.\n`;
+            helpMessage += `• *cari user [nama]* - Mencari data pegawai berdasarkan nama.\n`;
+            helpMessage += `• *cuaca* - Melihat prakiraan cuaca terkini (interaktif).\n`;
+            helpMessage += `• *berita* - Mencari berita berdasarkan topik (interaktif).\n`;
+            helpMessage += `• *gempa* - Menampilkan info gempa bumi terkini dari BMKG.\n`;
+            helpMessage += `• *ingat ini: [teks]* - Menyimpan catatan di memori jangka panjang.\n`;
+            helpMessage += `• *lupakan semua* - Menghapus riwayat percakapan singkat.\n\n`;
+            
+            // Bagian 2: Periksa apakah pengguna adalah admin
+            const isUserAdmin = await isAdmin(message.from);
+            
+            // Bagian 3: Jika admin, tambahkan pesan bantuan khusus admin
+            if (isUserAdmin) {
+                helpMessage += `*🔑 Perintah Admin*\n`;
+                helpMessage += `--------------------\n`;
+                helpMessage += `• *tambah pegawai* - Menampilkan panduan/template untuk menambah pegawai baru.\n`;
+                helpMessage += `• *update* - Menampilkan panduan untuk mengubah data pegawai.\n`;
+            }
+            
+            message.reply(helpMessage);
+            return;
+        }
+
+        // ▲▲▲ AKHIR DARI BLOK PANDUAN▲▲▲
+
+        // AWAL MENAMBAH PEGAWAI DENGAN PANDUAN OTOMATIS ADMIN
         if (userMessageLower.startsWith('tambah pegawai')) {
-            // BAGIAN INI SENGAJA DINONAKTIFKAN SEMENTARA UNTUK MENDAFTARKAN ADMIN PERTAMA
             const isUserAdmin = await isAdmin(message.from);
             if (!isUserAdmin) {
                 message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
@@ -906,22 +927,20 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
             }
 
             const argsString = userMessage.substring('tambah pegawai'.length).trim();
+
             if (!argsString) {
-                // ... (bagian panduan tetap sama, tidak perlu diubah) ...
                 let panduanMessage = `📝 *Panduan Menambah Pegawai Baru*\n\n`;
-                panduanMessage += `Gunakan format berikut dengan data dipisahkan oleh koma:\n`;
-                panduanMessage += `\`\`\`tambah pegawai <Nama>, <NIP>, <Jabatan>, <Level>\`\`\`\n\n`;
-                panduanMessage += `*Contoh Penggunaan:*\n`;
-                panduanMessage += `\`\`\`tambah pegawai Budi Santoso, 199001012020121001, Analis Data, user\`\`\`\n\n`;
-                panduanMessage += `*Keterangan:*\n`;
-                panduanMessage += `• *Nama:* Nama lengkap pegawai.\n`;
-                panduanMessage += `• *NIP:* Jika tidak ada, isi dengan \`-\` atau \`0\`.\n`;
-                panduanMessage += `• *Jabatan:* Posisi pegawai.\n`;
-                panduanMessage += `• *Level:* Hak akses, harus \`user\` atau \`admin\`.`;
+                panduanMessage += `Salin salah satu template di bawah ini, tempelkan, lalu ganti isinya.\n\n`;
+                panduanMessage += `*Template untuk Pegawai Biasa (User):*\n`;
+                panduanMessage += `\`\`\`tambah pegawai NAMA_LENGKAP, NIP, JABATAN, user\`\`\`\n\n`;
+                panduanMessage += `*Template untuk Admin:*\n`;
+                panduanMessage += `\`\`\`tambah pegawai NAMA_LENGKAP, NIP, JABATAN, admin\`\`\``;
+                
                 message.reply(panduanMessage);
                 return;
             }
-
+            
+            // ... (sisa logika prosesnya tetap sama)
             message.reply('⏳ Memproses data, mohon tunggu...');
             try {
                 const args = argsString.split(',').map(arg => arg.trim());
@@ -929,31 +948,23 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
                     message.reply('Format salah. Jumlah argumen tidak sesuai. Ketik `tambah pegawai` untuk melihat panduan.');
                     return;
                 }
-
                 const [nama, nip, jabatan, level] = args;
                 const levelLower = level.toLowerCase();
                 if (levelLower !== 'user' && levelLower !== 'admin') {
                     message.reply('Format salah. Nilai <Level> harus `user` atau `admin`.');
                     return;
                 }
-
-                // --- PERBAIKAN UTAMA ADA DI SINI ---
-                // Membuat ID Dokumen dari nomor HP pengirim
                 const sanitizedId = message.from.replace(/[@.]/g, '-');
-
                 const newPegawaiDoc = {
-                    _id: sanitizedId, // Secara eksplisit mengatur ID Dokumen
+                    _id: sanitizedId,
                     _type: 'pegawai',
                     nama: nama,
                     nip: nip,
                     jabatan: jabatan,
                     tipePegawai: levelLower
                 };
-
-                // Menggunakan createOrReplace untuk memastikan data dibuat atau diperbarui dengan ID yang benar
                 await clientSanity.createOrReplace(newPegawaiDoc);
                 message.reply(`✅ Pegawai baru dengan nama *${nama}* berhasil ditambahkan/diperbarui.`);
-
             } catch (error) {
                 console.error("Gagal menambah pegawai baru:", error);
                 message.reply("Maaf, terjadi kesalahan di server saat mencoba menambah pegawai.");
@@ -974,51 +985,55 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
             }
 
             const argsString = userMessage.substring('update'.length).trim();
+            
+            // Daftar field yang diizinkan untuk diubah via bot
+            const allowedFields = {
+                'nama': 'Nama Lengkap', 'nip': 'NIP', 'jabatan': 'Jabatan', 'level': 'Level Akses',
+                'usernamesipd': 'Username SIPD', 'passwordsipd': 'Password SIPD',
+                'passwordpenatausahaan': 'Password Penatausahaan', 'keterangan': 'Keterangan',
+                'userrakortek': 'User Rakortek', 'sipdrenstra': 'User SIPD Renstra', 'passrenstra': 'Password SIPD Renstra'
+            };
 
-            // Regex untuk mem-parsing perintah: (<Nama Target>) (<Nama Field>) menjadi (<Nilai Baru>)
+            if (!argsString) {
+                let panduanMessage = `📝 *Panduan Mengubah Data Pegawai*\n\n`;
+                panduanMessage += `Gunakan format berikut:\n`;
+                panduanMessage += `\`\`\`update <Nama Target> <Nama Field> menjadi <Nilai Baru>\`\`\`\n\n`;
+                panduanMessage += `*Contoh Penggunaan:*\n`;
+                panduanMessage += `\`\`\`update Budi Santoso jabatan menjadi Analis Senior\`\`\`\n\n`;
+                panduanMessage += `*Field yang bisa diubah:*\n`;
+                panduanMessage += `\`\`\`${Object.keys(allowedFields).join(', ')}\`\`\`\n\n`;
+                panduanMessage += `*💡 Tips:* Jika Anda tidak yakin dengan nama lengkap target, gunakan perintah \`cari user <nama>\` terlebih dahulu untuk memastikan.`;
+                
+                message.reply(panduanMessage);
+                return;
+            }
+
             const updateRegex = /^(.*?)\s(.*?)\smenjadi\s(.*)$/i;
             const match = argsString.match(updateRegex);
 
             if (!match) {
-                message.reply('Format salah. Gunakan:\n`update <Nama Target> <Nama Field> menjadi <Nilai Baru>`\n\n*Contoh:*\n`update Budi jabatan menjadi Analis Senior`');
+                message.reply('Format salah. Ketik `update` untuk melihat panduan.');
                 return;
             }
             
             const [, namaTarget, fieldToUpdate, nilaiBaru] = match.map(s => s.trim());
-
-            // Daftar field yang diizinkan untuk diubah via bot
-            const allowedFields = {
-                'nama': 'Nama Lengkap',
-                'nip': 'NIP',
-                'jabatan': 'Jabatan',
-                'level': 'Level Akses',
-                'usernamesipd': 'Username SIPD',
-                'passwordsipd': 'Password SIPD',
-                'passwordpenatausahaan': 'Password Penatausahaan',
-                'keterangan': 'Keterangan',
-                'userrakortek': 'User Rakortek',
-                'userrenstra': 'User Renstra',
-                'passwordrenstra': 'Password Renstra'
-            };
-            
             const fieldKey = fieldToUpdate.toLowerCase().replace(/\s/g, '');
+
             if (!allowedFields[fieldKey]) {
-                message.reply(`Maaf, field "${fieldToUpdate}" tidak valid atau tidak diizinkan untuk diubah.\n\nField yang valid: nama, nip, jabatan, level, usernameSipd, dll.`);
+                message.reply(`Maaf, field "${fieldToUpdate}" tidak valid. Ketik \`update\` untuk melihat daftar field yang bisa diubah.`);
                 return;
             }
 
-            // Koreksi nama field untuk 'level'
-            const finalFieldKey = fieldKey === 'level' ? 'tipePegawai' : fieldKey.replace('userrenstra', 'sipdRenstra').replace('passwordrenstra', 'passRenstra');
+            const finalFieldKey = fieldKey === 'level' ? 'tipePegawai' : fieldToUpdate;
 
             message.reply(`⏳ Mencari *${namaTarget}* untuk memperbarui *${allowedFields[fieldKey]}*...`);
 
             try {
-                // Cari pegawai berdasarkan nama
                 const query = `*[_type == "pegawai" && lower(nama) == lower($namaTarget)]`;
                 const pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
 
                 if (pegawaiDitemukan.length === 0) {
-                    message.reply(`Maaf, pegawai dengan nama "${namaTarget}" tidak ditemukan.`);
+                    message.reply(`Maaf, pegawai dengan nama "${namaTarget}" tidak ditemukan. Pastikan penulisan nama sudah benar.`);
                     return;
                 }
 
@@ -1028,8 +1043,6 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
                 }
 
                 const pegawaiId = pegawaiDitemukan[0]._id;
-
-                // Lakukan patch/update pada dokumen
                 await clientSanity.patch(pegawaiId).set({ [finalFieldKey]: nilaiBaru }).commit();
 
                 message.reply(`✅ Data *${namaTarget}* berhasil diperbarui:\n*${allowedFields[fieldKey]}* sekarang menjadi *${nilaiBaru}*`);
