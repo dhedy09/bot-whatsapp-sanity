@@ -126,7 +126,7 @@ const client = new Client({
         ],
     }
 });
-
+const userHistory = {};
 const userState = {};
 
 // =================================================================
