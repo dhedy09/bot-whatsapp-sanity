@@ -83,6 +83,50 @@ const userState = {};
 // =================================================================
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
+
+    // ▼▼▼ TAMBAHKAN FUNGSI ALARM ▼▼▼
+
+    /**
+     * Memeriksa Sanity untuk pengingat yang sudah jatuh tempo,
+     * mengirimkannya, lalu memperbarui statusnya.
+     */
+    async function checkAndSendReminders() {
+        try {
+            // 1. Cari pengingat yang statusnya 'menunggu' dan waktunya sudah lewat
+            const now = new Date().toISOString();
+            const query = `*[_type == "pengingat" && status == "menunggu" && waktuKirim <= $now]`;
+            const dueReminders = await clientSanity.fetch(query, { now });
+
+            if (dueReminders.length === 0) {
+                // Jika tidak ada pengingat, tidak melakukan apa-apa
+                return;
+            }
+
+            console.log(`[Pengingat] Ditemukan ${dueReminders.length} pengingat yang harus dikirim.`);
+
+            // 2. Kirim setiap pengingat satu per satu
+            for (const reminder of dueReminders) {
+                try {
+                    const messageBody = `🔔 *PENGINGAT* 🔔\n\n${reminder.pesan}`;
+                    await client.sendMessage(reminder.targetNomorHp, messageBody);
+
+                    // 3. Jika berhasil, update statusnya menjadi 'terkirim'
+                    await clientSanity.patch(reminder._id).set({ status: 'terkirim' }).commit();
+                    console.log(`[Pengingat] Berhasil mengirim pengingat ke ${reminder.targetNama}`);
+
+                } catch (sendError) {
+                    console.error(`[Pengingat] Gagal mengirim pengingat ke ${reminder.targetNama}:`, sendError);
+                    // Jika gagal, update statusnya menjadi 'gagal'
+                    await clientSanity.patch(reminder._id).set({ status: 'gagal' }).commit();
+                }
+            }
+        } catch (fetchError) {
+            console.error("[Pengingat] Gagal mengambil data pengingat dari Sanity:", fetchError);
+        }
+    }
+
+    // ▲▲▲ AKHIR DARI ALARM▲▲▲
+
 /**
  * Mengevaluasi ekspresi matematika menggunakan math.js.
  * @param {string} expression Ekspresi yang akan dihitung, contoh: "5 * (2 + 3)".
@@ -602,8 +646,12 @@ client.on('qr', async (qr) => {
 });
 
 client.on('ready', () => {
-    console.log('✅ Bot WhatsApp berhasil terhubung dan siap digunakan!');
-    qrCodeUrl = null;
+    console.log('✅ Bot WhatsApp berhasil terhubung dan siap digunakan!');
+    qrCodeUrl = null; // Baris ini penting untuk web server Anda, JANGAN DIHAPUS
+
+    // Menjalankan alarm pengingat setiap 60 detik (1 menit)
+    console.log('[Pengingat] Alarm pengingat diaktifkan, akan memeriksa setiap menit.');
+    setInterval(checkAndSendReminders, 60000); 
 });
 
 // awal kode message
