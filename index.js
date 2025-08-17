@@ -15,7 +15,9 @@ const { google } = require('googleapis');
 const { Readable } = require('stream');
 const { evaluate } = require('mathjs');
 const axios = require('axios');
-const chrono = require('chrono-node');
+const { Chrono, Parsers } = require('chrono-node');// ▼▼▼ awal GANTI DENGAN BLOK INI ▼▼▼
+const chronoId = new Chrono();
+chronoId.parsers.push(new Parsers.IDStandartParser());// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 const FOLDER_DRIVE_ID = '17LsEyvyF06v3dPN7wMv_3NOiaajY8sQk'; // Ganti dengan ID folder Google Drive Anda
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
@@ -987,9 +989,8 @@ if (userMessageLower.startsWith('ingatkan')) {
         const targetNama = target.nama;
 
         // --- PERBAIKAN UTAMA ADA DI SINI ---
-        // Alih-alih chrono.id.parseDate, kita gunakan chrono.parse dengan opsi bahasa
-        const results = chrono.parse(waktuString, new Date(), { forwardDate: true, language: 'id' });
-        // Ambil tanggal dari hasil pertama jika ada
+        // Menggunakan instance chronoId yang sudah kita buat secara manual
+        const results = chronoId.parse(waktuString, new Date(), { forwardDate: true });
         const waktuKirim = results.length > 0 ? results[0].start.date() : null;
 
         if (!waktuKirim) {
