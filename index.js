@@ -744,7 +744,6 @@ client.on('ready', () => {
 // awal kode message
 client.on('message', async (message) => {
     try {
-        const chat = await message.getChat();
         const userMessage = message.body.trim();
         const userMessageLower = userMessage.toLowerCase();
         const userLastState = userState[message.from] || userState[message.author];
@@ -1400,11 +1399,8 @@ if (userMessageLower.startsWith('ingatkan')) {
 
 // JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
 // ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
-// Panggil "pusat kendali AI" hanya jika BUKAN dari grup
-if (!chatInfo.isGroup) {
-    const responseText = await getGeminiResponse(userMessage, userHistory[message.from] || []);
-    message.reply(responseText);
-}
+const responseText = await getGeminiResponse(userMessage, userHistory[message.from] || []);
+message.reply(responseText);
 // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
     } catch (error) {
