@@ -337,49 +337,56 @@ async function getInfoGempa() {
 // ▼▼▼ GANTI FUNGSI LAMA ANDA DENGAN VERSI BARU INI ▼▼▼
 
     // AWAL SHOW MAIN MENU
-    async function showMainMenu(message) {
-        try {
-            // Bagian 1: Mengambil data (ini adalah kode Anda yang sudah ada, tidak diubah)
-            const contact = await message.getContact();
-            const userName = contact.pushname || contact.name || 'Pengguna';
-            const salamQuery = `*[_type == "botReply" && keyword == "salam_menu_utama"][0]`;
-            const menuQuery = `*[_type == "menuUtamaItem"] | order(urutanTampilan asc)`;
-            
-            const [salamData, menuItems] = await Promise.all([
-                clientSanity.fetch(salamQuery),
-                clientSanity.fetch(menuQuery)
-            ]);
-            
-            const salamText = salamData ? salamData.jawaban.replace(/\n\n/g, '\n') : 'Berikut adalah menu yang tersedia:';
-            
-            if (!menuItems || menuItems.length === 0) {
-                return message.reply('Maaf, menu utama belum diatur. Silakan hubungi admin.');
-            }
-
-            // Bagian 2: Membangun & Mengirim Tombol (ini bagian barunya)
-            const buttonBody = `👋 Selamat datang *${userName}* di bot perencanaan.\n${salamText}`;
-
-            // Mengubah daftar menu dari Sanity menjadi format tombol
-            const buttonArray = menuItems.map(item => ({
-                body: item.namaMenu, // Teks yang akan tampil di tombol
-                // ID unik untuk tombol, misal: "Pustaka Data" -> "pustaka_data"
-                id: item.namaMenu.toLowerCase().replace(/ /g, '_') 
-            }));
-
-            const buttons = new Buttons(
-                buttonBody,
-                buttonArray,
-                'Menu Utama',
-                'Pilih salah satu opsi'
-            );
-            
-            await client.sendMessage(message.from, buttons);
-
-        } catch (error) {
-            console.error("Error di showMainMenu:", error);
-            message.reply("Maaf, terjadi kesalahan saat menampilkan menu utama.");
+async function showMainMenu(message) {
+    try {
+        // Bagian 1: Mengambil data dari Sanity (tetap sama)
+        const contact = await message.getContact();
+        const userName = contact.pushname || contact.name || 'Pengguna';
+        const salamQuery = `*[_type == "botReply" && keyword == "salam_menu_utama"][0]`;
+        const menuQuery = `*[_type == "menuUtamaItem"] | order(urutanTampilan asc)`;
+        
+        const [salamData, menuItems] = await Promise.all([
+            clientSanity.fetch(salamQuery),
+            clientSanity.fetch(menuQuery)
+        ]);
+        
+        const salamText = salamData ? salamData.jawaban.replace(/\n\n/g, '\n') : 'Berikut adalah menu yang tersedia:';
+        
+        if (!menuItems || menuItems.length === 0) {
+            return message.reply('Maaf, menu utama belum diatur. Silakan hubungi admin.');
         }
+
+        // Bagian 2: Membangun dan Mengirim List (ini bagian yang diubah dari Buttons)
+        const listBody = `👋 Selamat datang *${userName}* di bot perencanaan.\n${salamText}`;
+
+        // Mengubah daftar menu dari Sanity menjadi format baris (rows)
+        const menuRows = menuItems.map(item => ({
+            title: item.namaMenu,
+            id: item.namaMenu.toLowerCase().replace(/ /g, '_')
+        }));
+
+        // Membuat section untuk List
+        const sections = [{
+            title: 'Pilihan Menu',
+            rows: menuRows
+        }];
+
+        // Membuat objek List
+        const list = new List(
+            listBody,
+            "Buka Menu", // Teks tombol untuk membuka daftar
+            sections,
+            "Menu Utama",
+            "Pilih salah satu opsi"
+        );
+        
+        await client.sendMessage(message.from, list);
+
+    } catch (error) {
+        console.error("Error di showMainMenu:", error);
+        message.reply("Maaf, terjadi kesalahan saat menampilkan menu utama.");
     }
+}
 
     // ▲▲▲ AKHIR DARI FUNGSI SHOW MAIN MENU▲▲▲
 
