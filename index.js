@@ -254,6 +254,49 @@ async function getLatestNews(query) {
     }
 }
 
+// ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
+
+/**
+ * Mengambil data gempa bumi terkini dari API publik BMKG.
+ * @returns {Promise<string>} String berisi informasi gempa terkini.
+ */
+async function getInfoGempa() {
+    try {
+        const url = 'https://data.bmkg.go.id/DataMKG/TEWS/autogempa.json';
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            throw new Error(`Gagal mengambil data dari BMKG (Status: ${response.status})`);
+        }
+
+        const data = await response.json();
+        const gempa = data.Infogempa.gempa;
+
+        const waktu = `${gempa.Tanggal}, ${gempa.Jam}`;
+        const magnitudo = gempa.Magnitude;
+        const kedalaman = gempa.Kedalaman;
+        const lokasi = `${gempa.Wilayah} | Koordinat: ${gempa.Lintang}, ${gempa.Bujur}`;
+        const potensi = gempa.Potensi;
+        const arahan = gempa.Dirasakan;
+
+        let gempaMessage = `⚠️ *Info Gempa Bumi Terkini (BMKG)*\n\n`;
+        gempaMessage += `*Waktu:* ${waktu}\n`;
+        gempaMessage += `*Magnitudo:* ${magnitudo} SR\n`;
+        gempaMessage += `*Kedalaman:* ${kedalaman}\n`;
+        gempaMessage += `*Lokasi:* ${lokasi}\n`;
+        gempaMessage += `*Potensi:* ${potensi}\n\n`;
+        gempaMessage += `*Arahan:* ${arahan}`;
+
+        return gempaMessage;
+
+    } catch (error) {
+        console.error("Error di dalam fungsi getInfoGempa:", error.message);
+        throw error; // Lemparkan error agar ditangani logika interaksi
+    }
+}
+
+// ▲▲▲ AKHIR DARI FUNGSI BARU ▲▲▲
+
 // ▲▲▲ AKHIR DARI KODE PENGGANTI ▲▲▲
 
 async function showMainMenu(message) {
@@ -826,6 +869,24 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 }
 
 // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
+
+// ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
+
+        // BLOK BARU: FITUR INFO GEMPA BMKG
+        if (userMessageLower === 'gempa' || userMessageLower === 'info gempa') {
+            message.reply('⏳ Sedang mengambil data gempa terkini dari BMKG, mohon tunggu...');
+            
+            try {
+                const gempaResult = await getInfoGempa(); 
+                message.reply(gempaResult);
+            } catch (error) {
+                console.error("Gagal mengambil data gempa di blok interaksi:", error.message);
+                message.reply("Maaf, terjadi kesalahan saat mengambil data gempa dari BMKG.");
+            }
+            return;
+        }
+
+        // ▲▲▲ AKHIR DARI BLOK GEMPA ▲▲▲
 
         // ▼▼▼ TAMBAHKAN BLOK BERITA ▼▼▼
 
