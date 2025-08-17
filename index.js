@@ -899,11 +899,11 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
         // BLOK BARU: MENAMBAH PEGAWAI DENGAN PANDUAN OTOMATIS
         if (userMessageLower.startsWith('tambah pegawai')) {
             // BAGIAN INI SENGAJA DINONAKTIFKAN SEMENTARA UNTUK MENDAFTARKAN ADMIN PERTAMA
-            // const isUserAdmin = await isAdmin(message.from);
-            // if (!isUserAdmin) {
-            //     message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
-            //     return;
-            // }
+            const isUserAdmin = await isAdmin(message.from);
+            if (!isUserAdmin) {
+                message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
+                return;
+            }
 
             const argsString = userMessage.substring('tambah pegawai'.length).trim();
             if (!argsString) {
