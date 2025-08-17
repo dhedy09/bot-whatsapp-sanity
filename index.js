@@ -82,6 +82,15 @@ const userState = {};
 // =================================================================
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
+
+// ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
+
+async function showDokumenDetail(message, documentId) {
+    // Nanti kita akan kembangkan fungsi ini
+    message.reply(`Anda memilih dokumen dengan ID: ${documentId}. Fitur detail akan segera dikembangkan.`);
+}
+
+// ▲▲▲ AKHIR DARI FUNGSI BARU ▲▲▲
 /**
  * Mengevaluasi ekspresi matematika menggunakan math.js.
  * @param {string} expression Ekspresi yang akan dihitung, contoh: "5 * (2 + 3)".
@@ -375,52 +384,91 @@ async function getInfoGempa() {
     // ▲▲▲ AKHIR DARI FUNGSI SHOW MAIN MENU▲▲▲
 
 
+// ▼▼▼AWAL PUSTAKA DATA LIST ▼▼▼
+
 async function showPustakaMenu(message, categoryId) {
-    // ... (Fungsi ini sudah benar, tidak ada perubahan)
     try {
+        // --- Bagian 1: Mengambil data & breadcrumb (Kode canggih Anda kita pertahankan) ---
         const breadcrumbPath = [];
-        let currentCatId = categoryId;
+        let currentCatIdForBreadcrumb = categoryId;
         let depth = 0;
-        const maxDepth = 10;
-        while (currentCatId && depth < maxDepth) {
-            const parentQuery = `*[_type == "kategoriPustaka" && _id == "${currentCatId}"][0]{namaKategori, "parentId": indukKategori._ref}`;
+        while (currentCatIdForBreadcrumb && depth < 10) {
+            const parentQuery = `*[_type == "kategoriPustaka" && _id == "${currentCatIdForBreadcrumb}"][0]{namaKategori, "parentId": indukKategori._ref}`;
             const parent = await clientSanity.fetch(parentQuery);
             if (parent) {
                 breadcrumbPath.unshift(parent.namaKategori);
-                currentCatId = parent.parentId;
+                currentCatIdForBreadcrumb = parent.parentId;
             } else {
-                currentCatId = null;
+                currentCatIdForBreadcrumb = null;
             }
             depth++;
         }
         const breadcrumb = breadcrumbPath.length > 0 ? `Pustaka Data > ${breadcrumbPath.join(' > ')}` : 'Pustaka Data';
+        
         const queryFilter = categoryId ? `indukKategori._ref == "${categoryId}"` : '!defined(indukKategori)';
         const subKategoriQuery = `*[_type == "kategoriPustaka" && ${queryFilter}] | order(namaKategori asc)`;
         const dokumenQuery = `*[_type == "dokumenPustaka" && kategoriInduk._ref == "${categoryId}"] | order(namaDokumen asc)`;
+        
         const [subKategoriList, dokumenList] = await Promise.all([
             clientSanity.fetch(subKategoriQuery),
             categoryId ? clientSanity.fetch(dokumenQuery) : Promise.resolve([])
         ]);
+        
         const combinedList = [...subKategoriList, ...dokumenList];
-        if (combinedList.length === 0) {
-            message.reply(`Maaf, belum ada data di dalam kategori ini.\n\nBalas dengan *0* untuk kembali.`);
-            userState[message.from] = { type: 'pustaka_data', currentCategoryId: categoryId, list: [] };
-            return;
-        }
-        let menuMessage = `*${breadcrumb}*\n\nSilakan pilih salah satu:\n\n`;
-        combinedList.forEach((item, index) => {
-            const icon = item._type === 'dokumenPustaka' ? '📄' : '📁';
+        
+        // --- Bagian 2: Membangun & Mengirim List (Bagian baru) ---
+        // 2a. Buat baris (rows) dari data Sanity
+        const dataRows = combinedList.map(item => {
+            const isDocument = item._type === 'dokumenPustaka';
             const title = item.namaKategori || item.namaDokumen;
-            menuMessage += `${index + 1}. ${icon} ${title}\n`;
+            return {
+                id: item._id, // ID dari Sanity, akan dikirim saat user memilih
+                title: `${isDocument ? '📄' : '📁'} ${title}`
+            };
         });
-        menuMessage += `\nBalas dengan *0* untuk kembali.`;
-        userState[message.from] = { type: 'pustaka_data', currentCategoryId: categoryId, list: combinedList };
-        message.reply(menuMessage);
+
+        // 2b. Buat baris navigasi
+        const navigationRows = [];
+        let parentCategoryId = null;
+        if (categoryId) {
+            const parentQuery = `*[_type == "kategoriPustaka" && _id == "${categoryId}"][0]{"parentId": indukKategori._ref}`;
+            const parent = await clientSanity.fetch(parentQuery);
+            parentCategoryId = parent ? parent.parentId : null;
+            // Tombol "Kembali" hanya muncul jika kita tidak di level paling atas
+            navigationRows.push({ id: `pustaka_nav_back_${parentCategoryId || 'root'}`, title: '↩️ Kembali ke Menu Sebelumnya' });
+        }
+        navigationRows.push({ id: `pustaka_nav_main`, title: '🏠 Kembali ke Menu Utama' });
+
+        // 2c. Gabungkan semua baris ke dalam "sections"
+        const sections = [];
+        if (dataRows.length > 0) {
+            sections.push({ title: 'Pilihan Kategori/Dokumen', rows: dataRows });
+        } else {
+            sections.push({ title: 'Info', rows: [{ id: 'no_data', title: 'Tidak ada data di kategori ini.' }] });
+        }
+        sections.push({ title: 'Navigasi', rows: navigationRows });
+
+        // 2d. Buat dan kirim objek List
+        const list = new List(
+            `*${breadcrumb}*\n\nSilakan pilih salah satu dari daftar di bawah ini:`, // Body
+            "Lihat Opsi", // Teks tombol untuk membuka list
+            sections,
+            "Pustaka Data Digital", // Judul List
+            "Pilih salah satu" // Footer
+        );
+        
+        await client.sendMessage(message.from, list);
+
+        // 2e. Simpan state pengguna (untuk tombol kembali jika diperlukan di masa depan)
+        userState[message.from] = { type: 'pustaka_data', currentCategoryId: categoryId, parentCategoryId: parentCategoryId };
+
     } catch (error) {
         console.error("Error di showPustakaMenu:", error);
         message.reply("Maaf, terjadi kesalahan saat memuat Pustaka Data.");
     }
 }
+
+// ▲▲▲ AKHIR DARI FUNGSI PENGGANTI PUSTAKA DATA▲▲▲
 
 /**
  * Mengirim prompt dan riwayat percakapan ke API Gemini dan mengembalikan responsnya.
@@ -911,6 +959,56 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
         // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
         // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
+
+        // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
+
+        // BLOK: PEMICU MENU PUSTAKA DATA
+        // Blok ini menangani ketikan manual "pustaka data"
+        // DAN klik tombol yang mengirim ID "pustaka_data"
+        if (userMessageLower === 'pustaka data' || userMessageLower === 'pustaka_data') {
+            // Panggil fungsi untuk menampilkan Pustaka Data dari level paling atas
+            await showPustakaMenu(message, null);
+            return;
+        }
+
+        // ▲▲▲ AKHIR DARI BLOK BARU PUSTAKA▲▲▲
+
+        // AWALMENANGANI NAVIGASI PUSTAKA DATA (DARI LIST)
+        if (userState[message.from]?.type === 'pustaka_data') {
+            const selectedId = message.body;
+
+            // Menangani tombol "Kembali ke Menu Utama"
+            if (selectedId === 'pustaka_nav_main') {
+                await showMainMenu(message);
+                delete userState[message.from];
+                return;
+            }
+
+            // Menangani tombol "Kembali ke Menu Sebelumnya"
+            if (selectedId.startsWith('pustaka_nav_back_')) {
+                const parentId = selectedId.replace('pustaka_nav_back_', '');
+                await showPustakaMenu(message, parentId === 'root' ? null : parentId);
+                return;
+            }
+
+            // Menangani pilihan kategori atau dokumen (ID dari Sanity)
+            if (selectedId && selectedId.length > 20 && !selectedId.includes(' ')) {
+                const query = `*[_id == "${selectedId}"][0]`;
+                const selectedItem = await clientSanity.fetch(query);
+
+                if (selectedItem) {
+                    if (selectedItem._type === 'kategoriPustaka') {
+                        await showPustakaMenu(message, selectedItem._id);
+                    } else if (selectedItem._type === 'dokumenPustaka') {
+                        await showDokumenDetail(message, selectedItem._id); 
+                        delete userState[message.from];
+                    }
+                }
+                return;
+            }
+        }
+
+        // ▲▲▲ AKHIR DARI BLOK MENANGANI LIST▲▲▲
 
         // AWAL BLOK  MENU BANTUAN (HELP)
         if (userMessageLower === 'help' || userMessageLower === 'bantuan') {
