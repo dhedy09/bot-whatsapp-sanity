@@ -1285,12 +1285,12 @@ if (userMessageLower.startsWith('ingatkan')) {
             return;
         }
         // AKHIR UPDATE DATA PEGAWAI
-        
+
         // AWAL LINK PEGAWAI
         // =================================================================
         // BLOK BARU: MENGHUBUNGKAN PEGAWAI (HANYA ADMIN)
         // =================================================================
-        const linkPegawaiPrefix = 'link pegawai ';
+const linkPegawaiPrefix = 'link pegawai ';
         if (userMessageLower.startsWith(linkPegawaiPrefix)) {
             // 1. Cek apakah pengirim adalah admin
             const isAdmin = await isUserAdmin(message.from);
@@ -1308,13 +1308,10 @@ if (userMessageLower.startsWith('ingatkan')) {
 
             // 3. Ekstrak nama pegawai dari sisa pesan
             const commandBody = userMessage.substring(linkPegawaiPrefix.length);
-            // Ambil teks setelah mention. Ini mungkin perlu penyesuaian tergantung format pesan.
-            // Asumsi format: "link pegawai @user ke Nama Lengkap Pegawai"
             const nameParts = commandBody.split(' ke ');
             if (nameParts.length < 2 || !nameParts[1]) {
                  return message.reply('Format salah. Gunakan: `link pegawai @user ke Nama Lengkap Pegawai`\nContoh: `link pegawai @BudiSantoso ke Budi Santoso`');
             }
-            // Hapus mention dari bagian nama
             const targetPegawaiName = nameParts[1].replace(/@\d+/g, '').trim();
 
 
