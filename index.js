@@ -773,6 +773,32 @@ client.on('message', async (message) => {
                 return;
             }
 
+// ▼▼▼ TAMBAHKAN BLOK INI DI POSISI PALING ATAS ▼▼▼
+
+        // =================================================================
+        // PRIORITAS #0: MENANGANI PESAN KONTAK (UNTUK LINK PEGAWAI)
+        // =================================================================
+        if (message.type === 'vcard') {
+            const isAdmin = await isUserAdmin(message.from);
+            if (!isAdmin) {
+                // Jika bukan admin, abaikan saja dan jangan balas apa pun.
+                return;
+            }
+
+            const contact = await message.getContact();
+            const targetUserId = contact.id._serialized;
+
+            // Simpan informasi kontak dan set state baru
+            userState[message.from] = {
+                type: 'link_pegawai_contact_received',
+                targetUserId: targetUserId,
+                targetUserNumber: contact.number,
+            };
+
+            return message.reply(`Anda mengirim kontak *${contact.name || contact.pushname}*.\n\nSekarang, silakan balas dengan *sebagian namanya* yang terdaftar di Sanity untuk saya cari.`);
+        }
+// ▲▲▲ BATAS AKHIR BLOK 1 ▲▲▲
+
             // ▼▼▼ PASTE BLOK BARU INI DI TEMPAT YANG SAMA ▼▼▼
             // BLOK BARU: MENYIMPAN MEMORI JANGKA PANJANG (VERSI PERBAIKAN)
             const memoryTriggers = ['ingat ini:', 'ingat saya:'];
@@ -905,6 +931,8 @@ client.on('message', async (message) => {
                 return message.reply('Silakan masukkan kata kunci. Contoh: `cari file laporan`');
             }
 
+
+
             const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
             const hasilPencarian = await cariFileDiSanity(kataKunci, groupId);
 
@@ -919,6 +947,49 @@ client.on('message', async (message) => {
             replyMessage += `\nUntuk mengambil, balas dengan:\n\`kirim file <nama file lengkap>\``;
             return message.reply(replyMessage);
         }
+
+        const cariPrefix = 'cari file ';
+        if (userMessageLower.startsWith(cariPrefix)) {
+            const kataKunci = userMessage.substring(cariPrefix.length).trim();
+            if (!kataKunci) {
+                return message.reply('Silakan masukkan kata kunci. Contoh: `cari file laporan`');
+            }
+// AWAL LINK PEGAWAI
+} else if (userLastState && userLastState.type === 'link_pegawai_contact_received') {
+            const searchKeyword = userMessage;
+            const { targetUserId, targetUserNumber } = userLastState;
+
+            // Cari pegawai di Sanity yang namanya cocok (case-insensitive) dan belum punya userId
+            const query = `*[_type == "pegawai" && nama match $keyword && !defined(userId)]`;
+            const candidates = await clientSanity.fetch(query, { keyword: `*${searchKeyword}*` });
+
+            if (candidates.length === 0) {
+                delete userState[message.from]; // Hapus state jika tidak ada hasil
+                return message.reply(`❌ Tidak ditemukan kandidat pegawai dengan nama mengandung "${searchKeyword}" yang belum terhubung.`);
+            }
+
+            // Update state ke tahap pemilihan angka
+            userState[message.from] = {
+                type: 'link_pegawai_selection',
+                targetUserId: targetUserId,
+                targetUserNumber: targetUserNumber,
+                list: candidates,
+            };
+
+            let replyMessage = `Ditemukan ${candidates.length} kandidat untuk dihubungkan ke @${targetUserNumber}:\n\n`;
+            candidates.forEach((p, i) => {
+                replyMessage += `${i + 1}. ${p.nama} - *(${p.jabatan || 'Jabatan Kosong'})*\n`;
+            });
+            replyMessage += `\nSilakan balas dengan *NOMOR* yang benar. Balas *0* untuk batal.`;
+
+            return message.reply(replyMessage);
+        
+        // <-- Kurung kurawal ini menutup blok 'else if' untuk 'link_pegawai'
+        }
+        
+        // ... (lanjut ke blok 'else if' atau logika lainnya) ...
+
+// ▲▲▲ BATAS AKHIR LINK PEGAWAI▲▲▲
 
         const kirimPrefix = 'kirim file ';
         if (userMessageLower.startsWith(kirimPrefix)) {
@@ -941,52 +1012,6 @@ client.on('message', async (message) => {
             await kirimFileDariDrive(fileData.googleDriveId, fileData.namaFile, message.from);
             return;
         }
-
-        // =================================================================
-        // BLOK BARU: MENGHUBUNGKAN LINK  PEGAWAI (INTERAKTIF)
-        // =================================================================
-        const linkPegawaiPrefix = 'link pegawai ';
-        if (userMessageLower.startsWith(linkPegawaiPrefix)) {
-            const isAdmin = await isUserAdmin(message.from);
-            if (!isAdmin) {
-                return message.reply('❌ Perintah ini hanya bisa dijalankan oleh admin.');
-            }
-
-            const mentions = await message.getMentions();
-            if (!mentions || mentions.length === 0) {
-                return message.reply('❌ Anda harus me-mention pengguna yang ingin dihubungkan.');
-            }
-            const targetUser = mentions[0];
-            const targetUserId = targetUser.id._serialized;
-
-            const searchKeyword = userMessage.substring(linkPegawaiPrefix.length).replace(/@\d+/g, '').trim();
-            if (!searchKeyword) {
-                return message.reply('Format salah. Gunakan: `link pegawai @user <kata kunci nama>`\nContoh: `link pegawai @BudiSantoso budi`');
-            }
-
-            const query = `*[_type == "pegawai" && nama match $keyword && !defined(userId)]`;
-            const candidates = await clientSanity.fetch(query, { keyword: `*${searchKeyword}*` });
-
-            if (candidates.length === 0) {
-                return message.reply(`❌ Tidak ditemukan kandidat pegawai dengan nama mengandung "${searchKeyword}" yang belum terhubung.`);
-            }
-
-            userState[message.from] = {
-                type: 'link_pegawai_selection',
-                targetUserId: targetUserId,
-                targetUserNumber: targetUser.number,
-                list: candidates,
-            };
-
-            let replyMessage = `Ditemukan ${candidates.length} kandidat untuk dihubungkan ke @${targetUser.number}:\n\n`;
-            candidates.forEach((p, i) => {
-                replyMessage += `${i + 1}. ${p.nama} - *(${p.jabatan || 'Jabatan Kosong'})*\n`;
-            });
-            replyMessage += `\nSilakan balas dengan *NOMOR* yang benar. Balas *0* untuk batal.`;
-
-            return message.reply(replyMessage);
-        }
-        // AKHIR LINK PEGAWAI
 
         // ▲▲▲ BATAS AKHIR BLOK BARU  PEMANGGIL FILE▲▲▲
 
