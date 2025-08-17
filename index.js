@@ -254,6 +254,32 @@ async function getLatestNews(query) {
     }
 }
 
+// ▼▼▼ TAMBAHKAN FUNGSI BARU INI admin ▼▼▼
+
+/**
+ * Memeriksa apakah seorang pengguna adalah admin berdasarkan datanya di Sanity.
+ * @param {string} userId ID WhatsApp pengguna (misal: "62812...@c.us").
+ * @returns {Promise<boolean>} Mengembalikan true jika admin, false jika bukan.
+ */
+async function isAdmin(userId) {
+    try {
+        const sanitizedId = userId.replace(/[@.]/g, '-');
+        const query = `*[_type == "pegawai" && _id == $id][0]`;
+        const user = await clientSanity.fetch(query, { id: sanitizedId });
+
+        if (user && user.tipePegawai === 'admin') {
+            return true;
+        }
+        return false;
+
+    } catch (error) {
+        console.error("Error saat memeriksa status admin:", error);
+        return false;
+    }
+}
+
+// ▲▲▲ AKHIR DARI FUNGSI BARU admin ▲▲▲
+
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
 
 /**
@@ -870,6 +896,58 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
 // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
 
+        // ▼▼▼ TAMBAHKAN BLOK BARU INI admin▼▼▼
+
+        // BLOK BARU: MENAMBAH PEGAWAI (HANYA ADMIN)
+        if (userMessageLower.startsWith('tambah pegawai')) {
+            // Langkah 1: Periksa apakah pengguna adalah admin
+            // BAGIAN INI SENGAJA DINONAKTIFKAN SEMENTARA UNTUK MENDAFTARKAN ADMIN PERTAMA
+            // const isUserAdmin = await isAdmin(message.from);
+            // if (!isUserAdmin) {
+            //     message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
+            //     return;
+            // }
+
+            message.reply('⏳ Memproses data, mohon tunggu...');
+
+            try {
+                const argsString = userMessage.substring('tambah pegawai'.length).trim();
+                const args = argsString.split(',').map(arg => arg.trim());
+
+                if (args.length !== 4) {
+                    message.reply('Format salah. Gunakan:\n`tambah pegawai <Nama>, <NIP>, <Jabatan>, <Level>`\n\nContoh:\n`tambah pegawai Budi, 12345, Staf, user`');
+                    return;
+                }
+
+                const [nama, nip, jabatan, level] = args;
+                const levelLower = level.toLowerCase();
+
+                if (levelLower !== 'user' && levelLower !== 'admin') {
+                    message.reply('Format salah. Nilai <Level> harus `user` atau `admin`.');
+                    return;
+                }
+
+                const newPegawaiDoc = {
+                    _type: 'pegawai',
+                    nama: nama,
+                    nip: nip,
+                    jabatan: jabatan,
+                    tipePegawai: levelLower
+                };
+
+                await clientSanity.create(newPegawaiDoc);
+                message.reply(`✅ Pegawai baru dengan nama *${nama}* berhasil ditambahkan.`);
+
+            } catch (error) {
+                console.error("Gagal menambah pegawai baru:", error);
+                message.reply("Maaf, terjadi kesalahan di server saat mencoba menambah pegawai.");
+            }
+
+            return;
+        }
+
+        // ▲▲▲ AKHIR DARI BLOK BARU  admin▲▲▲
+
 // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
         // BLOK BARU: FITUR INFO GEMPA BMKG
@@ -960,6 +1038,8 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
         }
 
         // ▲▲▲ AKHIR DARI BLOK BARU  CUACA▲▲▲
+
+
 
         // ▼▼▼ TAMBAHKAN BLOK PENJAGA INI ▼▼▼
         if (userLastState && (userLastState.type === 'menu_utama' || userLastState.type === 'pustaka_data' || userLastState.type === 'pegawai')) {
