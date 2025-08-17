@@ -174,6 +174,8 @@ async function cariFileDiSanity(kataKunci, groupId) {
 
 /**
  * Mengambil data cuaca terkini dari OpenWeatherMap API.
+ * Jika berhasil, mengembalikan string deskripsi cuaca.
+ * Jika gagal, akan melempar (throw) sebuah error.
  * @param {string} location Nama kota untuk dicari cuacanya.
  * @returns {Promise<string>} String yang mendeskripsikan cuaca.
  */
@@ -181,13 +183,19 @@ async function getCurrentWeather(location) {
     try {
         console.log(`Mencari cuaca untuk: ${location}`);
         const apiKey = process.env.OPENWEATHER_API_KEY;
-        if (!apiKey) throw new Error("OPENWEATHER_API_KEY tidak ditemukan");
+        if (!apiKey) {
+            throw new Error("OPENWEATHER_API_KEY tidak ditemukan di environment variables.");
+        }
 
         const url = `https://api.openweathermap.org/data/2.5/weather?q=${location}&appid=${apiKey}&units=metric&lang=id`;
         
         const response = await fetch(url);
+        
+        // Jika respons tidak sukses (misal: 404 Not Found, 401 Unauthorized)
         if (!response.ok) {
-            return `Maaf, saya tidak bisa menemukan data cuaca untuk ${location}.`;
+            // Lemparkan error agar ditangkap oleh blok catch di logika interaksi.
+            // Ini akan mencegah masalah balasan ganda.
+            throw new Error(`Lokasi tidak ditemukan atau terjadi kesalahan API (Status: ${response.status})`);
         }
         
         const data = await response.json();
@@ -196,8 +204,9 @@ async function getCurrentWeather(location) {
         return weatherDescription;
 
     } catch (error) {
-        console.error("Error di getCurrentWeather:", error);
-        return "Maaf, terjadi kesalahan saat mengambil data cuaca.";
+        console.error("Error di dalam fungsi getCurrentWeather:", error.message);
+        // Lemparkan kembali error tersebut agar bisa ditangani oleh kode yang memanggil fungsi ini.
+        throw error;
     }
 }
 
