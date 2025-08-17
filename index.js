@@ -899,23 +899,41 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
         // ▼▼▼ TAMBAHKAN BLOK BARU INI admin▼▼▼
 
         // BLOK BARU: MENAMBAH PEGAWAI (HANYA ADMIN)
+        // BLOK BARU: MENAMBAH PEGAWAI DENGAN PANDUAN OTOMATIS
         if (userMessageLower.startsWith('tambah pegawai')) {
-            // Langkah 1: Periksa apakah pengguna adalah admin
-            // BAGIAN INI SENGAJA DINONAKTIFKAN SEMENTARA UNTUK MENDAFTARKAN ADMIN PERTAMA
             const isUserAdmin = await isAdmin(message.from);
             if (!isUserAdmin) {
                 message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
                 return;
             }
 
-            message.reply('⏳ Memproses data, mohon tunggu...');
+            // Ambil semua teks setelah 'tambah pegawai'
+            const argsString = userMessage.substring('tambah pegawai'.length).trim();
 
+            // JIKA KOSONG, TAMPILKAN PANDUAN
+            if (!argsString) {
+                let panduanMessage = `📝 *Panduan Menambah Pegawai Baru*\n\n`;
+                panduanMessage += `Gunakan format berikut dengan data dipisahkan oleh koma:\n`;
+                panduanMessage += `\`\`\`tambah pegawai <Nama>, <NIP>, <Jabatan>, <Level>\`\`\`\n\n`;
+                panduanMessage += `*Contoh Penggunaan:*\n`;
+                panduanMessage += `\`\`\`tambah pegawai Budi Santoso, 199001012020121001, Analis Data, user\`\`\`\n\n`;
+                panduanMessage += `*Keterangan:*\n`;
+                panduanMessage += `• *Nama:* Nama lengkap pegawai.\n`;
+                panduanMessage += `• *NIP:* Jika tidak ada, isi dengan \`-\` atau \`0\`.\n`;
+                panduanMessage += `• *Jabatan:* Posisi pegawai.\n`;
+                panduanMessage += `• *Level:* Hak akses, harus \`user\` atau \`admin\`.`;
+                
+                message.reply(panduanMessage);
+                return;
+            }
+
+            // JIKA TIDAK KOSONG, LANJUTKAN PROSES
+            message.reply('⏳ Memproses data, mohon tunggu...');
             try {
-                const argsString = userMessage.substring('tambah pegawai'.length).trim();
                 const args = argsString.split(',').map(arg => arg.trim());
 
                 if (args.length !== 4) {
-                    message.reply('Format salah. Gunakan:\n`tambah pegawai <Nama>, <NIP>, <Jabatan>, <Level>`\n\nContoh:\n`tambah pegawai Budi, 12345, Staf, user`');
+                    message.reply('Format salah. Jumlah argumen tidak sesuai. Ketik `tambah pegawai` untuk melihat panduan.');
                     return;
                 }
 
