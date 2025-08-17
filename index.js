@@ -16,10 +16,17 @@ const { Readable } = require('stream');
 const { evaluate } = require('mathjs');
 const axios = require('axios');
 
-const chrono = require('chrono-node'); // Impor seluruh library untuk keamanan
-const chronoId = new chrono.Chrono();   // Buat instance baru dari chrono
-// Menggunakan nama yang benar: IDStandardParser (dengan 'd')
-chronoId.parsers.push(new chrono.Parsers.IDStandardParser());
+// ▼▼▼ GANTI KESELURUHAN BLOK CHRONO DENGAN VERSI FINAL INI ▼▼▼
+
+const { Chrono } = require('chrono-node');
+// Impor parser Bahasa Indonesia secara langsung dari file spesifiknya
+const { IDStandardParser } = require('chrono-node/locales/id');
+
+// Membuat instance chrono khusus yang HANYA mengerti Bahasa Indonesia
+const chronoId = new Chrono();
+chronoId.parsers.push(new IDStandardParser());
+
+// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
 const FOLDER_DRIVE_ID = '17LsEyvyF06v3dPN7wMv_3NOiaajY8sQk'; // Ganti dengan ID folder Google Drive Anda
 app.get('/health', (req, res) => {
