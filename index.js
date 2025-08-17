@@ -1316,75 +1316,51 @@ if (userMessageLower.startsWith('ingatkan')) {
         // AWAL LINK PEGAWAI
         // =================================================================
         // BLOK BARU: MENGHUBUNGKAN PEGAWAI (HANYA ADMIN)
+    
         // =================================================================
-// =================================================================
-        // BLOK BARU: MENGHUBUNGKAN & MENGHAPUS PEGAWAI (HANYA ADMIN)
-        // =================================================================
-
         const linkPegawaiPrefix = 'link pegawai ';
         if (userMessageLower.startsWith(linkPegawaiPrefix)) {
             const isAdmin = await isUserAdmin(message.from);
-            if (!isAdmin) return message.reply('❌ Perintah ini hanya bisa dijalankan oleh admin.');
-
-            const mentions = await message.getMentions();
-            if (!mentions || mentions.length === 0) return message.reply('❌ Anda harus me-mention pengguna yang ingin dihubungkan.');
-            
-            const targetUser = mentions[0];
-            const targetUserId = targetUser.id._serialized;
-
-            // Logika parsing yang lebih kuat
-            const keyword = ' ke ';
-            const keywordIndex = userMessageLower.indexOf(keyword);
-            if (keywordIndex === -1) {
-                return message.reply('Format salah. Gunakan: `link pegawai @user ke Nama Lengkap di Sanity`');
+            if (!isAdmin) {
+                return message.reply('❌ Perintah ini hanya bisa dijalankan oleh admin.');
             }
-            const targetPegawaiName = userMessage.substring(keywordIndex + keyword.length).trim();
-            if (!targetPegawaiName) {
-                return message.reply('Nama pegawai di Sanity tidak boleh kosong.');
-            }
-
-            const query = `*[_type == "pegawai" && nama == $nama && !defined(userId)][0]`;
-            const pegawaiDoc = await clientSanity.fetch(query, { nama: targetPegawaiName });
-
-            if (!pegawaiDoc) {
-                return message.reply(`❌ Tidak ditemukan data pegawai dengan nama "${targetPegawaiName}" yang belum terhubung.`);
-            }
-
-            try {
-                await clientSanity.patch(pegawaiDoc._id).set({ userId: targetUserId }).commit();
-                return message.reply(`✅ Berhasil! Data *${targetPegawaiName}* sekarang terhubung ke akun WhatsApp @${targetUser.number}.`);
-            } catch (error) {
-                console.error("Gagal me-link pegawai:", error);
-                return message.reply('Terjadi kesalahan saat mencoba menghubungkan data pegawai.');
-            }
-        }
-
-        const hapusPegawaiPrefix = 'hapus pegawai ';
-        if (userMessageLower.startsWith(hapusPegawaiPrefix)) {
-            const isAdmin = await isUserAdmin(message.from);
-            if (!isAdmin) return message.reply('❌ Perintah ini hanya bisa dijalankan oleh admin.');
 
             const mentions = await message.getMentions();
             if (!mentions || mentions.length === 0) {
-                return message.reply('❌ Anda harus me-mention pengguna yang ingin dihapus.');
+                return message.reply('❌ Anda harus me-mention pengguna yang ingin dihubungkan.');
             }
             const targetUser = mentions[0];
             const targetUserId = targetUser.id._serialized;
 
-            const query = `*[_type == "pegawai" && userId == $userId][0]`;
-            const pegawaiDoc = await clientSanity.fetch(query, { userId: targetUserId });
-
-            if (!pegawaiDoc) {
-                return message.reply(`❌ Pengguna @${targetUser.number} tidak ditemukan di data pegawai.`);
+            // Ekstrak kata kunci pencarian dari sisa pesan
+            const searchKeyword = userMessage.substring(linkPegawaiPrefix.length).replace(/@\d+/g, '').trim();
+            if (!searchKeyword) {
+                return message.reply('Format salah. Gunakan: `link pegawai @user <kata kunci nama>`\nContoh: `link pegawai @BudiSantoso budi`');
             }
 
-            try {
-                await clientSanity.delete(pegawaiDoc._id);
-                return message.reply(`✅ Berhasil! Data pegawai *${pegawaiDoc.nama}* (@${targetUser.number}) telah dihapus.`);
-            } catch (error) {
-                console.error("Gagal menghapus pegawai:", error);
-                return message.reply('Terjadi kesalahan saat mencoba menghapus data pegawai.');
+            // Cari pegawai di Sanity yang namanya cocok (case-insensitive) dan belum punya userId
+            const query = `*[_type == "pegawai" && nama match $keyword && !defined(userId)]`;
+            const candidates = await clientSanity.fetch(query, { keyword: `*${searchKeyword}*` });
+
+            if (candidates.length === 0) {
+                return message.reply(`❌ Tidak ditemukan kandidat pegawai dengan nama mengandung "${searchKeyword}" yang belum terhubung.`);
             }
+
+            // Simpan kandidat ke state pengguna untuk dipilih nanti
+            userState[message.from] = {
+                type: 'link_pegawai_selection',
+                targetUserId: targetUserId,
+                targetUserNumber: targetUser.number,
+                list: candidates, // 'list' adalah nama yang konsisten dengan menu kita
+            };
+
+            let replyMessage = `Ditemukan ${candidates.length} kandidat untuk dihubungkan ke @${targetUser.number}:\n\n`;
+            candidates.forEach((p, i) => {
+                replyMessage += `${i + 1}. ${p.nama} - *(${p.jabatan || 'Jabatan Kosong'})*\n`;
+            });
+            replyMessage += `\nSilakan balas dengan *NOMOR* yang benar. Balas *0* untuk batal.`;
+
+            return message.reply(replyMessage);
         }
         // AKHIR LINK PEGAWAI
 
@@ -1418,88 +1394,99 @@ if (userMessageLower.startsWith('ingatkan')) {
 
 
 
-        // ▼▼▼ TAMBAHKAN BLOK PENJAGA INI ▼▼▼
-        if (userLastState && (userLastState.type === 'menu_utama' || userLastState.type === 'pustaka_data' || userLastState.type === 'pegawai')) {
-            if (message.hasMedia) {
-                // Pengguna mengirim file saat bot sedang dalam mode menu. Abaikan saja.
-                return;
-            }
-        }
-        // ▲▲▲ BATAS AKHIR BLOK PENJAGA ▲▲▲
+// ▼▼▼ BLOK PENJAGA & MENU NUMERIK (VERSI FINAL) ▼▼▼
+        if (userLastState && ['menu_utama', 'pustaka_data', 'pegawai', 'link_pegawai_selection'].includes(userLastState.type)) {
+            
+            // Abaikan jika yang dikirim adalah file/media
+            if (message.hasMedia) {
+                return;
+            }
 
-        // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
-        const isNumericChoice = !isNaN(parseInt(userMessage));
-        if (userLastState && isNumericChoice) {
-            if (userMessage === '0') {
-                if (userLastState.type === 'pustaka_data' && userLastState.currentCategoryId) {
-                    const parent = await clientSanity.fetch(`*[_type == "kategoriPustaka" && _id == "${userLastState.currentCategoryId}"][0]{"parentId": indukKategori._ref}`);
-                    await showPustakaMenu(message, parent ? parent.parentId : null);
-                } else {
-                    await showMainMenu(message);
-                }
-                return;
-            }
+            // Periksa apakah pesan adalah angka
+            const isNumericChoice = !isNaN(parseInt(userMessage));
+            if (isNumericChoice) {
+                
+                // Logika untuk kembali (angka 0)
+                if (userMessage === '0') {
+                    if (userLastState.type === 'pustaka_data' && userLastState.currentCategoryId) {
+                        const parent = await clientSanity.fetch(`*[_type == "kategoriPustaka" && _id == "${userLastState.currentCategoryId}"][0]{"parentId": indukKategori._ref}`);
+                        await showPustakaMenu(message, parent ? parent.parentId : null);
+                    } else {
+                        delete userState[message.from]; // Hapus state saat kembali
+                        await showMainMenu(message);
+                    }
+                    return;
+                }
 
-            const index = parseInt(userMessage) - 1;
-            if (index >= 0 && index < userLastState.list.length) {
-                const selectedItem = userLastState.list[index];
-                
-                if (userLastState.type === 'pustaka_data') {
-                    if (selectedItem._type === 'kategoriPustaka') {
-                        await showPustakaMenu(message, selectedItem._id);
-                    } else if (selectedItem._type === 'dokumenPustaka') {
-                        let detailMessage = `📄 *Detail Dokumen*\n\n*Nama:* ${selectedItem.namaDokumen}\n*Tahun:* ${selectedItem.tahunDokumen || '-'}\n*Deskripsi:* ${selectedItem.deskripsi || '-'}\n\n*Link:* ${selectedItem.linkDokumen}`;
-                        message.reply(detailMessage);
-                        delete userState[message.from];
-                    }
+                // Logika untuk pilihan menu lainnya
+                const index = parseInt(userMessage) - 1;
+                if (index >= 0 && index < userLastState.list.length) {
+                    const selectedItem = userLastState.list[index];
+                    
+                    if (userLastState.type === 'pustaka_data') {
+                        if (selectedItem._type === 'kategoriPustaka') {
+                            await showPustakaMenu(message, selectedItem._id);
+                        } else if (selectedItem._type === 'dokumenPustaka') {
+                            let detailMessage = `📄 *Detail Dokumen*\n\n*Nama:* ${selectedItem.namaDokumen}\n*Tahun:* ${selectedItem.tahunDokumen || '-'}\n*Deskripsi:* ${selectedItem.deskripsi || '-'}\n\n*Link:* ${selectedItem.linkDokumen}`;
+                            message.reply(detailMessage);
+                            delete userState[message.from];
+                        }
                     } else if (userLastState.type === 'pegawai') {
                         const pegawai = selectedItem;
-
                         let detailMessage = `👤 *Profil Pegawai*\n\n`;
                         detailMessage += `*Nama:* ${pegawai.nama || '-'}\n`;
                         detailMessage += `*NIP:* \`\`\`${pegawai.nip || '-'}\`\`\`\n`;
                         detailMessage += `*Jabatan:* ${pegawai.jabatan || '-'}\n`;
                         detailMessage += `*Level:* ${pegawai.tipePegawai || 'user'}\n\n`;
-
                         detailMessage += `🔑 *Akun & Kredensial*\n`;
                         detailMessage += `*Username SIPD:* \`\`\`${pegawai.usernameSipd || '-'}\`\`\`\n`;
                         detailMessage += `*Password SIPD:* \`\`\`${pegawai.passwordSipd || '-'}\`\`\`\n`;
                         detailMessage += `*Password Penatausahaan:* \`\`\`${pegawai.passwordPenatausahaan || '-'}\`\`\`\n\n`;
-
                         detailMessage += `📝 *Keterangan*\n${pegawai.keterangan || '-'}`;
-
                         if (pegawai.tipePegawai === 'admin') {
                             detailMessage += `\n\n🛡️ *Data Khusus Admin*\n`;
                             detailMessage += `*User Rakortek:* \`\`\`${pegawai.userRakortek || '-'}\`\`\`\n`;
                             detailMessage += `*User Renstra:* \`\`\`${pegawai.sipdRenstra || '-'}\`\`\`\n`;
                             detailMessage += `*Password Renstra:* \`\`\`${pegawai.passRenstra || '-'}\`\`\``;
                         }
-
                         message.reply(detailMessage);
                         delete userState[message.from];
-                        return;
-                    }else if (userLastState.type === 'menu_utama') {
-                    if (selectedItem.tipeLink === 'kategori_pustaka') {
-                        await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
-                    } else if (selectedItem.tipeLink === 'perintah_khusus') {
-                        if (selectedItem.perintahKhusus === 'mulai_sesi_ai') {
-                            const nomorBot = '6287849305181'; // <-- GANTI DENGAN NOMOR BOT ANDA YANG BENAR
-                            const teksOtomatis = encodeURIComponent("Halo, saya ingin memulai sesi AI");
-                            const linkWa = `https://wa.me/${nomorBot}?text=${teksOtomatis}`;
-                            const replyMessage = `Untuk memulai sesi privat dengan Asisten AI, silakan klik link di bawah ini. Anda akan diarahkan ke chat pribadi dengan saya.\n\n${linkWa}`;
-                            message.reply(replyMessage);
-                        }else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
-                            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
-                            if (result) {
-                                message.reply(result.jawaban + '\n\nBalas dengan *0* untuk kembali.');
-                                userState[message.from] = { type: 'info', list: [] };
-                            }
-                        }
-                    }
-                }
-                return;
-            }
-        }
+                    } else if (userLastState.type === 'menu_utama') {
+                        if (selectedItem.tipeLink === 'kategori_pustaka') {
+                            await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
+                        } else if (selectedItem.tipeLink === 'perintah_khusus') {
+                            if (selectedItem.perintahKhusus === 'mulai_sesi_ai') {
+                                const nomorBot = '6287849305181'; // <-- GANTI DENGAN NOMOR BOT ANDA YANG BENAR
+                                const teksOtomatis = encodeURIComponent("Halo, saya ingin memulai sesi AI");
+                                const linkWa = `https://wa.me/${nomorBot}?text=${teksOtomatis}`;
+                                const replyMessage = `Untuk memulai sesi privat dengan Asisten AI, silakan klik link di bawah ini. Anda akan diarahkan ke chat pribadi dengan saya.\n\n${linkWa}`;
+                                message.reply(replyMessage);
+                            } else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
+                                const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
+                                if (result) {
+                                    message.reply(result.jawaban + '\n\nBalas dengan *0* untuk kembali.');
+                                    userState[message.from] = { type: 'info', list: [] };
+                                }
+                            }
+                        }
+                    } else if (userLastState.type === 'link_pegawai_selection') {
+                        const selectedPegawai = selectedItem;
+                        const { targetUserId, targetUserNumber } = userLastState;
+                        try {
+                            await clientSanity.patch(selectedPegawai._id).set({ userId: targetUserId }).commit();
+                            message.reply(`✅ Berhasil! Data *${selectedPegawai.nama}* sekarang telah terhubung ke akun WhatsApp @${targetUserNumber}.`);
+                            delete userState[message.from];
+                        } catch (error) {
+                            console.error("Gagal finalisasi link pegawai:", error);
+                            message.reply('Terjadi kesalahan saat mencoba menyimpan perubahan.');
+                            delete userState[message.from];
+                        }
+                    }
+                    return; // Return penting setelah semua kondisi diperiksa
+                }
+            }
+        }
+        // ▲▲▲ BATAS AKHIR BLOK PENJAGA & MENU NUMERIK ▲▲▲
 
 // JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
 // ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
