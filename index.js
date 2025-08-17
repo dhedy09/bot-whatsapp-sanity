@@ -590,84 +590,57 @@ async function showPustakaMenu(message, categoryId) {
  * @param {Array} history Riwayat percakapan sebelumnya.
  * @returns {string} Jawaban dari AI.
  */
-async function getGeminiResponse(chat, history) {
-    try {
-        const modelWithTools = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest", tools });
-        const generativeChat = modelWithTools.startChat({
-            history: history,
-            generationConfig: {
-                maxOutputTokens: 800,
-            },
-        });
-        const result = await generativeChat.sendMessage(chat);
-        const response = result.response;
+async function getGeminiResponse(prompt, history) {
+    const maxRetries = 3;
+    const delay = 2000;
 
-        // ▼▼▼ BLOK PENGAMAN BARU DITAMBAHKAN DI SINI ▼▼▼
-        if (!response || !response.candidates || response.candidates.length === 0) {
-            console.error("Respons tidak valid atau kosong dari Gemini:", JSON.stringify(response, null, 2));
-            return "Maaf, terjadi kesalahan. Saya tidak menerima respons yang valid dari AI.";
-        }
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const chat = model.startChat({ history: history, tools: tools });
+            const result = await chat.sendMessage(prompt);
+            const call = result.response.functionCalls()?.[0];
 
-        const candidate = response.candidates[0];
-        // Cek jika respons diblokir karena alasan keamanan
-        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-             if (candidate.finishReason === 'SAFETY') {
-                return "Maaf, saya tidak dapat merespons permintaan tersebut karena melanggar kebijakan keamanan.";
-             }
-             console.warn(`Respons AI dihentikan karena: ${candidate.finishReason}`);
-             return `Maaf, respons saya terpotong karena alasan: ${candidate.finishReason}.`;
-        }
-        
-        if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-            console.error("Respons tidak memiliki konten (parts):", JSON.stringify(response, null, 2));
-            return "Maaf, saya menerima respons kosong dari AI.";
-        }
-        // ▲▲▲ BATAS AKHIR BLOK PENGAMAN ▲▲▲
-
-        const parts = candidate.content.parts;
-        let botResponseText = '';
-        let functionCalls = [];
-
-        for (const part of parts) {
-            if (part.text) {
-                botResponseText += part.text;
-            } else if (part.functionCall) {
-                functionCalls.push(part.functionCall);
-            }
-        }
-
-        if (functionCalls.length > 0) {
-            for (const call of functionCalls) {
-                let functionResponse;
-                console.log(`AI meminta untuk menjalankan fungsi: ${call.name}`);
+            if (call) {
+                console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
                 
+                let functionResponse;
                 if (call.name === 'getCurrentWeather') {
                     functionResponse = await getCurrentWeather(call.args.location);
                 } else if (call.name === 'getLatestNews') {
                     functionResponse = await getLatestNews(call.args.query);
-                } else if (call.name === 'getGempa') {
+                } else if (call.name === 'getGempa') { // <-- LOGIKA BARU
                     functionResponse = await getGempa();
                 } else if (call.name === 'calculate') {
                     functionResponse = evaluateMathExpression(call.args.expression);
+                } else {
+                    console.error(`❌ Nama fungsi tidak dikenali: ${call.name}`);
+                    functionResponse = null;
                 }
 
                 if (functionResponse) {
-                    const resultFromFunction = await generativeChat.sendMessage(JSON.stringify([{
-                        functionResponse: {
-                            name: call.name,
-                            response: { content: functionResponse }
-                        }
-                    }]));
-                    botResponseText += resultFromFunction.response.candidates[0].content.parts[0].text;
+                    const result2 = await chat.sendMessage([
+                        { functionResponse: { name: call.name, response: { content: JSON.stringify(functionResponse) } } } // Dibungkus JSON.stringify
+                    ]);
+                    return result2.response.text();
+                } else {
+                    return "Maaf, saya tidak mengenali alat yang diminta.";
                 }
             }
-        }
-        
-        return botResponseText || "Saya tidak yakin bagaimana meresponsnya.";
+            
+            return result.response.text();
 
-    } catch (error) {
-        console.error("Error saat berkomunikasi dengan Gemini:", error);
-        return "Maaf, terjadi kesalahan saat mencoba menghubungi AI.";
+        } catch (error) {
+            if (error.status === 503) {
+                console.log(`Attempt ${attempt}: Gagal (503), server sibuk. Mencoba lagi dalam ${delay / 1000} detik...`);
+                if (attempt === maxRetries) {
+                    return "Maaf, Asisten AI sedang sangat sibuk saat ini. Coba lagi nanti.";
+                }
+                await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+                console.error("Error saat memanggil API Gemini:", error);
+                return "Maaf, terjadi kesalahan yang tidak terduga saat menghubungi Asisten AI.";
+            }
+        }
     }
 }
 
@@ -1311,58 +1284,6 @@ if (userMessageLower.startsWith('ingatkan')) {
 
             return;
         }
-        // AKHIR UPDATE DATA PEGAWAI
-
-        // AWAL LINK PEGAWAI
-        // =================================================================
-        // BLOK BARU: MENGHUBUNGKAN PEGAWAI (HANYA ADMIN)
-    
-        // =================================================================
-        const linkPegawaiPrefix = 'link pegawai ';
-        if (userMessageLower.startsWith(linkPegawaiPrefix)) {
-            const isAdmin = await isUserAdmin(message.from);
-            if (!isAdmin) {
-                return message.reply('❌ Perintah ini hanya bisa dijalankan oleh admin.');
-            }
-
-            const mentions = await message.getMentions();
-            if (!mentions || mentions.length === 0) {
-                return message.reply('❌ Anda harus me-mention pengguna yang ingin dihubungkan.');
-            }
-            const targetUser = mentions[0];
-            const targetUserId = targetUser.id._serialized;
-
-            // Ekstrak kata kunci pencarian dari sisa pesan
-            const searchKeyword = userMessage.substring(linkPegawaiPrefix.length).replace(/@\d+/g, '').trim();
-            if (!searchKeyword) {
-                return message.reply('Format salah. Gunakan: `link pegawai @user <kata kunci nama>`\nContoh: `link pegawai @BudiSantoso budi`');
-            }
-
-            // Cari pegawai di Sanity yang namanya cocok (case-insensitive) dan belum punya userId
-            const query = `*[_type == "pegawai" && nama match $keyword && !defined(userId)]`;
-            const candidates = await clientSanity.fetch(query, { keyword: `*${searchKeyword}*` });
-
-            if (candidates.length === 0) {
-                return message.reply(`❌ Tidak ditemukan kandidat pegawai dengan nama mengandung "${searchKeyword}" yang belum terhubung.`);
-            }
-
-            // Simpan kandidat ke state pengguna untuk dipilih nanti
-            userState[message.from] = {
-                type: 'link_pegawai_selection',
-                targetUserId: targetUserId,
-                targetUserNumber: targetUser.number,
-                list: candidates, // 'list' adalah nama yang konsisten dengan menu kita
-            };
-
-            let replyMessage = `Ditemukan ${candidates.length} kandidat untuk dihubungkan ke @${targetUser.number}:\n\n`;
-            candidates.forEach((p, i) => {
-                replyMessage += `${i + 1}. ${p.nama} - *(${p.jabatan || 'Jabatan Kosong'})*\n`;
-            });
-            replyMessage += `\nSilakan balas dengan *NOMOR* yang benar. Balas *0* untuk batal.`;
-
-            return message.reply(replyMessage);
-        }
-        // AKHIR LINK PEGAWAI
 
         // ▲▲▲ AKHIR DARI BLOK BARU update admin ▲▲▲
 
@@ -1394,108 +1315,93 @@ if (userMessageLower.startsWith('ingatkan')) {
 
 
 
-// ▼▼▼ BLOK PENJAGA & MENU NUMERIK (VERSI FINAL) ▼▼▼
-        if (userLastState && ['menu_utama', 'pustaka_data', 'pegawai', 'link_pegawai_selection'].includes(userLastState.type)) {
-            
-            // Abaikan jika yang dikirim adalah file/media
-            if (message.hasMedia) {
-                return;
-            }
+        // ▼▼▼ TAMBAHKAN BLOK PENJAGA INI ▼▼▼
+        if (userLastState && (userLastState.type === 'menu_utama' || userLastState.type === 'pustaka_data' || userLastState.type === 'pegawai')) {
+            if (message.hasMedia) {
+                // Pengguna mengirim file saat bot sedang dalam mode menu. Abaikan saja.
+                return;
+            }
+        }
+        // ▲▲▲ BATAS AKHIR BLOK PENJAGA ▲▲▲
 
-            // Periksa apakah pesan adalah angka
-            const isNumericChoice = !isNaN(parseInt(userMessage));
-            if (isNumericChoice) {
-                
-                // Logika untuk kembali (angka 0)
-                if (userMessage === '0') {
-                    if (userLastState.type === 'pustaka_data' && userLastState.currentCategoryId) {
-                        const parent = await clientSanity.fetch(`*[_type == "kategoriPustaka" && _id == "${userLastState.currentCategoryId}"][0]{"parentId": indukKategori._ref}`);
-                        await showPustakaMenu(message, parent ? parent.parentId : null);
-                    } else {
-                        delete userState[message.from]; // Hapus state saat kembali
-                        await showMainMenu(message);
-                    }
-                    return;
-                }
+        // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
+        const isNumericChoice = !isNaN(parseInt(userMessage));
+        if (userLastState && isNumericChoice) {
+            if (userMessage === '0') {
+                if (userLastState.type === 'pustaka_data' && userLastState.currentCategoryId) {
+                    const parent = await clientSanity.fetch(`*[_type == "kategoriPustaka" && _id == "${userLastState.currentCategoryId}"][0]{"parentId": indukKategori._ref}`);
+                    await showPustakaMenu(message, parent ? parent.parentId : null);
+                } else {
+                    await showMainMenu(message);
+                }
+                return;
+            }
 
-                // Logika untuk pilihan menu lainnya
-                const index = parseInt(userMessage) - 1;
-                if (index >= 0 && index < userLastState.list.length) {
-                    const selectedItem = userLastState.list[index];
-                    
-                    if (userLastState.type === 'pustaka_data') {
-                        if (selectedItem._type === 'kategoriPustaka') {
-                            await showPustakaMenu(message, selectedItem._id);
-                        } else if (selectedItem._type === 'dokumenPustaka') {
-                            let detailMessage = `📄 *Detail Dokumen*\n\n*Nama:* ${selectedItem.namaDokumen}\n*Tahun:* ${selectedItem.tahunDokumen || '-'}\n*Deskripsi:* ${selectedItem.deskripsi || '-'}\n\n*Link:* ${selectedItem.linkDokumen}`;
-                            message.reply(detailMessage);
-                            delete userState[message.from];
-                        }
+            const index = parseInt(userMessage) - 1;
+            if (index >= 0 && index < userLastState.list.length) {
+                const selectedItem = userLastState.list[index];
+                
+                if (userLastState.type === 'pustaka_data') {
+                    if (selectedItem._type === 'kategoriPustaka') {
+                        await showPustakaMenu(message, selectedItem._id);
+                    } else if (selectedItem._type === 'dokumenPustaka') {
+                        let detailMessage = `📄 *Detail Dokumen*\n\n*Nama:* ${selectedItem.namaDokumen}\n*Tahun:* ${selectedItem.tahunDokumen || '-'}\n*Deskripsi:* ${selectedItem.deskripsi || '-'}\n\n*Link:* ${selectedItem.linkDokumen}`;
+                        message.reply(detailMessage);
+                        delete userState[message.from];
+                    }
                     } else if (userLastState.type === 'pegawai') {
                         const pegawai = selectedItem;
+
                         let detailMessage = `👤 *Profil Pegawai*\n\n`;
                         detailMessage += `*Nama:* ${pegawai.nama || '-'}\n`;
                         detailMessage += `*NIP:* \`\`\`${pegawai.nip || '-'}\`\`\`\n`;
                         detailMessage += `*Jabatan:* ${pegawai.jabatan || '-'}\n`;
                         detailMessage += `*Level:* ${pegawai.tipePegawai || 'user'}\n\n`;
+
                         detailMessage += `🔑 *Akun & Kredensial*\n`;
                         detailMessage += `*Username SIPD:* \`\`\`${pegawai.usernameSipd || '-'}\`\`\`\n`;
                         detailMessage += `*Password SIPD:* \`\`\`${pegawai.passwordSipd || '-'}\`\`\`\n`;
                         detailMessage += `*Password Penatausahaan:* \`\`\`${pegawai.passwordPenatausahaan || '-'}\`\`\`\n\n`;
+
                         detailMessage += `📝 *Keterangan*\n${pegawai.keterangan || '-'}`;
+
                         if (pegawai.tipePegawai === 'admin') {
                             detailMessage += `\n\n🛡️ *Data Khusus Admin*\n`;
                             detailMessage += `*User Rakortek:* \`\`\`${pegawai.userRakortek || '-'}\`\`\`\n`;
                             detailMessage += `*User Renstra:* \`\`\`${pegawai.sipdRenstra || '-'}\`\`\`\n`;
                             detailMessage += `*Password Renstra:* \`\`\`${pegawai.passRenstra || '-'}\`\`\``;
                         }
+
                         message.reply(detailMessage);
                         delete userState[message.from];
-                    } else if (userLastState.type === 'menu_utama') {
-                        if (selectedItem.tipeLink === 'kategori_pustaka') {
-                            await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
-                        } else if (selectedItem.tipeLink === 'perintah_khusus') {
-                            if (selectedItem.perintahKhusus === 'mulai_sesi_ai') {
-                                const nomorBot = '6287849305181'; // <-- GANTI DENGAN NOMOR BOT ANDA YANG BENAR
-                                const teksOtomatis = encodeURIComponent("Halo, saya ingin memulai sesi AI");
-                                const linkWa = `https://wa.me/${nomorBot}?text=${teksOtomatis}`;
-                                const replyMessage = `Untuk memulai sesi privat dengan Asisten AI, silakan klik link di bawah ini. Anda akan diarahkan ke chat pribadi dengan saya.\n\n${linkWa}`;
-                                message.reply(replyMessage);
-                            } else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
-                                const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
-                                if (result) {
-                                    message.reply(result.jawaban + '\n\nBalas dengan *0* untuk kembali.');
-                                    userState[message.from] = { type: 'info', list: [] };
-                                }
-                            }
-                        }
-                    } else if (userLastState.type === 'link_pegawai_selection') {
-                        const selectedPegawai = selectedItem;
-                        const { targetUserId, targetUserNumber } = userLastState;
-                        try {
-                            await clientSanity.patch(selectedPegawai._id).set({ userId: targetUserId }).commit();
-                            message.reply(`✅ Berhasil! Data *${selectedPegawai.nama}* sekarang telah terhubung ke akun WhatsApp @${targetUserNumber}.`);
-                            delete userState[message.from];
-                        } catch (error) {
-                            console.error("Gagal finalisasi link pegawai:", error);
-                            message.reply('Terjadi kesalahan saat mencoba menyimpan perubahan.');
-                            delete userState[message.from];
-                        }
-                    }
-                    return; // Return penting setelah semua kondisi diperiksa
-                }
-            }
-        }
-        // ▲▲▲ BATAS AKHIR BLOK PENJAGA & MENU NUMERIK ▲▲▲
+                        return;
+                    }else if (userLastState.type === 'menu_utama') {
+                    if (selectedItem.tipeLink === 'kategori_pustaka') {
+                        await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
+                    } else if (selectedItem.tipeLink === 'perintah_khusus') {
+                        if (selectedItem.perintahKhusus === 'mulai_sesi_ai') {
+                            const nomorBot = '6287849305181'; // <-- GANTI DENGAN NOMOR BOT ANDA YANG BENAR
+                            const teksOtomatis = encodeURIComponent("Halo, saya ingin memulai sesi AI");
+                            const linkWa = `https://wa.me/${nomorBot}?text=${teksOtomatis}`;
+                            const replyMessage = `Untuk memulai sesi privat dengan Asisten AI, silakan klik link di bawah ini. Anda akan diarahkan ke chat pribadi dengan saya.\n\n${linkWa}`;
+                            message.reply(replyMessage);
+                        }else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
+                            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
+                            if (result) {
+                                message.reply(result.jawaban + '\n\nBalas dengan *0* untuk kembali.');
+                                userState[message.from] = { type: 'info', list: [] };
+                            }
+                        }
+                    }
+                }
+                return;
+            }
+        }
 
 // JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
 // ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
-const chat = await message.getChat();
-if (!chat.isGroup) {
-    // Panggil "pusat kendali AI" hanya jika BUKAN dari grup
-    const responseText = await getGeminiResponse(userMessage, userHistory[message.from] || []);
-    message.reply(responseText);
-}
+const responseText = await getGeminiResponse(userMessage, userHistory[message.from] || []);
+message.reply(responseText);
 // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
     } catch (error) {
