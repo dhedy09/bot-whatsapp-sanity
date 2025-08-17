@@ -590,57 +590,84 @@ async function showPustakaMenu(message, categoryId) {
  * @param {Array} history Riwayat percakapan sebelumnya.
  * @returns {string} Jawaban dari AI.
  */
-async function getGeminiResponse(prompt, history) {
-    const maxRetries = 3;
-    const delay = 2000;
+async function getGeminiResponse(chat, history) {
+    try {
+        const modelWithTools = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest", tools });
+        const generativeChat = modelWithTools.startChat({
+            history: history,
+            generationConfig: {
+                maxOutputTokens: 800,
+            },
+        });
+        const result = await generativeChat.sendMessage(chat);
+        const response = result.response;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            const chat = model.startChat({ history: history, tools: tools });
-            const result = await chat.sendMessage(prompt);
-            const call = result.response.functionCalls()?.[0];
+        // ▼▼▼ BLOK PENGAMAN BARU DITAMBAHKAN DI SINI ▼▼▼
+        if (!response || !response.candidates || response.candidates.length === 0) {
+            console.error("Respons tidak valid atau kosong dari Gemini:", JSON.stringify(response, null, 2));
+            return "Maaf, terjadi kesalahan. Saya tidak menerima respons yang valid dari AI.";
+        }
 
-            if (call) {
-                console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
-                
+        const candidate = response.candidates[0];
+        // Cek jika respons diblokir karena alasan keamanan
+        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+             if (candidate.finishReason === 'SAFETY') {
+                return "Maaf, saya tidak dapat merespons permintaan tersebut karena melanggar kebijakan keamanan.";
+             }
+             console.warn(`Respons AI dihentikan karena: ${candidate.finishReason}`);
+             return `Maaf, respons saya terpotong karena alasan: ${candidate.finishReason}.`;
+        }
+        
+        if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+            console.error("Respons tidak memiliki konten (parts):", JSON.stringify(response, null, 2));
+            return "Maaf, saya menerima respons kosong dari AI.";
+        }
+        // ▲▲▲ BATAS AKHIR BLOK PENGAMAN ▲▲▲
+
+        const parts = candidate.content.parts;
+        let botResponseText = '';
+        let functionCalls = [];
+
+        for (const part of parts) {
+            if (part.text) {
+                botResponseText += part.text;
+            } else if (part.functionCall) {
+                functionCalls.push(part.functionCall);
+            }
+        }
+
+        if (functionCalls.length > 0) {
+            for (const call of functionCalls) {
                 let functionResponse;
+                console.log(`AI meminta untuk menjalankan fungsi: ${call.name}`);
+                
                 if (call.name === 'getCurrentWeather') {
                     functionResponse = await getCurrentWeather(call.args.location);
                 } else if (call.name === 'getLatestNews') {
                     functionResponse = await getLatestNews(call.args.query);
-                } else if (call.name === 'getGempa') { // <-- LOGIKA BARU
+                } else if (call.name === 'getGempa') {
                     functionResponse = await getGempa();
                 } else if (call.name === 'calculate') {
                     functionResponse = evaluateMathExpression(call.args.expression);
-                } else {
-                    console.error(`❌ Nama fungsi tidak dikenali: ${call.name}`);
-                    functionResponse = null;
                 }
 
                 if (functionResponse) {
-                    const result2 = await chat.sendMessage([
-                        { functionResponse: { name: call.name, response: { content: JSON.stringify(functionResponse) } } } // Dibungkus JSON.stringify
-                    ]);
-                    return result2.response.text();
-                } else {
-                    return "Maaf, saya tidak mengenali alat yang diminta.";
+                    const resultFromFunction = await generativeChat.sendMessage(JSON.stringify([{
+                        functionResponse: {
+                            name: call.name,
+                            response: { content: functionResponse }
+                        }
+                    }]));
+                    botResponseText += resultFromFunction.response.candidates[0].content.parts[0].text;
                 }
-            }
-            
-            return result.response.text();
-
-        } catch (error) {
-            if (error.status === 503) {
-                console.log(`Attempt ${attempt}: Gagal (503), server sibuk. Mencoba lagi dalam ${delay / 1000} detik...`);
-                if (attempt === maxRetries) {
-                    return "Maaf, Asisten AI sedang sangat sibuk saat ini. Coba lagi nanti.";
-                }
-                await new Promise(resolve => setTimeout(resolve, delay));
-            } else {
-                console.error("Error saat memanggil API Gemini:", error);
-                return "Maaf, terjadi kesalahan yang tidak terduga saat menghubungi Asisten AI.";
             }
         }
+        
+        return botResponseText || "Saya tidak yakin bagaimana meresponsnya.";
+
+    } catch (error) {
+        console.error("Error saat berkomunikasi dengan Gemini:", error);
+        return "Maaf, terjadi kesalahan saat mencoba menghubungi AI.";
     }
 }
 
