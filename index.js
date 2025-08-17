@@ -19,6 +19,27 @@ const FOLDER_DRIVE_ID = '17LsEyvyF06v3dPN7wMv_3NOiaajY8sQk'; // Ganti dengan ID 
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
+
+// AWAL CONST BERITA
+const tools = {
+    getLatestNews: { // <-- Nama diubah
+        description: "Mencari artikel berita terkini dari seluruh dunia berdasarkan topik atau kata kunci.",
+        parameters: {
+            type: "object",
+            properties: {
+                query: { // <-- Nama parameter diubah
+                    type: "string",
+                    description: "Topik atau kata kunci berita yang ingin dicari, contoh: 'IKN di Kalimantan' atau 'pemilu indonesia'."
+                }
+            },
+            required: ["query"] // <-- Nama parameter diubah
+        },
+        function: getLatestNews // <-- Nama fungsi lokal yang akan kita ubah di langkah 2
+    }
+    // Nanti kita akan tambahkan getWeather dan getGempa di sini
+};
+// ▲▲▲ AKHIR CONTS BERITA
+
 const port = process.env.PORT || 8080;
 
 let qrCodeUrl = null;
@@ -82,8 +103,46 @@ const userState = {};
 // =================================================================
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
-// AWAL ▼▼▼ TAMBAHKAN FUNGSI PERSE INDONESIA ▼▼▼
+// Tambahkan ini bersama fungsi lainnya
+async function getCurrentWeather(location) {
+    return { error: "Fitur cuaca belum terhubung." };
+}
+function evaluateMathExpression(expression) {
+    return { error: "Fitur kalkulator belum terhubung." };
+}
 
+//AWAL FUNGSI GET BERITA
+/**
+ * Fungsi ini mengambil topik berita sebagai input,
+ * mencari berita menggunakan News API, dan mengembalikan hasilnya dalam format JSON.
+ * @param {string} topik - Topik berita yang ingin dicari.
+ * @returns {Promise<object>} - Hasil pencarian berita dalam format JSON.
+ */
+async function getLatestNews(query) { // <-- Nama fungsi & parameter diubah
+    console.log(`[Tool] Menjalankan getLatestNews dengan query: ${query}`);
+    try {
+        // ... (seluruh isi logikanya tetap sama persis)
+        const apiKey = process.env.NEWS_API_KEY;
+        if (!apiKey) { return { error: "NEWS_API_KEY tidak diatur." }; }
+        const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=id&sortBy=publishedAt&pageSize=5&apiKey=${apiKey}`;
+        const response = await axios.get(apiUrl);
+        if (response.data.articles && response.data.articles.length > 0) {
+            const articles = response.data.articles.map(article => ({
+                title: article.title, description: article.description,
+                url: article.url, source: article.source.name
+            }));
+            return { articles: articles };
+        } else {
+            return { error: `Tidak ada berita yang ditemukan untuk topik "${query}".` };
+        }
+    } catch (error) {
+        console.error("Error saat mengambil berita:", error.message);
+        return { error: "Gagal mengambil data berita dari News API." };
+    }
+}
+// ▲▲▲ AKHIR DARI FUNGSI GET BERITA ▲▲▲
+
+// AWAL ▼▼▼ TAMBAHKAN FUNGSI PERSE INDONESIA ▼▼▼
 function parseWaktuIndonesia(teks) {
     const sekarang = new Date(); // Cukup ambil waktu saat ini.
     teks = teks.toLowerCase();
@@ -1257,50 +1316,6 @@ if (userMessageLower.startsWith('ingatkan')) {
 
         // ▲▲▲ AKHIR DARI BLOK GEMPA ▲▲▲
 
-        // ▼▼▼ TAMBAHKAN BLOK BERITA ▼▼▼
-
-        // BLOK BARU: FITUR BERITA INTERAKTIF
-        // Bagian 1: Memicu permintaan berita
-        if (userMessageLower === 'berita') {
-            userState[message.from] = { type: 'menunggu_topik_berita' };
-            message.reply('Tentu. Anda ingin mencari berita tentang topik apa?');
-            return;
-        }
-
-        // Bagian 2: Menangkap topik, lalu bertanya lokasi
-        if (userLastState && userLastState.type === 'menunggu_topik_berita') {
-            const topik = userMessage;
-            userState[message.from] = { type: 'menunggu_lokasi_berita', topik: topik };
-            message.reply(`Baik, topik "${topik}". Apakah ada lokasi spesifik (kota/daerah) yang ingin disertakan? Balas dengan nama lokasi, atau ketik "nasional" untuk berita umum.`);
-            return;
-        }
-
-        // Bagian 3: Menangkap lokasi, menggabungkan query, dan mencari berita
-        if (userLastState && userLastState.type === 'menunggu_lokasi_berita') {
-            const lokasi = userMessage.toLowerCase();
-            const topik = userLastState.topik;
-            
-            let finalQuery = topik;
-            if (lokasi !== 'nasional') {
-                finalQuery = `${topik} AND ${lokasi}`;
-            }
-
-            message.reply(`⏳ Sedang mencari berita tentang *"${topik}"* ${lokasi !== 'nasional' ? `di *${lokasi}*` : ''}, mohon tunggu...`);
-            
-            try {
-                const newsResult = await getLatestNews(finalQuery); 
-                message.reply(newsResult);
-            } catch (error) {
-                console.error("Gagal mengambil data berita di blok interaksi:", error.message);
-                message.reply("Maaf, terjadi kesalahan saat mengambil data berita. Pastikan API Key sudah benar.");
-            }
-            
-            delete userState[message.from];
-            return;
-        }
-
-        // ▲▲▲ AKHIR DARI BLOK BERITA ▲▲▲
-
         // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
         // BLOK BARU: FITUR CUACA INTERAKTIF
@@ -1411,6 +1426,12 @@ if (userMessageLower.startsWith('ingatkan')) {
                 return;
             }
         }
+
+// JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
+// ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
+const responseText = await getGeminiResponse(userMessage, userHistory[message.from] || []);
+message.reply(responseText);
+// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
     } catch (error) {
         console.error('Terjadi error fatal di event message:', error);
