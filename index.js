@@ -85,7 +85,12 @@ const userState = {};
 // AWAL ▼▼▼ TAMBAHKAN FUNGSI PERSE INDONESIA ▼▼▼
 
 function parseWaktuIndonesia(teks) {
-    const sekarang = new Date();
+    // Dapatkan waktu UTC saat ini dari server
+    const sekarangUTC = new Date();
+    // Konversi ke zona waktu WITA (UTC+8) secara manual
+    const offsetWITA = 8 * 60 * 60 * 1000;
+    const sekarang = new Date(sekarangUTC.getTime() + offsetWITA);
+
     teks = teks.toLowerCase();
 
     // Pola 1: "dalam X menit/jam"
@@ -105,9 +110,9 @@ function parseWaktuIndonesia(teks) {
     match = teks.match(/besok (?:jam|pukul) (\d+)/);
     if (match) {
         const jam = parseInt(match[1]);
-        const besok = new Date();
+        const besok = sekarang;
         besok.setDate(besok.getDate() + 1);
-        besok.setHours(jam, 0, 0, 0); // Set jam, reset menit & detik
+        besok.setHours(jam, 0, 0, 0);
         return besok;
     }
 
@@ -1030,6 +1035,7 @@ if (userMessageLower.startsWith('ingatkan')) {
         await clientSanity.create(newPengingat);
 
         const waktuLokal = waktuKirim.toLocaleString('id-ID', {
+            timeZone: 'Asia/Makassar', // <-- INI PERBAIKANNYA
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
             hour: '2-digit', minute: '2-digit'
         });
