@@ -210,41 +210,51 @@ async function getCurrentWeather(location) {
     }
 }
 
+// ▼▼▼ FUNGSI BERITA ▼▼▼
+
 /**
  * Mengambil berita utama terkini dari NewsAPI.org.
- * @param {string} country Kode negara (misal: 'id' untuk Indonesia).
+ * Jika berhasil, mengembalikan string daftar berita.
+ * Jika gagal, akan melempar (throw) sebuah error.
+ * @param {string} query Topik berita yang ingin dicari.
  * @returns {Promise<string>} String berisi daftar judul berita.
  */
 async function getLatestNews(query) {
     try {
         console.log(`Mencari berita untuk query: ${query}`);
         const apiKey = process.env.NEWS_API_KEY;
-        if (!apiKey) throw new Error("NEWS_API_KEY tidak ditemukan");
+        if (!apiKey) {
+            throw new Error("NEWS_API_KEY tidak ditemukan di environment variables.");
+        }
 
-        const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&apiKey=${apiKey}&pageSize=5&sortBy=relevancy`;
-
+        const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&apiKey=${apiKey}&pageSize=5&sortBy=publishedAt&language=id`;
+        
         const response = await fetch(url);
+        
         if (!response.ok) {
-            return `Maaf, saya tidak bisa mengambil berita terkait ${query}.`;
+            throw new Error(`Gagal mengambil data dari NewsAPI (Status: ${response.status})`);
         }
         
         const data = await response.json();
         
         if (data.articles.length === 0) {
-            return `Tidak ada berita yang ditemukan untuk topik "${query}".`;
+            return `Maaf, tidak ada berita yang ditemukan untuk topik "${query}".`;
         }
 
-        let newsDescription = `Berikut 5 berita teratas terkait "${query}":\n`;
+        let newsDescription = `Berikut 5 berita teratas terkait "${query}":\n\n`;
         data.articles.forEach((article, index) => {
-            newsDescription += `${index + 1}. ${article.title}\n`;
+            newsDescription += `*${index + 1}. ${article.title}*\n`;
+            newsDescription += `  - _Sumber: ${article.source.name}_\n`;
         });
         return newsDescription;
         
     } catch (error) {
-        console.error("Error di getLatestNews:", error);
-        return "Maaf, terjadi kesalahan saat mengambil data berita.";
+        console.error("Error di dalam fungsi getLatestNews:", error.message);
+        throw error;
     }
 }
+
+// ▲▲▲ AKHIR DARI KODE PENGGANTI ▲▲▲
 
 async function showMainMenu(message) {
     // ... (Fungsi ini sudah benar, tidak ada perubahan)
@@ -816,6 +826,50 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 }
 
 // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
+
+        // ▼▼▼ TAMBAHKAN BLOK BERITA ▼▼▼
+
+        // BLOK BARU: FITUR BERITA INTERAKTIF
+        // Bagian 1: Memicu permintaan berita
+        if (userMessageLower === 'berita') {
+            userState[message.from] = { type: 'menunggu_topik_berita' };
+            message.reply('Tentu. Anda ingin mencari berita tentang topik apa?');
+            return;
+        }
+
+        // Bagian 2: Menangkap topik, lalu bertanya lokasi
+        if (userLastState && userLastState.type === 'menunggu_topik_berita') {
+            const topik = userMessage;
+            userState[message.from] = { type: 'menunggu_lokasi_berita', topik: topik };
+            message.reply(`Baik, topik "${topik}". Apakah ada lokasi spesifik (kota/daerah) yang ingin disertakan? Balas dengan nama lokasi, atau ketik "nasional" untuk berita umum.`);
+            return;
+        }
+
+        // Bagian 3: Menangkap lokasi, menggabungkan query, dan mencari berita
+        if (userLastState && userLastState.type === 'menunggu_lokasi_berita') {
+            const lokasi = userMessage.toLowerCase();
+            const topik = userLastState.topik;
+            
+            let finalQuery = topik;
+            if (lokasi !== 'nasional') {
+                finalQuery = `${topik} AND ${lokasi}`;
+            }
+
+            message.reply(`⏳ Sedang mencari berita tentang *"${topik}"* ${lokasi !== 'nasional' ? `di *${lokasi}*` : ''}, mohon tunggu...`);
+            
+            try {
+                const newsResult = await getLatestNews(finalQuery); 
+                message.reply(newsResult);
+            } catch (error) {
+                console.error("Gagal mengambil data berita di blok interaksi:", error.message);
+                message.reply("Maaf, terjadi kesalahan saat mengambil data berita. Pastikan API Key sudah benar.");
+            }
+            
+            delete userState[message.from];
+            return;
+        }
+
+        // ▲▲▲ AKHIR DARI BLOK BERITA ▲▲▲
 
         // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
