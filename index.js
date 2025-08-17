@@ -15,19 +15,6 @@ const { google } = require('googleapis');
 const { Readable } = require('stream');
 const { evaluate } = require('mathjs');
 const axios = require('axios');
-
-// ▼▼▼ GANTI KESELURUHAN BLOK CHRONO DENGAN VERSI FINAL INI ▼▼▼
-
-const { Chrono } = require('chrono-node');
-// Impor parser Bahasa Indonesia secara langsung dari file spesifiknya
-const { IDStandardParser } = require('chrono-node/locales/id');
-
-// Membuat instance chrono khusus yang HANYA mengerti Bahasa Indonesia
-const chronoId = new Chrono();
-chronoId.parsers.push(new IDStandardParser());
-
-// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
-
 const FOLDER_DRIVE_ID = '17LsEyvyF06v3dPN7wMv_3NOiaajY8sQk'; // Ganti dengan ID folder Google Drive Anda
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
@@ -95,6 +82,40 @@ const userState = {};
 // =================================================================
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
+// AWAL ▼▼▼ TAMBAHKAN FUNGSI PERSE INDONESIA ▼▼▼
+
+function parseWaktuIndonesia(teks) {
+    const sekarang = new Date();
+    teks = teks.toLowerCase();
+
+    // Pola 1: "dalam X menit/jam"
+    let match = teks.match(/dalam (\d+) (menit|jam)/);
+    if (match) {
+        const jumlah = parseInt(match[1]);
+        const unit = match[2];
+        if (unit === 'menit') {
+            sekarang.setMinutes(sekarang.getMinutes() + jumlah);
+        } else if (unit === 'jam') {
+            sekarang.setHours(sekarang.getHours() + jumlah);
+        }
+        return sekarang;
+    }
+
+    // Pola 2: "besok jam X" atau "besok pukul X"
+    match = teks.match(/besok (?:jam|pukul) (\d+)/);
+    if (match) {
+        const jam = parseInt(match[1]);
+        const besok = new Date();
+        besok.setDate(besok.getDate() + 1);
+        besok.setHours(jam, 0, 0, 0); // Set jam, reset menit & detik
+        return besok;
+    }
+
+    // Jika tidak ada pola yang cocok
+    return null;
+}
+
+// ▲▲▲ AKHIR DARI FUNGSI PERSEINDONESIA ▲▲▲
 
     // ▼▼▼ TAMBAHKAN FUNGSI ALARM ▼▼▼
 
@@ -963,8 +984,7 @@ if (userMessageLower.startsWith('ingatkan')) {
     if (!match) {
         message.reply(
             'Format salah. Gunakan:\n`ingatkan <Nama> <Waktu> tentang "<Pesan>"`\n\n' +
-            '*Contoh:*\n' +
-            '`ingatkan Budi besok jam 9 pagi tentang "Rapat evaluasi"`'
+            '*Contoh:*\n`ingatkan Budi besok jam 9 tentang "Rapat evaluasi"`'
         );
         return;
     }
@@ -973,9 +993,9 @@ if (userMessageLower.startsWith('ingatkan')) {
 
     message.reply(`⏳ Mencari pegawai dengan nama *${namaTarget}*...`);
     try {
+        // ... (Logika pencarian pegawai tetap sama)
         const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`;
         let pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
-
         if (pegawaiDitemukan.length === 0) {
             if (namaTarget.toLowerCase() === 'saya') {
                  const selfQuery = `*[_type == "pegawai" && _id == "${message.from.replace(/[@.]/g, '-')}"][0]`;
@@ -983,40 +1003,30 @@ if (userMessageLower.startsWith('ingatkan')) {
                  if(selfData) pegawaiDitemukan = [selfData];
             }
         }
-
         if (pegawaiDitemukan.length === 0) {
             message.reply(`Maaf, pegawai dengan nama "${namaTarget}" tidak ditemukan.`);
             return;
         }
-
         if (pegawaiDitemukan.length > 1) {
             message.reply(`Ditemukan ${pegawaiDitemukan.length} pegawai dengan nama mirip "${namaTarget}". Mohon gunakan nama yang lebih spesifik.`);
             return;
         }
-
         const target = pegawaiDitemukan[0];
         const targetNomorHp = target._id.replace(/-/g, '.');
         const targetNama = target.nama;
 
-        // --- PERBAIKAN UTAMA ADA DI SINI ---
-        // Menggunakan instance chronoId yang sudah kita buat secara manual
-        const results = chronoId.parse(waktuString, new Date(), { forwardDate: true });
-        const waktuKirim = results.length > 0 ? results[0].start.date() : null;
+        // --- MENGGUNAKAN FUNGSI PARSER BARU KITA ---
+        const waktuKirim = parseWaktuIndonesia(waktuString);
 
         if (!waktuKirim) {
-            message.reply(`Maaf, saya tidak mengerti format waktu "${waktuString}". Coba gunakan format seperti "besok jam 10 pagi" atau "dalam 2 jam".`);
+            message.reply(`Maaf, saya tidak mengerti format waktu "${waktuString}".\nGunakan format seperti "besok jam 10" atau "dalam 5 menit".`);
             return;
         }
 
         const newPengingat = {
-            _type: 'pengingat',
-            pesan: pesan,
-            targetNomorHp: targetNomorHp,
-            targetNama: targetNama,
-            waktuKirim: waktuKirim.toISOString(),
-            status: 'menunggu',
+            _type: 'pengingat', pesan, targetNomorHp, targetNama,
+            waktuKirim: waktuKirim.toISOString(), status: 'menunggu',
         };
-
         await clientSanity.create(newPengingat);
 
         const waktuLokal = waktuKirim.toLocaleString('id-ID', {
@@ -1029,7 +1039,6 @@ if (userMessageLower.startsWith('ingatkan')) {
         console.error("Gagal membuat pengingat:", error);
         message.reply("Maaf, terjadi kesalahan di server saat mencoba membuat pengingat.");
     }
-
     return;
 }
 
