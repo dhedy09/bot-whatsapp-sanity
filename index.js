@@ -901,11 +901,11 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
         // BLOK BARU: MENAMBAH PEGAWAI (HANYA ADMIN)
         // BLOK BARU: MENAMBAH PEGAWAI DENGAN PANDUAN OTOMATIS
         if (userMessageLower.startsWith('tambah pegawai')) {
-            const isUserAdmin = await isAdmin(message.from);
-            if (!isUserAdmin) {
-                message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
-                return;
-            }
+            // const isUserAdmin = await isAdmin(message.from);
+            // if (!isUserAdmin) {
+            //     message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
+            //     return;
+            // }
 
             // Ambil semua teks setelah 'tambah pegawai'
             const argsString = userMessage.substring('tambah pegawai'.length).trim();
