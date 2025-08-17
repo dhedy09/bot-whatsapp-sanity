@@ -902,11 +902,11 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
         if (userMessageLower.startsWith('tambah pegawai')) {
             // Langkah 1: Periksa apakah pengguna adalah admin
             // BAGIAN INI SENGAJA DINONAKTIFKAN SEMENTARA UNTUK MENDAFTARKAN ADMIN PERTAMA
-            // const isUserAdmin = await isAdmin(message.from);
-            // if (!isUserAdmin) {
-            //     message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
-            //     return;
-            // }
+            const isUserAdmin = await isAdmin(message.from);
+            if (!isUserAdmin) {
+                message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
+                return;
+            }
 
             message.reply('⏳ Memproses data, mohon tunggu...');
 
