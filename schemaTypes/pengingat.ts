@@ -60,10 +60,11 @@ export default defineType({
         dateStyle: 'medium',
         timeStyle: 'short',
       })
+      // ▼▼▼ BAGIAN INI SUDAH DIPERBAIKI ▼▼▼
       return {
         title: title,
-        subtitle: `Untuk: ${subtitle || 'Tidak Diketahui'} | ${waktuLokal}`,
-        media: status === 'terkirim' ? '✅' : status === 'gagal' ? '❌' : '🕒',
+        subtitle: `Untuk: ${subtitle || 'Tidak Diketahui'} | ${waktuLokal} | Status: ${status}`,
+        // Baris 'media' yang menyebabkan error sudah dihapus
       }
     },
   },

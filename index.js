@@ -85,15 +85,10 @@ const userState = {};
 // AWAL ▼▼▼ TAMBAHKAN FUNGSI PERSE INDONESIA ▼▼▼
 
 function parseWaktuIndonesia(teks) {
-    // Dapatkan waktu UTC saat ini dari server
-    const sekarangUTC = new Date();
-    // Konversi ke zona waktu WITA (UTC+8) secara manual
-    const offsetWITA = 8 * 60 * 60 * 1000;
-    const sekarang = new Date(sekarangUTC.getTime() + offsetWITA);
-
+    const sekarang = new Date(); // Cukup ambil waktu saat ini.
     teks = teks.toLowerCase();
 
-    // Pola 1: "dalam X menit/jam"
+    // Pola untuk "dalam X menit/jam"
     let match = teks.match(/dalam (\d+) (menit|jam)/);
     if (match) {
         const jumlah = parseInt(match[1]);
@@ -106,14 +101,17 @@ function parseWaktuIndonesia(teks) {
         return sekarang;
     }
 
-    // Pola 2: "besok jam X" atau "besok pukul X"
+    // Pola untuk "besok jam X"
     match = teks.match(/besok (?:jam|pukul) (\d+)/);
     if (match) {
         const jam = parseInt(match[1]);
-        const besok = sekarang;
-        besok.setDate(besok.getDate() + 1);
-        besok.setHours(jam, 0, 0, 0);
-        return besok;
+        const besok = new Date(); // Ambil tanggal hari ini
+        besok.setDate(besok.getDate() + 1); // Maju ke besok
+        
+        // Atur jam berdasarkan zona waktu Asia/Makassar
+        const targetWaktuString = `${besok.getFullYear()}-${besok.getMonth()+1}-${besok.getDate()} ${jam}:00:00`;
+        // Trik untuk memastikan tanggal dibuat dalam zona waktu yang benar
+        return new Date(new Date(targetWaktuString).toLocaleString("en-US", {timeZone: "Asia/Makassar"}));
     }
 
     // Jika tidak ada pola yang cocok
