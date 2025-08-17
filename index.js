@@ -937,88 +937,90 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
         // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
         // AWAL BLOK: MEMBUAT PENGINGAT PRIBADI (HANYA ADMIN)
-        if (userMessageLower.startsWith('ingatkan')) {
-            const isUserAdmin = await isAdmin(message.from);
-            if (!isUserAdmin) {
-                message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
-                return;
+if (userMessageLower.startsWith('ingatkan')) {
+    const isUserAdmin = await isAdmin(message.from);
+    if (!isUserAdmin) {
+        message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
+        return;
+    }
+
+    const argsString = userMessage.substring('ingatkan'.length).trim();
+    const reminderRegex = /^(.*?)\s(.*?)\stentang\s"(.*?)"$/i;
+    const match = argsString.match(reminderRegex);
+
+    if (!match) {
+        message.reply(
+            'Format salah. Gunakan:\n`ingatkan <Nama> <Waktu> tentang "<Pesan>"`\n\n' +
+            '*Contoh:*\n' +
+            '`ingatkan Budi besok jam 9 pagi tentang "Rapat evaluasi"`'
+        );
+        return;
+    }
+
+    const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
+
+    message.reply(`⏳ Mencari pegawai dengan nama *${namaTarget}*...`);
+    try {
+        const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`;
+        let pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
+
+        if (pegawaiDitemukan.length === 0) {
+            if (namaTarget.toLowerCase() === 'saya') {
+                 const selfQuery = `*[_type == "pegawai" && _id == "${message.from.replace(/[@.]/g, '-')}"][0]`;
+                 const selfData = await clientSanity.fetch(selfQuery);
+                 if(selfData) pegawaiDitemukan = [selfData];
             }
+        }
 
-            const argsString = userMessage.substring('ingatkan'.length).trim();
-            const reminderRegex = /^(.*?)\s(.*?)\stentang\s"(.*?)"$/i;
-            const match = argsString.match(reminderRegex);
-
-            if (!match) {
-                message.reply(
-                    'Format salah. Gunakan:\n`ingatkan <Nama> <Waktu> tentang "<Pesan>"`\n\n' +
-                    '*Contoh:*\n' +
-                    '`ingatkan Budi besok jam 9 pagi tentang "Rapat evaluasi"`'
-                );
-                return;
-            }
-
-            const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
-
-            message.reply(`⏳ Mencari pegawai dengan nama *${namaTarget}*...`);
-            try {
-                const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`;
-                let pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
-
-                if (pegawaiDitemukan.length === 0) {
-                    if (namaTarget.toLowerCase() === 'saya') {
-                        const selfQuery = `*[_type == "pegawai" && _id == "${message.from.replace(/[@.]/g, '-')}"][0]`;
-                        const selfData = await clientSanity.fetch(selfQuery);
-                        if(selfData) pegawaiDitemukan = [selfData];
-                    }
-                }
-
-                if (pegawaiDitemukan.length === 0) {
-                    message.reply(`Maaf, pegawai dengan nama "${namaTarget}" tidak ditemukan.`);
-                    return;
-                }
-
-                if (pegawaiDitemukan.length > 1) {
-                    message.reply(`Ditemukan ${pegawaiDitemukan.length} pegawai dengan nama mirip "${namaTarget}". Mohon gunakan nama yang lebih spesifik.`);
-                    return;
-                }
-
-                const target = pegawaiDitemukan[0];
-                const targetNomorHp = target._id.replace(/-/g, '.');
-                const targetNama = target.nama;
-
-                // --- PERBAIKAN UTAMA ADA DI SINI ---
-                // Menggunakan parser Bahasa Indonesia (.id)
-                const waktuKirim = chrono.id.parseDate(waktuString, new Date(), { forwardDate: true });
-
-                if (!waktuKirim) {
-                    message.reply(`Maaf, saya tidak mengerti format waktu "${waktuString}". Coba gunakan format seperti "besok jam 10 pagi" atau "dalam 2 jam".`);
-                    return;
-                }
-
-                const newPengingat = {
-                    _type: 'pengingat',
-                    pesan: pesan,
-                    targetNomorHp: targetNomorHp,
-                    targetNama: targetNama,
-                    waktuKirim: waktuKirim.toISOString(),
-                    status: 'menunggu',
-                };
-
-                await clientSanity.create(newPengingat);
-
-                const waktuLokal = waktuKirim.toLocaleString('id-ID', {
-                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-                    hour: '2-digit', minute: '2-digit'
-                });
-                message.reply(`✅ Pengingat berhasil dibuat!\n\n*Untuk:* ${targetNama}\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`);
-
-            } catch (error) {
-                console.error("Gagal membuat pengingat:", error);
-                message.reply("Maaf, terjadi kesalahan di server saat mencoba membuat pengingat.");
-            }
-
+        if (pegawaiDitemukan.length === 0) {
+            message.reply(`Maaf, pegawai dengan nama "${namaTarget}" tidak ditemukan.`);
             return;
         }
+
+        if (pegawaiDitemukan.length > 1) {
+            message.reply(`Ditemukan ${pegawaiDitemukan.length} pegawai dengan nama mirip "${namaTarget}". Mohon gunakan nama yang lebih spesifik.`);
+            return;
+        }
+
+        const target = pegawaiDitemukan[0];
+        const targetNomorHp = target._id.replace(/-/g, '.');
+        const targetNama = target.nama;
+
+        // --- PERBAIKAN UTAMA ADA DI SINI ---
+        // Alih-alih chrono.id.parseDate, kita gunakan chrono.parse dengan opsi bahasa
+        const results = chrono.parse(waktuString, new Date(), { forwardDate: true, language: 'id' });
+        // Ambil tanggal dari hasil pertama jika ada
+        const waktuKirim = results.length > 0 ? results[0].start.date() : null;
+
+        if (!waktuKirim) {
+            message.reply(`Maaf, saya tidak mengerti format waktu "${waktuString}". Coba gunakan format seperti "besok jam 10 pagi" atau "dalam 2 jam".`);
+            return;
+        }
+
+        const newPengingat = {
+            _type: 'pengingat',
+            pesan: pesan,
+            targetNomorHp: targetNomorHp,
+            targetNama: targetNama,
+            waktuKirim: waktuKirim.toISOString(),
+            status: 'menunggu',
+        };
+
+        await clientSanity.create(newPengingat);
+
+        const waktuLokal = waktuKirim.toLocaleString('id-ID', {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        });
+        message.reply(`✅ Pengingat berhasil dibuat!\n\n*Untuk:* ${targetNama}\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`);
+
+    } catch (error) {
+        console.error("Gagal membuat pengingat:", error);
+        message.reply("Maaf, terjadi kesalahan di server saat mencoba membuat pengingat.");
+    }
+
+    return;
+}
 
         // ▲▲▲ AKHIR DARI BLOK PENGINGAT ▲▲▲
 
