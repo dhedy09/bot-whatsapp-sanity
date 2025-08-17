@@ -20,25 +20,54 @@ app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
 
-// AWAL CONST BERITA
+// ▼▼▼ GANTI BLOK DI BAWAH '// AWAL CONST BERITA' DENGAN YANG INI ▼▼▼
+
 const tools = {
-    getLatestNews: { // <-- Nama diubah
+    getLatestNews: {
         description: "Mencari artikel berita terkini dari seluruh dunia berdasarkan topik atau kata kunci.",
         parameters: {
             type: "object",
             properties: {
-                query: { // <-- Nama parameter diubah
+                query: {
                     type: "string",
                     description: "Topik atau kata kunci berita yang ingin dicari, contoh: 'IKN di Kalimantan' atau 'pemilu indonesia'."
                 }
             },
-            required: ["query"] // <-- Nama parameter diubah
+            required: ["query"]
         },
-        function: getLatestNews // <-- Nama fungsi lokal yang akan kita ubah di langkah 2
+        function: getLatestNews
+    },
+    getCurrentWeather: {
+        description: "Mendapatkan data cuaca terkini untuk lokasi tertentu.",
+        parameters: {
+            type: "object",
+            properties: {
+                location: {
+                    type: "string",
+                    description: "Nama kota untuk pencarian cuaca."
+                }
+            },
+            required: ["location"]
+        },
+        function: getCurrentWeather
+    },
+    calculate: {
+        description: "Mengevaluasi ekspresi matematika atau formula. Gunakan ini untuk semua perhitungan.",
+        parameters: {
+            type: "object",
+            properties: {
+                expression: {
+                    type: "string",
+                    description: "Ekspresi matematika yang akan dihitung. Contoh: '100 / (5 * 2)'."
+                }
+            },
+            required: ["expression"]
+        },
+        function: evaluateMathExpression
     }
-    // Nanti kita akan tambahkan getWeather dan getGempa di sini
 };
-// ▲▲▲ AKHIR CONTS BERITA
+
+// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
 const port = process.env.PORT || 8080;
 
@@ -534,52 +563,6 @@ async function showPustakaMenu(message, categoryId) {
         message.reply("Maaf, terjadi kesalahan saat memuat Pustaka Data.");
     }
 }
-
-/**
- * Mengirim prompt dan riwayat percakapan ke API Gemini dan mengembalikan responsnya.
- * @param {string} prompt Pesan baru dari pengguna.
- * @param {Array} history Riwayat percakapan sebelumnya.
- * @returns {string} Jawaban dari AI.
- */
-// ▼▼▼ GANTI FUNGSI LAMA ANDA DENGAN SEMUA KODE DI BAWAH INI ▼▼▼
-
-// 1. Definisikan "alat" yang bisa digunakan oleh AI
-const tools = {
-  functionDeclarations: [
-    {
-      name: "getCurrentWeather",
-      description: "Mendapatkan data cuaca terkini untuk lokasi tertentu.",
-      parameters: {
-        type: "OBJECT",
-        properties: { location: { type: "STRING", description: "Nama kota." } },
-        required: ["location"],
-      },
-    },
-    {
-      name: "getLatestNews",
-      description: "Mendapatkan berita terkini berdasarkan topik atau kata kunci.",
-      parameters: {
-        type: "OBJECT",
-        properties: { query: { type: "STRING", description: "Topik berita." } },
-        required: ["query"],
-      },
-    },
-    { 
-      name: "calculate",
-      description: "Mengevaluasi ekspresi matematika atau formula Excel. Gunakan ini untuk semua perhitungan, konversi, atau operasi matematika.",
-      parameters: {
-        type: "OBJECT",
-        properties: {
-          expression: {
-            type: "STRING",
-            description: "Ekspresi matematika yang akan dihitung. Contoh: '100 / (5 * 2)' atau 'sqrt(16) + 2^3'.",
-          },
-        },
-        required: ["expression"],
-      },
-    },
-  ],
-};
 
 /**
  * Mengirim prompt ke API Gemini, menangani function calling, dan mengembalikan respons.
