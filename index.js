@@ -20,52 +20,55 @@ app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
 
-// ▼▼▼ GANTI BLOK DI BAWAH '// AWAL CONST BERITA' DENGAN YANG INI ▼▼▼
 
-const tools = {
-    getLatestNews: {
-        description: "Mencari artikel berita terkini dari seluruh dunia berdasarkan topik atau kata kunci.",
-        parameters: {
-            type: "object",
-            properties: {
-                query: {
-                    type: "string",
-                    description: "Topik atau kata kunci berita yang ingin dicari, contoh: 'IKN di Kalimantan' atau 'pemilu indonesia'."
-                }
+// ▼▼▼ HAPUS SEMUA 'const tools' LAMA DAN GANTI DENGAN YANG INI ▼▼▼
+
+const tools = [{
+    functionDeclarations: [
+        {
+            name: "getLatestNews",
+            description: "Mendapatkan berita terkini berdasarkan topik atau kata kunci.",
+            parameters: {
+                type: "OBJECT",
+                properties: {
+                    query: {
+                        type: "STRING",
+                        description: "Topik berita yang ingin dicari, contoh: 'IKN di Kalimantan'."
+                    }
+                },
+                required: ["query"],
             },
-            required: ["query"]
         },
-        function: getLatestNews
-    },
-    getCurrentWeather: {
-        description: "Mendapatkan data cuaca terkini untuk lokasi tertentu.",
-        parameters: {
-            type: "object",
-            properties: {
-                location: {
-                    type: "string",
-                    description: "Nama kota untuk pencarian cuaca."
-                }
+        {
+            name: "getCurrentWeather",
+            description: "Mendapatkan data cuaca terkini untuk lokasi tertentu.",
+            parameters: {
+                type: "OBJECT",
+                properties: {
+                    location: {
+                        type: "STRING",
+                        description: "Nama kota, contoh: 'Makassar'."
+                    }
+                },
+                required: ["location"],
             },
-            required: ["location"]
         },
-        function: getCurrentWeather
-    },
-    calculate: {
-        description: "Mengevaluasi ekspresi matematika atau formula. Gunakan ini untuk semua perhitungan.",
-        parameters: {
-            type: "object",
-            properties: {
-                expression: {
-                    type: "string",
-                    description: "Ekspresi matematika yang akan dihitung. Contoh: '100 / (5 * 2)'."
-                }
+        {
+            name: "calculate",
+            description: "Mengevaluasi ekspresi matematika atau formula. Gunakan ini untuk semua perhitungan.",
+            parameters: {
+                type: "OBJECT",
+                properties: {
+                    expression: {
+                        type: "STRING",
+                        description: "Ekspresi matematika yang akan dihitung. Contoh: '100 / (5 * 2)'."
+                    }
+                },
+                required: ["expression"],
             },
-            required: ["expression"]
         },
-        function: evaluateMathExpression
-    }
-};
+    ],
+}];
 
 // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
