@@ -1284,6 +1284,57 @@ if (userMessageLower.startsWith('ingatkan')) {
 
             return;
         }
+        
+        // AWAL LINK PEGAWAI
+        // =================================================================
+        // BLOK BARU: MENGHUBUNGKAN PEGAWAI (HANYA ADMIN)
+        // =================================================================
+        const linkPegawaiPrefix = 'link pegawai ';
+        if (userMessageLower.startsWith(linkPegawaiPrefix)) {
+            // 1. Cek apakah pengirim adalah admin
+            const isAdmin = await isUserAdmin(message.from);
+            if (!isAdmin) {
+                return message.reply('❌ Perintah ini hanya bisa dijalankan oleh admin.');
+            }
+
+            // 2. Dapatkan mention dari pesan
+            const mentions = await message.getMentions();
+            if (!mentions || mentions.length === 0) {
+                return message.reply('❌ Anda harus me-mention satu pengguna yang ingin dihubungkan.');
+            }
+            const targetUser = mentions[0];
+            const targetUserId = targetUser.id._serialized;
+
+            // 3. Ekstrak nama pegawai dari sisa pesan
+            const commandBody = userMessage.substring(linkPegawaiPrefix.length);
+            // Ambil teks setelah mention. Ini mungkin perlu penyesuaian tergantung format pesan.
+            // Asumsi format: "link pegawai @user ke Nama Lengkap Pegawai"
+            const nameParts = commandBody.split(' ke ');
+            if (nameParts.length < 2 || !nameParts[1]) {
+                 return message.reply('Format salah. Gunakan: `link pegawai @user ke Nama Lengkap Pegawai`\nContoh: `link pegawai @BudiSantoso ke Budi Santoso`');
+            }
+            // Hapus mention dari bagian nama
+            const targetPegawaiName = nameParts[1].replace(/@\d+/g, '').trim();
+
+
+            // 4. Cari dokumen pegawai di Sanity berdasarkan nama & userId yang masih kosong
+            const query = `*[_type == "pegawai" && nama == $nama && !defined(userId)][0]`;
+            const pegawaiDoc = await clientSanity.fetch(query, { nama: targetPegawaiName });
+
+            if (!pegawaiDoc) {
+                return message.reply(`❌ Tidak ditemukan data pegawai dengan nama "${targetPegawaiName}" yang belum terhubung.`);
+            }
+
+            // 5. Update dokumen dengan userId dari mention
+            try {
+                await clientSanity.patch(pegawaiDoc._id).set({ userId: targetUserId }).commit();
+                return message.reply(`✅ Berhasil! Data pegawai *${targetPegawaiName}* sekarang telah terhubung ke akun WhatsApp @${targetUser.number}.`);
+            } catch (error) {
+                console.error("Gagal me-link pegawai:", error);
+                return message.reply('Terjadi kesalahan saat mencoba menghubungkan data pegawai.');
+            }
+        }
+        // AKHIR LINK PEGAWAI
 
         // ▲▲▲ AKHIR DARI BLOK BARU update admin ▲▲▲
 
