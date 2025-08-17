@@ -591,71 +591,60 @@ async function showPustakaMenu(message, categoryId) {
  * @returns {string} Jawaban dari AI.
  */
 async function getGeminiResponse(prompt, history) {
-    const maxRetries = 3; // Coba panggil API maksimal 3 kali
-    const delay = 2000;   // Jeda 2 detik antar percobaan
+    const maxRetries = 3;
+    const delay = 2000;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            const chat = model.startChat({
-                history: history,
-                tools: tools,
-            });
-
+            const chat = model.startChat({ history: history, tools: tools });
             const result = await chat.sendMessage(prompt);
             const call = result.response.functionCalls()?.[0];
 
             if (call) {
-                // LOGGING BARU: Untuk melihat apa yang diminta AI
-                console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
-                
-                let functionResponse;
-                if (call.name === 'getCurrentWeather') {
-                    functionResponse = await getCurrentWeather(call.args.location);
-                } else if (call.name === 'getLatestNews') {
-                    functionResponse = await getLatestNews(call.args.query);
-                } else if (call.name === 'calculate') {
-                    functionResponse = evaluateMathExpression(call.args.expression);
-                } else {
-                    // Jika nama fungsi tidak ada dalam daftar kita
-                    console.error(`❌ Nama fungsi tidak dikenali: ${call.name}`);
-                    // Kita sengaja set null agar memicu pesan error yang kita buat
-                    functionResponse = null; 
-                }
+                console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
+                
+                let functionResponse;
+                if (call.name === 'getCurrentWeather') {
+                    functionResponse = await getCurrentWeather(call.args.location);
+                } else if (call.name === 'getLatestNews') {
+                    functionResponse = await getLatestNews(call.args.query);
+                } else if (call.name === 'getGempa') { // <-- LOGIKA BARU
+                    functionResponse = await getGempa();
+                } else if (call.name === 'calculate') {
+                    functionResponse = evaluateMathExpression(call.args.expression);
+                } else {
+                    console.error(`❌ Nama fungsi tidak dikenali: ${call.name}`);
+                    functionResponse = null;
+                }
 
-                if (functionResponse) {
-                    const result2 = await chat.sendMessage([
-                        { functionResponse: { name: call.name, response: { content: functionResponse } } }
-                    ]);
-                    return result2.response.text();
-                } else {
-                     return "Maaf, saya tidak mengenali alat yang diminta.";
-                }
-            }
+                if (functionResponse) {
+                    const result2 = await chat.sendMessage([
+                        { functionResponse: { name: call.name, response: { content: JSON.stringify(functionResponse) } } } // Dibungkus JSON.stringify
+                    ]);
+                    return result2.response.text();
+                } else {
+                    return "Maaf, saya tidak mengenali alat yang diminta.";
+                }
+            }
             
-            // Jika berhasil, langsung kembalikan hasil dan keluar dari loop
             return result.response.text();
 
         } catch (error) {
-            // Periksa apakah ini eror 'Service Unavailable' (503) yang bisa dicoba lagi
             if (error.status === 503) {
                 console.log(`Attempt ${attempt}: Gagal (503), server sibuk. Mencoba lagi dalam ${delay / 1000} detik...`);
-                
                 if (attempt === maxRetries) {
-                    console.error("Gagal setelah percobaan maksimal karena server terus sibuk.");
-                    return "Maaf, Asisten AI sedang sangat sibuk saat ini. Silakan coba lagi beberapa saat lagi.";
+                    return "Maaf, Asisten AI sedang sangat sibuk saat ini. Coba lagi nanti.";
                 }
-                
-                // Tunggu sebentar sebelum mencoba lagi
                 await new Promise(resolve => setTimeout(resolve, delay));
-
             } else {
-                // Untuk eror lain (misal: API key salah), langsung hentikan dan laporkan
-                console.error("Error saat memanggil API Gemini (bukan 503):", error);
+                console.error("Error saat memanggil API Gemini:", error);
                 return "Maaf, terjadi kesalahan yang tidak terduga saat menghubungi Asisten AI.";
             }
         }
     }
 }
+
+// AKHIR GEMINI RESPONSE
 
 /**
  * Mengunggah file media ke folder Google Drive yang ditentukan.
