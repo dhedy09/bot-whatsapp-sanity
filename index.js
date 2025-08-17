@@ -23,52 +23,32 @@ app.get('/health', (req, res) => {
 
 // ▼▼▼ HAPUS SEMUA 'const tools' LAMA DAN GANTI DENGAN YANG INI ▼▼▼
 
+// ▼▼▼ GANTI 'const tools' LAMA DENGAN VERSI BARU INI ▼▼▼
 const tools = [{
     functionDeclarations: [
         {
             name: "getLatestNews",
             description: "Mendapatkan berita terkini berdasarkan topik atau kata kunci.",
-            parameters: {
-                type: "OBJECT",
-                properties: {
-                    query: {
-                        type: "STRING",
-                        description: "Topik berita yang ingin dicari, contoh: 'IKN di Kalimantan'."
-                    }
-                },
-                required: ["query"],
-            },
+            parameters: { type: "OBJECT", properties: { query: { type: "STRING", description: "Topik berita." } }, required: ["query"] },
         },
         {
             name: "getCurrentWeather",
             description: "Mendapatkan data cuaca terkini untuk lokasi tertentu.",
-            parameters: {
-                type: "OBJECT",
-                properties: {
-                    location: {
-                        type: "STRING",
-                        description: "Nama kota, contoh: 'Makassar'."
-                    }
-                },
-                required: ["location"],
-            },
+            parameters: { type: "OBJECT", properties: { location: { type: "STRING", description: "Nama kota." } }, required: ["location"] },
+        },
+        {
+            name: "getGempa", // <-- ALAT BARU
+            description: "Mendapatkan informasi gempa bumi terkini yang terjadi di wilayah Indonesia dari BMKG.",
+            // Tidak ada parameters karena tidak butuh input
         },
         {
             name: "calculate",
             description: "Mengevaluasi ekspresi matematika atau formula. Gunakan ini untuk semua perhitungan.",
-            parameters: {
-                type: "OBJECT",
-                properties: {
-                    expression: {
-                        type: "STRING",
-                        description: "Ekspresi matematika yang akan dihitung. Contoh: '100 / (5 * 2)'."
-                    }
-                },
-                required: ["expression"],
-            },
+            parameters: { type: "OBJECT", properties: { expression: { type: "STRING", description: "Ekspresi matematika." } }, required: ["expression"] },
         },
     ],
 }];
+// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
 // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
@@ -135,6 +115,39 @@ const userState = {};
 // =================================================================
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
+// ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
+
+/**
+ * Mengambil data gempa bumi terkini dari server BMKG gempa
+ * @returns {Promise<object>} Data gempa dalam format JSON.
+ */
+async function getGempa() {
+    console.log(`[Tool] Menjalankan getGempa`);
+    try {
+        const apiUrl = 'https://data.bmkg.go.id/DataMKG/TEWS/autogempa.json';
+        const response = await axios.get(apiUrl);
+        const data = response.data.Infogempa.gempa;
+
+        // Susun informasi penting untuk AI
+        const gempaInfo = {
+            waktu: data.Jam,
+            tanggal: data.Tanggal,
+            magnitudo: data.Magnitude,
+            kedalaman: data.Kedalaman,
+            wilayah: data.Wilayah,
+            potensi: data.Potensi,
+            dirasakan: data.Dirasakan
+        };
+        return gempaInfo;
+
+    } catch (error) {
+        console.error("Error saat mengambil data gempa:", error.message);
+        return { error: "Gagal mengambil data gempa dari server BMKG." };
+    }
+}
+
+// ▲▲▲ AKHIR DARI FUNGSI BARU gempa▲▲▲
+
 // Tambahkan ini bersama fungsi lainnya
 async function getCurrentWeather(location) {
     return { error: "Fitur cuaca belum terhubung." };
@@ -1284,27 +1297,6 @@ if (userMessageLower.startsWith('ingatkan')) {
         }
 
         // ▲▲▲ AKHIR DARI BLOK BARU update admin ▲▲▲
-
-// ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
-
-        // BLOK BARU: FITUR INFO GEMPA BMKG
-        // BLOK BARU: FITUR INFO GEMPA BMKG (PERBAIKAN URUTAN)
-        if (userMessageLower === 'gempa' || userMessageLower === 'info gempa') {
-            // LANGKAH 1: Kirim pesan "sedang mencari" terlebih dahulu.
-            message.reply('⏳ Sedang mengambil data gempa terkini dari BMKG, mohon tunggu...');
-            
-            // LANGKAH 2: Baru ambil datanya dan kirim hasilnya.
-            try {
-                const gempaResult = await getInfoGempa(); 
-                message.reply(gempaResult);
-            } catch (error) {
-                console.error("Gagal mengambil data gempa di blok interaksi:", error.message);
-                message.reply("Maaf, terjadi kesalahan saat mengambil data gempa dari BMKG.");
-            }
-            return;
-        }
-
-        // ▲▲▲ AKHIR DARI BLOK GEMPA ▲▲▲
 
         // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
