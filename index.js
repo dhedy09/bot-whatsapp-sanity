@@ -1317,32 +1317,32 @@ if (userMessageLower.startsWith('ingatkan')) {
         // =================================================================
         // BLOK BARU: MENGHUBUNGKAN PEGAWAI (HANYA ADMIN)
         // =================================================================
-const linkPegawaiPrefix = 'link pegawai ';
-        if (userMessageLower.startsWith(linkPegawaiPrefix)) {
-            // 1. Cek apakah pengirim adalah admin
-            const isAdmin = await isUserAdmin(message.from);
-            if (!isAdmin) {
-                return message.reply('❌ Perintah ini hanya bisa dijalankan oleh admin.');
-            }
+// =================================================================
+        // BLOK BARU: MENGHUBUNGKAN & MENGHAPUS PEGAWAI (HANYA ADMIN)
+        // =================================================================
 
-            // 2. Dapatkan mention dari pesan
+        const linkPegawaiPrefix = 'link pegawai ';
+        if (userMessageLower.startsWith(linkPegawaiPrefix)) {
+            const isAdmin = await isUserAdmin(message.from);
+            if (!isAdmin) return message.reply('❌ Perintah ini hanya bisa dijalankan oleh admin.');
+
             const mentions = await message.getMentions();
-            if (!mentions || mentions.length === 0) {
-                return message.reply('❌ Anda harus me-mention satu pengguna yang ingin dihubungkan.');
-            }
+            if (!mentions || mentions.length === 0) return message.reply('❌ Anda harus me-mention pengguna yang ingin dihubungkan.');
+            
             const targetUser = mentions[0];
             const targetUserId = targetUser.id._serialized;
 
-            // 3. Ekstrak nama pegawai dari sisa pesan
-            const commandBody = userMessage.substring(linkPegawaiPrefix.length);
-            const nameParts = commandBody.split(' ke ');
-            if (nameParts.length < 2 || !nameParts[1]) {
-                 return message.reply('Format salah. Gunakan: `link pegawai @user ke Nama Lengkap Pegawai`\nContoh: `link pegawai @BudiSantoso ke Budi Santoso`');
+            // Logika parsing yang lebih kuat
+            const keyword = ' ke ';
+            const keywordIndex = userMessageLower.indexOf(keyword);
+            if (keywordIndex === -1) {
+                return message.reply('Format salah. Gunakan: `link pegawai @user ke Nama Lengkap di Sanity`');
             }
-            const targetPegawaiName = nameParts[1].replace(/@\d+/g, '').trim();
+            const targetPegawaiName = userMessage.substring(keywordIndex + keyword.length).trim();
+            if (!targetPegawaiName) {
+                return message.reply('Nama pegawai di Sanity tidak boleh kosong.');
+            }
 
-
-            // 4. Cari dokumen pegawai di Sanity berdasarkan nama & userId yang masih kosong
             const query = `*[_type == "pegawai" && nama == $nama && !defined(userId)][0]`;
             const pegawaiDoc = await clientSanity.fetch(query, { nama: targetPegawaiName });
 
@@ -1350,13 +1350,40 @@ const linkPegawaiPrefix = 'link pegawai ';
                 return message.reply(`❌ Tidak ditemukan data pegawai dengan nama "${targetPegawaiName}" yang belum terhubung.`);
             }
 
-            // 5. Update dokumen dengan userId dari mention
             try {
                 await clientSanity.patch(pegawaiDoc._id).set({ userId: targetUserId }).commit();
-                return message.reply(`✅ Berhasil! Data pegawai *${targetPegawaiName}* sekarang telah terhubung ke akun WhatsApp @${targetUser.number}.`);
+                return message.reply(`✅ Berhasil! Data *${targetPegawaiName}* sekarang terhubung ke akun WhatsApp @${targetUser.number}.`);
             } catch (error) {
                 console.error("Gagal me-link pegawai:", error);
                 return message.reply('Terjadi kesalahan saat mencoba menghubungkan data pegawai.');
+            }
+        }
+
+        const hapusPegawaiPrefix = 'hapus pegawai ';
+        if (userMessageLower.startsWith(hapusPegawaiPrefix)) {
+            const isAdmin = await isUserAdmin(message.from);
+            if (!isAdmin) return message.reply('❌ Perintah ini hanya bisa dijalankan oleh admin.');
+
+            const mentions = await message.getMentions();
+            if (!mentions || mentions.length === 0) {
+                return message.reply('❌ Anda harus me-mention pengguna yang ingin dihapus.');
+            }
+            const targetUser = mentions[0];
+            const targetUserId = targetUser.id._serialized;
+
+            const query = `*[_type == "pegawai" && userId == $userId][0]`;
+            const pegawaiDoc = await clientSanity.fetch(query, { userId: targetUserId });
+
+            if (!pegawaiDoc) {
+                return message.reply(`❌ Pengguna @${targetUser.number} tidak ditemukan di data pegawai.`);
+            }
+
+            try {
+                await clientSanity.delete(pegawaiDoc._id);
+                return message.reply(`✅ Berhasil! Data pegawai *${pegawaiDoc.nama}* (@${targetUser.number}) telah dihapus.`);
+            } catch (error) {
+                console.error("Gagal menghapus pegawai:", error);
+                return message.reply('Terjadi kesalahan saat mencoba menghapus data pegawai.');
             }
         }
         // AKHIR LINK PEGAWAI
