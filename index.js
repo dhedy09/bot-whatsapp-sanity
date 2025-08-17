@@ -963,6 +963,87 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
         // ▲▲▲ AKHIR DARI KODE PENGGANTI  admin▲▲▲
 
+                // ▼▼▼ TAMBAHKAN BLOK BARU INI update admin▼▼▼
+
+        // BLOK BARU: UPDATE DATA PEGAWAI (HANYA ADMIN)
+        if (userMessageLower.startsWith('update')) {
+            const isUserAdmin = await isAdmin(message.from);
+            if (!isUserAdmin) {
+                message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
+                return;
+            }
+
+            const argsString = userMessage.substring('update'.length).trim();
+
+            // Regex untuk mem-parsing perintah: (<Nama Target>) (<Nama Field>) menjadi (<Nilai Baru>)
+            const updateRegex = /^(.*?)\s(.*?)\smenjadi\s(.*)$/i;
+            const match = argsString.match(updateRegex);
+
+            if (!match) {
+                message.reply('Format salah. Gunakan:\n`update <Nama Target> <Nama Field> menjadi <Nilai Baru>`\n\n*Contoh:*\n`update Budi jabatan menjadi Analis Senior`');
+                return;
+            }
+            
+            const [, namaTarget, fieldToUpdate, nilaiBaru] = match.map(s => s.trim());
+
+            // Daftar field yang diizinkan untuk diubah via bot
+            const allowedFields = {
+                'nama': 'Nama Lengkap',
+                'nip': 'NIP',
+                'jabatan': 'Jabatan',
+                'level': 'Level Akses',
+                'usernamesipd': 'Username SIPD',
+                'passwordsipd': 'Password SIPD',
+                'passwordpenatausahaan': 'Password Penatausahaan',
+                'keterangan': 'Keterangan',
+                'userrakortek': 'User Rakortek',
+                'userrenstra': 'User Renstra',
+                'passwordrenstra': 'Password Renstra'
+            };
+            
+            const fieldKey = fieldToUpdate.toLowerCase().replace(/\s/g, '');
+            if (!allowedFields[fieldKey]) {
+                message.reply(`Maaf, field "${fieldToUpdate}" tidak valid atau tidak diizinkan untuk diubah.\n\nField yang valid: nama, nip, jabatan, level, usernameSipd, dll.`);
+                return;
+            }
+
+            // Koreksi nama field untuk 'level'
+            const finalFieldKey = fieldKey === 'level' ? 'tipePegawai' : fieldKey.replace('userrenstra', 'sipdRenstra').replace('passwordrenstra', 'passRenstra');
+
+            message.reply(`⏳ Mencari *${namaTarget}* untuk memperbarui *${allowedFields[fieldKey]}*...`);
+
+            try {
+                // Cari pegawai berdasarkan nama
+                const query = `*[_type == "pegawai" && lower(nama) == lower($namaTarget)]`;
+                const pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
+
+                if (pegawaiDitemukan.length === 0) {
+                    message.reply(`Maaf, pegawai dengan nama "${namaTarget}" tidak ditemukan.`);
+                    return;
+                }
+
+                if (pegawaiDitemukan.length > 1) {
+                    message.reply(`Ditemukan ${pegawaiDitemukan.length} pegawai dengan nama "${namaTarget}". Mohon gunakan nama yang lebih spesifik.`);
+                    return;
+                }
+
+                const pegawaiId = pegawaiDitemukan[0]._id;
+
+                // Lakukan patch/update pada dokumen
+                await clientSanity.patch(pegawaiId).set({ [finalFieldKey]: nilaiBaru }).commit();
+
+                message.reply(`✅ Data *${namaTarget}* berhasil diperbarui:\n*${allowedFields[fieldKey]}* sekarang menjadi *${nilaiBaru}*`);
+
+            } catch (error) {
+                console.error("Gagal mengupdate pegawai:", error);
+                message.reply("Maaf, terjadi kesalahan di server saat mencoba mengupdate data.");
+            }
+
+            return;
+        }
+
+        // ▲▲▲ AKHIR DARI BLOK BARU update admin ▲▲▲
+
 // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
         // BLOK BARU: FITUR INFO GEMPA BMKG
