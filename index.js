@@ -1503,8 +1503,12 @@ if (userMessageLower.startsWith('ingatkan')) {
 
 // JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
 // ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
-const responseText = await getGeminiResponse(userMessage, userHistory[message.from] || []);
-message.reply(responseText);
+const chat = await message.getChat();
+if (!chat.isGroup) {
+    // Panggil "pusat kendali AI" hanya jika BUKAN dari grup
+    const responseText = await getGeminiResponse(userMessage, userHistory[message.from] || []);
+    message.reply(responseText);
+}
 // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
     } catch (error) {
