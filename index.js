@@ -945,8 +945,6 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
             }
 
             const argsString = userMessage.substring('ingatkan'.length).trim();
-
-            // Regex untuk mem-parsing: <Nama> <Waktu> tentang "<Pesan>"
             const reminderRegex = /^(.*?)\s(.*?)\stentang\s"(.*?)"$/i;
             const match = argsString.match(reminderRegex);
 
@@ -961,14 +959,12 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
             const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
 
-            // 1. Cari target di database pegawai
             message.reply(`⏳ Mencari pegawai dengan nama *${namaTarget}*...`);
             try {
                 const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`;
                 let pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
 
                 if (pegawaiDitemukan.length === 0) {
-                    // Jika tidak ketemu, coba cari "saya" (untuk diri sendiri)
                     if (namaTarget.toLowerCase() === 'saya') {
                         const selfQuery = `*[_type == "pegawai" && _id == "${message.from.replace(/[@.]/g, '-')}"][0]`;
                         const selfData = await clientSanity.fetch(selfQuery);
@@ -987,18 +983,18 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
                 }
 
                 const target = pegawaiDitemukan[0];
-                const targetNomorHp = target._id.replace(/-/g, '.'); // Kembalikan ke format WA
+                const targetNomorHp = target._id.replace(/-/g, '.');
                 const targetNama = target.nama;
 
-                // 2. Parse waktu menggunakan chrono-node
-                const waktuKirim = chrono.parseDate(waktuString, new Date(), { forwardDate: true });
+                // --- PERBAIKAN UTAMA ADA DI SINI ---
+                // Menggunakan parser Bahasa Indonesia (.id)
+                const waktuKirim = chrono.id.parseDate(waktuString, new Date(), { forwardDate: true });
 
                 if (!waktuKirim) {
                     message.reply(`Maaf, saya tidak mengerti format waktu "${waktuString}". Coba gunakan format seperti "besok jam 10 pagi" atau "dalam 2 jam".`);
                     return;
                 }
 
-                // 3. Simpan pengingat ke Sanity
                 const newPengingat = {
                     _type: 'pengingat',
                     pesan: pesan,
@@ -1010,7 +1006,6 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
                 await clientSanity.create(newPengingat);
 
-                // 4. Konfirmasi ke admin
                 const waktuLokal = waktuKirim.toLocaleString('id-ID', {
                     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
                     hour: '2-digit', minute: '2-digit'
