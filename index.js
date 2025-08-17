@@ -887,32 +887,48 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
         // AWAL BLOK  MENU BANTUAN (HELP)
         if (userMessageLower === 'help' || userMessageLower === 'bantuan') {
-            // Bagian 1: Siapkan pesan bantuan untuk pengguna umum
-            let helpMessage = `*MENU BANTUAN* 📚\n\n`;
-            helpMessage += `Berikut adalah daftar perintah yang bisa Anda gunakan:\n\n`;
-            helpMessage += `*✨ Perintah Umum*\n`;
-            helpMessage += `--------------------\n`;
-            helpMessage += `• *menu* - Menampilkan menu utama.\n`;
-            helpMessage += `• *pustaka data* - Menampilkan menu pustaka data.\n`;
-            helpMessage += `• *cari user [nama]* - Mencari data pegawai berdasarkan nama.\n`;
-            helpMessage += `• *cuaca* - Melihat prakiraan cuaca terkini (interaktif).\n`;
-            helpMessage += `• *berita* - Mencari berita berdasarkan topik (interaktif).\n`;
-            helpMessage += `• *gempa* - Menampilkan info gempa bumi terkini dari BMKG.\n`;
-            helpMessage += `• *ingat ini: [teks]* - Menyimpan catatan di memori jangka panjang.\n`;
-            helpMessage += `• *lupakan semua* - Menghapus riwayat percakapan singkat.\n\n`;
-            
-            // Bagian 2: Periksa apakah pengguna adalah admin
-            const isUserAdmin = await isAdmin(message.from);
-            
-            // Bagian 3: Jika admin, tambahkan pesan bantuan khusus admin
-            if (isUserAdmin) {
-                helpMessage += `*🔑 Perintah Admin*\n`;
+            try {
+                const isUserAdmin = await isAdmin(message.from);
+                
+                // 1. Ambil semua data perintah dari Sanity, diurutkan
+                const query = `*[_type == "perintahBantuan"] | order(urutan asc)`;
+                const semuaPerintah = await clientSanity.fetch(query);
+
+                if (!semuaPerintah || semuaPerintah.length === 0) {
+                    message.reply("Maaf, daftar perintah bantuan belum diatur di Sanity.");
+                    return;
+                }
+
+                // 2. Pisahkan perintah umum dan perintah admin
+                const perintahUmum = semuaPerintah.filter(p => !p.isAdminOnly);
+                const perintahAdmin = semuaPerintah.filter(p => p.isAdminOnly);
+
+                // 3. Bangun pesan bantuan (tampilan tetap sama)
+                let helpMessage = `*MENU BANTUAN* 📚\n\n`;
+                helpMessage += `Berikut adalah daftar perintah yang bisa Anda gunakan:\n\n`;
+                
+                // Tampilkan Perintah Umum
+                helpMessage += `*✨ Perintah Umum*\n`;
                 helpMessage += `--------------------\n`;
-                helpMessage += `• *tambah pegawai* - Menampilkan panduan/template untuk menambah pegawai baru.\n`;
-                helpMessage += `• *update* - Menampilkan panduan untuk mengubah data pegawai.\n`;
+                perintahUmum.forEach(cmd => {
+                    helpMessage += `• *${cmd.perintah}* - ${cmd.deskripsi}\n`;
+                });
+                
+                // Jika pengguna adalah admin dan ada perintah admin, tampilkan
+                if (isUserAdmin && perintahAdmin.length > 0) {
+                    helpMessage += `\n*🔑 Perintah Admin*\n`;
+                    helpMessage += `--------------------\n`;
+                    perintahAdmin.forEach(cmd => {
+                        helpMessage += `• *${cmd.perintah}* - ${cmd.deskripsi}\n`;
+                    });
+                }
+                
+                message.reply(helpMessage);
+
+            } catch (error) {
+                console.error("Gagal mengambil data bantuan dari Sanity:", error);
+                message.reply("Maaf, terjadi kesalahan saat memuat menu bantuan.");
             }
-            
-            message.reply(helpMessage);
             return;
         }
 
