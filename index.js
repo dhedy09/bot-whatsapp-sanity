@@ -374,11 +374,6 @@ async function kirimFileDariDrive(fileId, fileName, userChatId) {
             response.headers['content-type'],
             base64data,
             fileName
-        const { MessageMedia } = require('whatsapp-web.js');
-        const media = new MessageMedia(
-            response.headers['content-type'],
-            base64data,
-            fileName
         );
     } catch (error) {
         console.error("Error saat mengirim file dari Drive:", error);
@@ -849,55 +844,57 @@ client.on('message', async (message) => {
 
         // ▼▼▼ TAMBAHKAN BLOK BARU UNTUK SIMPAN FILE DI SINI ▼▼▼
         const simpanPrefix = 'panda simpan ';
-        if (userMessageLower.startsWith(simpanPrefix)) {
-            // Pemeriksaan 1: Apakah ini sebuah balasan?
-            if (!message.hasQuotedMsg) {
-                return message.reply('❌ Perintah ini hanya berfungsi jika Anda membalas file yang ingin disimpan.');
-            }
+if (userMessageLower.startsWith(simpanPrefix)) {
+    // Pemeriksaan 1: Apakah ini sebuah balasan?
+    if (!message.hasQuotedMsg) {
+        return message.reply('❌ Perintah ini hanya berfungsi jika Anda membalas file yang ingin disimpan.');
+    }
 
-            const quotedMsg = await message.getQuotedMessage();
+    const quotedMsg = await message.getQuotedMessage();
 
-            // Pemeriksaan 2: Apakah yang dibalas adalah file?
-            if (!quotedMsg.hasMedia) {
-                return message.reply('❌ Anda harus membalas sebuah file (PDF, Dokumen, Gambar), bukan pesan teks.');
-            }
+    // Pemeriksaan 2: Apakah yang dibalas adalah file?
+    if (!quotedMsg.hasMedia) {
+        return message.reply('❌ Anda harus membalas sebuah file (PDF, Dokumen, Gambar), bukan pesan teks.');
+    }
 
-            const namaFile = userMessage.substring(simpanPrefix.length).trim();
+    const namaFile = userMessage.substring(simpanPrefix.length).trim();
 
-            // Pemeriksaan 3: Apakah nama file diberikan?
-                const aiResponse = await getGeminiResponse(userMessage, userLastState.history);
+    // Pemeriksaan 3: Apakah nama file diberikan?
+    if (!namaFile) {
+        return message.reply('❌ Anda harus memberikan nama file. Contoh: `panda simpan Laporan Bulanan 2025.pdf`');
+    }
 
-                message.reply(aiResponse);
-                
-                userLastState.history.push({ role: 'user', parts: [{ text: userMessage }] });
-                userLastState.history.push({ role: 'model', parts: [{ text: aiResponse }] });
-                
-                const MAX_HISTORY = 10;
-                if (userLastState.history.length > MAX_HISTORY) {
-                    userLastState.history = userLastState.history.slice(-MAX_HISTORY);
-                }
-                    return message.reply(' Gagal mengunggah file ke Google Drive.');
-                }
+    try {
+        // Ambil media dari pesan yang dibalas
+        const media = await quotedMsg.downloadMedia();
+        if (!media) {
+            return message.reply('Gagal mengambil data file dari pesan.');
+        }
 
-                // Langkah 2: Simpan informasi ke Sanity
-                const contact = await message.getContact();
-                const dataFile = {
-                    namaFile: namaFile,
-                    googleDriveId: driveId,
-                    diunggahOleh: contact.pushname || message.author,
-                    groupId: chat.isGroup ? chat.id._serialized : 'pribadi',
-                    tipeFile: media.mimetype,
-                };
-                await simpanDataFileKeSanity(dataFile);
+        // Upload ke Google Drive
+        const driveId = await uploadKeDrive(media, namaFile);
+        if (!driveId) {
+            return message.reply('Gagal mengunggah file ke Google Drive.');
+        }
 
-                return message.reply(`✅ Berhasil! File dengan nama *"${namaFile}"* telah diarsipkan.`);
+        // Simpan info ke Sanity
+        const contact = await message.getContact();
+        const dataFile = {
+            namaFile: namaFile,
+            googleDriveId: driveId,
+            diunggahOleh: contact.pushname || message.author,
+            groupId: chat.isGroup ? chat.id._serialized : 'pribadi',
+            tipeFile: media.mimetype,
+        };
+        await simpanDataFileKeSanity(dataFile);
 
-            } catch (error) {
-                console.error("Error di blok simpan file:", error);
-                return message.reply(' Gagal memproses file. Terjadi kesalahan tak terduga.');
-            }
-
-        }
+        return message.reply(`✅ Berhasil! File dengan nama *"${namaFile}"* telah diarsipkan.`);
+    } catch (error) {
+        console.error("Error di blok simpan file:", error);
+        return message.reply('Gagal memproses file. Terjadi kesalahan tak terduga.');
+    }
+}
+// ▲▲▲ BATAS AKHIR BLOK BARU SIMPAN FILE▲▲▲
         // ▲▲▲ BATAS AKHIR BLOK BARU SIMPAN FILE▲▲▲
 
 // Tambahkan setelah blok "BLOK 2: MENANGANI PERINTAH TEKS"
