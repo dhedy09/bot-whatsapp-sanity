@@ -1,3 +1,5 @@
+//8e4ed76ff85ed87cb76ac3cace01a88d
+
 // =================================================================
 // BAGIAN 1: INISIALISASI & KONFIGURASI AWAL
 // =================================================================
@@ -1025,11 +1027,7 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
         // AWAL BLOK: MEMBUAT PENGINGAT PRIBADI (HANYA ADMIN)
 if (userMessageLower.startsWith('ingatkan')) {
-    // --- PERBAIKAN UTAMA: Dapatkan info kontak pengirim untuk ID asli ---
-    const contact = await message.getContact();
-    const authorId = contact.id._serialized; // Ini akan selalu 628...@c.us
-
-    const isUserAdmin = await isAdmin(authorId);
+    const isUserAdmin = await isAdmin(message.from);
     if (!isUserAdmin) {
         message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
         return;
@@ -1048,21 +1046,19 @@ if (userMessageLower.startsWith('ingatkan')) {
     }
 
     const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
-    message.reply(`⏳ Mencari pegawai dengan nama *${namaTarget}*...`);
 
+    message.reply(`⏳ Mencari pegawai dengan nama *${namaTarget}*...`);
     try {
+        // ... (Logika pencarian pegawai tetap sama)
         const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`;
         let pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
-
         if (pegawaiDitemukan.length === 0) {
-            // Jika tidak ketemu, coba cari "saya" (untuk diri sendiri)
             if (namaTarget.toLowerCase() === 'saya') {
-                 const selfQuery = `*[_type == "pegawai" && _id == "${authorId.replace(/[@.]/g, '-')}"][0]`;
+                 const selfQuery = `*[_type == "pegawai" && _id == "${message.from.replace(/[@.]/g, '-')}"][0]`;
                  const selfData = await clientSanity.fetch(selfQuery);
                  if(selfData) pegawaiDitemukan = [selfData];
             }
         }
-
         if (pegawaiDitemukan.length === 0) {
             message.reply(`Maaf, pegawai dengan nama "${namaTarget}" tidak ditemukan.`);
             return;
@@ -1071,10 +1067,11 @@ if (userMessageLower.startsWith('ingatkan')) {
             message.reply(`Ditemukan ${pegawaiDitemukan.length} pegawai dengan nama mirip "${namaTarget}". Mohon gunakan nama yang lebih spesifik.`);
             return;
         }
-
         const target = pegawaiDitemukan[0];
         const targetNomorHp = target._id.replace('-c-us', '@c.us');
         const targetNama = target.nama;
+
+        // --- MENGGUNAKAN FUNGSI PARSER BARU KITA ---
         const waktuKirim = parseWaktuIndonesia(waktuString);
 
         if (!waktuKirim) {
@@ -1089,7 +1086,7 @@ if (userMessageLower.startsWith('ingatkan')) {
         await clientSanity.create(newPengingat);
 
         const waktuLokal = waktuKirim.toLocaleString('id-ID', {
-            timeZone: 'Asia/Makassar',
+            timeZone: 'Asia/Makassar', // <-- INI PERBAIKANNYA
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
             hour: '2-digit', minute: '2-digit'
         });
@@ -1354,8 +1351,7 @@ if (userMessageLower.startsWith('ingatkan')) {
                         message.reply(detailMessage);
                         delete userState[message.from];
                     }
-                    } else if (userLastState.type === 'pegawai')
-                        
+                    } else if (userLastState.type === 'pegawai') {
                         const pegawai = selectedItem;
 
                         let detailMessage = `👤 *Profil Pegawai*\n\n`;
