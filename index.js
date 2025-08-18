@@ -267,10 +267,18 @@ function parseWaktuIndonesia(teks) {
 // AWAL BROADCAST GEMPA
 let lastGempaId = null; // Simpan ID gempa terakhir yang sudah dikirim
 
+// ...existing code...
 async function checkAndBroadcastGempa() {
     try {
         const gempa = await getGempa();
-        if (!gempa || gempa.error) return;
+        if (
+            !gempa ||
+            gempa.error ||
+            !gempa.tanggal ||
+            !gempa.waktu ||
+            !gempa.magnitudo ||
+            !gempa.wilayah
+        ) return;
 
         // Gunakan kombinasi waktu & magnitudo sebagai ID unik gempa
         const currentGempaId = `${gempa.tanggal}_${gempa.waktu}_${gempa.magnitudo}`;
@@ -305,6 +313,7 @@ async function checkAndBroadcastGempa() {
         console.error("[Broadcast Gempa] Gagal broadcast info gempa:", error);
     }
 }
+// ...existing code...
 
 // ▲▲▲ AKHIR BROADCAST GEMPA
 
