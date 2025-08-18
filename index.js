@@ -154,7 +154,7 @@ const userState = {};
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI HAPUS FILE▼▼▼
 
 /**
- * Menghapus file dari Google Drive berdasarkan ID-nya.
+ * Menghapus file dari Google Drive berdasarkan ID-nya. (VERSI DIAGNOSTIK)
  * @param {string} fileId ID file di Google Drive.
  * @returns {Promise<boolean>} True jika berhasil, false jika gagal.
  */
@@ -167,7 +167,10 @@ async function hapusFileDiDrive(fileId) {
         console.log(`[Drive] Berhasil menghapus file dengan ID: ${fileId}`);
         return true;
     } catch (error) {
-        console.error(`[Drive] Gagal menghapus file dengan ID ${fileId}:`, error.message);
+        // --- PERUBAHAN ADA DI SINI ---
+        // Kita akan mencetak keseluruhan objek error untuk melihat detailnya
+        console.error(`[Drive] Gagal menghapus file dengan ID ${fileId}.`);
+        console.error("================= DETAIL ERROR LENGKAP DARI GOOGLE =================\n", error, "\n==================================================================");
         return false;
     }
 }
