@@ -1044,84 +1044,51 @@ client.on('message', async (message) => {
         // AKHIR BLOK LANGGANAN INFO GEMPA
 
 // ▼▼▼ BLOK BARU UNTUK MENCARI & MENGIRIM FILE ▼▼▼
-const cariPrefix = 'cari file ';
-if (userMessageLower.startsWith(cariPrefix)) {
-    const kataKunci = userMessage.substring(cariPrefix.length).trim();
-    if (!kataKunci) {
-        return message.reply('Silakan masukkan kata kunci. Contoh: `cari file laporan`');
-    }
+        const cariPrefix = 'cari file ';
+        if (userMessageLower.startsWith(cariPrefix)) {
+            const kataKunci = userMessage.substring(cariPrefix.length).trim();
+            if (!kataKunci) {
+                return message.reply('Silakan masukkan kata kunci. Contoh: `cari file laporan`');
+            }
 
-    try {
-        message.reply(`⏳ Mencari file dengan kata kunci *"${kataKunci}"*...`);
-        const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
-        
-        // Logika pencarian sekarang ada di sini, tidak di fungsi terpisah
-        const query = `*[_type == "fileArsip" && groupId == $groupId && namaFile match $kataKunci] | order(_createdAt desc)`;
-        const hasilPencarian = await clientSanity.fetch(query, { 
-            groupId: groupId, 
-            kataKunci: `*${kataKunci}*` 
-        });
+            const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
+            const hasilPencarian = await cariFileDiSanity(kataKunci, groupId);
 
-        if (hasilPencarian.length === 0) {
-            return message.reply(`Tidak ada file yang ditemukan dengan kata kunci *"${kataKunci}"* di arsip ini.`);
-        }
+            if (hasilPencarian.length === 0) {
+                return message.reply(`Tidak ada file yang ditemukan dengan kata kunci "${kataKunci}" di arsip grup ini.`);
+            }
 
-        // Simpan hasil pencarian ke memori sementara (userState)
-        userState[message.from] = {
-            type: 'file_search_result',
-            list: hasilPencarian
-        };
-
-        // Buat pesan balasan dengan daftar bernomor
-        let replyMessage = `✅ Ditemukan ${hasilPencarian.length} file:\n\n`;
-        hasilPencarian.forEach((file, index) => {
-            replyMessage += `*${index + 1}.* ${file.namaFile}\n`;
-        });
-        replyMessage += `\nUntuk mengambil, balas dengan:\n\`kirim file <nomor>\``;
-        
-        return message.reply(replyMessage);
-
-    } catch (error) {
-        console.error("Error di blok cari file:", error);
-        return message.reply("Maaf, terjadi kesalahan saat mencari file.");
-    }
-}
+            let replyMessage = `Ditemukan ${hasilPencarian.length} file:\n\n`;
+            hasilPencarian.forEach(file => {
+                replyMessage += `📄 *${file.namaFile}*\n`;
+            });
+            replyMessage += `\nUntuk mengambil, balas dengan:\n\`kirim file <nama file lengkap>\``;
+            return message.reply(replyMessage);
+        }
 
 
 
-        const kirimPrefix = 'kirim file ';
-        if (userMessageLower.startsWith(kirimPrefix)) {
-            // --- LOGIKA DIUBAH TOTAL UNTUK MEMBACA NOMOR ---
-            const userLastState = userState[message.from];
+         const kirimPrefix = 'kirim file ';
+        if (userMessageLower.startsWith(kirimPrefix)) {
+            const namaFile = userMessage.substring(kirimPrefix.length).trim();
+            if (!namaFile) {
+                return message.reply('Silakan masukkan nama file lengkap. Contoh: `kirim file Laporan Keuangan 2025`');
+            }
 
-            // Cek apakah pengguna sudah melakukan pencarian sebelumnya
-            if (!userLastState || userLastState.type !== 'file_search_result') {
-                return message.reply('Sesi pencarian tidak ditemukan. Silakan lakukan `cari file` terlebih dahulu sebelum mengirim file.');
-            }
+            const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
+            
+            // Query untuk mencari nama file yang persis
+            const query = `*[_type == "fileArsip" && namaFile == $namaFile && groupId == $groupId][0]`;
+            const fileData = await clientSanity.fetch(query, { namaFile, groupId });
 
-            const nomorPilihanStr = userMessage.substring(kirimPrefix.length).trim();
-            const nomorPilihan = parseInt(nomorPilihanStr);
-
-            // Validasi input nomor
-            if (isNaN(nomorPilihan) || nomorPilihan < 1 || nomorPilihan > userLastState.list.length) {
-                return message.reply(`Nomor tidak valid. Harap masukkan nomor antara 1 dan ${userLastState.list.length}.`);
-            }
-
-            try {
-                const fileData = userLastState.list[nomorPilihan - 1]; // Ambil data file dari memori
-
-                message.reply(`⏳ Sedang mengambil file *"${fileData.namaFile}"* dari arsip, mohon tunggu...`);
-                await kirimFileDariDrive(fileData.googleDriveId, fileData.namaFile, message.from);
-                
-                // Hapus state setelah file berhasil dikirim
-                delete userState[message.from];
-                return;
-
-            } catch (error) {
-                console.error("Error di blok kirim file:", error);
-                return message.reply("Maaf, terjadi kesalahan saat mencoba mengirim file.");
-            }
-        }
+            if (!fileData) {
+                return message.reply(`File dengan nama persis "${namaFile}" tidak ditemukan di arsip grup ini.`);
+            }
+            
+            message.reply(`⏳ Sedang mengambil file *"${namaFile}"* dari arsip, mohon tunggu...`);
+            await kirimFileDariDrive(fileData.googleDriveId, fileData.namaFile, message.from);
+            return;
+        }
         // ▲▲▲ BATAS AKHIR BLOK BARU  PEMANGGIL FILE▲▲▲
 
         if (userMessageLower.startsWith('cari user ')) {
