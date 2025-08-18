@@ -17,7 +17,6 @@ const { google } = require('googleapis');
 const { Readable } = require('stream');
 const { evaluate } = require('mathjs');
 const axios = require('axios');
-const { exit } = require('process');
 const FOLDER_DRIVE_ID = '17LsEyvyF06v3dPN7wMv_3NOiaajY8sQk'; // Ganti dengan ID folder Google Drive Anda
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
@@ -453,8 +452,7 @@ async function getLatestNews(query) {
  * @param {string} userId ID WhatsApp pengguna (misal: "62812...@c.us").
  * @returns {Promise<boolean>} Mengembalikan true jika admin, false jika bukan.
  */
-async function isUserAdmin(userId) {
-    if (!userId) return false;
+async function isAdmin(userId) {
     try {
         const sanitizedId = userId.replace(/[@.]/g, '-');
         const query = `*[_type == "pegawai" && _id == $id][0]`;
@@ -1043,16 +1041,14 @@ if (userMessageLower.startsWith('ingatkan')) {
     const reminderRegex = /^(.*?)\s(.*?)\stentang\s"(.*?)"$/i;
     const match = argsString.match(reminderRegex);
 
-    // --- PERBAIKAN UTAMA: Cek format di awal ---
     if (!match) {
         message.reply(
             'Format salah. Gunakan:\n`ingatkan <Nama> <Waktu> tentang "<Pesan>"`\n\n' +
             '*Contoh:*\n`ingatkan Budi besok jam 9 tentang "Rapat evaluasi"`'
         );
-        return; // Hentikan proses jika format salah
+        return;
     }
 
-    // Jika format benar, baru lanjutkan proses
     const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
     message.reply(`⏳ Mencari pegawai dengan nama *${namaTarget}*...`);
 
@@ -1061,6 +1057,7 @@ if (userMessageLower.startsWith('ingatkan')) {
         let pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
 
         if (pegawaiDitemukan.length === 0 && namaTarget.toLowerCase() === 'saya') {
+            // --- PERBAIKAN UTAMA: Menggunakan Parameterized Query ---
             const idToSearch = authorId.replace('@c.us', '-c-us');
             const selfQuery = `*[_type == "pegawai" && _id == $idToSearch][0]`;
             const selfData = await clientSanity.fetch(selfQuery, { idToSearch: idToSearch });
@@ -1108,6 +1105,7 @@ if (userMessageLower.startsWith('ingatkan')) {
     }
     return;
 }
+
 
         // ▲▲▲ AKHIR DARI BLOK PENGINGAT ▲▲▲
 
