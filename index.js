@@ -954,6 +954,28 @@ client.on('message', async (message) => {
             return;
         }
 
+// ▼▼▼ TAMBAHKAN BLOK TES DIAGNOSTIK INI ▼▼▼
+
+if (userMessageLower === 'cek pesan') {
+    let debugInfo = '--- Info Pesan ---\n\n';
+    debugInfo += `Memiliki Balasan (hasQuotedMsg): *${message.hasQuotedMsg}*\n`;
+
+    if (message.hasQuotedMsg) {
+        try {
+            const quotedMsg = await message.getQuotedMessage();
+            debugInfo += `\n--- Info Pesan yang Dibalas ---\n`;
+            debugInfo += `Punya Media (quoted.hasMedia): *${quotedMsg.hasMedia}*\n`;
+            debugInfo += `Nama File (quoted.filename): *${quotedMsg.filename || 'Tidak ada'}*\n`;
+        } catch (e) {
+            debugInfo += `\nGagal mendapatkan info pesan balasan: ${e.message}`;
+        }
+    }
+
+    return message.reply(debugInfo);
+}
+
+// ▲▲▲ AKHIR DARI BLOK TES ▲▲▲
+
         // ▼▼▼ TAMBAHKAN BLOK BARU UNTUK SIMPAN FILE DI SINI ▼▼▼
 const simpanPrefix = 'panda simpan ';
 if (userMessageLower.startsWith(simpanPrefix)) {
