@@ -1026,8 +1026,52 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
         // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
         // AWAL BLOK: MEMBUAT PENGINGAT PRIBADI (HANYA ADMIN)
+// ▼▼▼ GANTI KESELURUHAN BLOK 'ingatkan' ANDA DENGAN YANG INI ▼▼▼
+
 if (userMessageLower.startsWith('ingatkan')) {
-    const isUserAdmin = await isAdmin(message.from);
+    // --- PERBAIKAN UTAMA: Dapatkan info kontak pengirim untuk ID asli ---
+    const contact = await message.getContact();
+    const authorId = contact.id._serialized; // Ini akan selalu 628...@c.us
+    console.log("--- DEBUGGING ADMIN DI GRUP ---");
+    console.log("ID Grup (message.from):", message.from);
+    console.log("ID Pengirim (message.author):", message.author);
+    console.log("ID yang akan dicek (authorId):", authorId);
+
+    const isUserAdmin = await isAdmin(authorId);
+    Oke, ini sangat aneh dan membuat frustrasi, terutama karena Anda sudah memastikan status admin Anda di Sanity. Jika kode perbaikan sudah diterapkan tapi hasilnya masih sama, berarti ada sesuatu yang tidak beres di salah satu dari tiga area ini:
+
+Bot salah mengidentifikasi ID Anda di grup.
+
+Fungsi isAdmin gagal mencocokkan ID tersebut.
+
+Ada kesalahan data di Sanity.
+
+Mari kita lakukan investigasi singkat untuk menemukan masalahnya. Kita akan menambahkan beberapa console.log untuk "mengintip" apa yang sebenarnya dilihat oleh bot saat Anda mengirim perintah di grup.
+
+## Langkah Investigasi
+1. Tambahkan "Mata-mata" (Console.log) ke Kode Anda
+Buka file index.js Anda dan cari blok if (userMessageLower.startsWith('ingatkan')). Tambahkan beberapa baris console.log seperti di bawah ini untuk melihat variabel-variabel penting.
+
+JavaScript
+
+// ▼▼▼ MODIFIKASI BLOK 'ingatkan' ANDA SEPERTI INI ▼▼▼
+
+if (userMessageLower.startsWith('ingatkan')) {
+    const authorId = message.author || message.from;
+
+    // --- TAMBAHKAN LOG UNTUK DEBUGGING ---
+    console.log("--- DEBUGGING ADMIN DI GRUP ---");
+    console.log("ID Grup (message.from):", message.from);
+    console.log("ID Pengirim (message.author):", message.author);
+    console.log("ID yang akan dicek (authorId):", authorId);
+    // ------------------------------------
+
+    const isUserAdmin = await isAdmin(authorId);
+
+    // --- TAMBAHKAN LOG KEDUA ---
+    console.log("Hasil pengecekan isAdmin:", isUserAdmin);
+    console.log("-----------------------------");
+    // ---------------------------
     if (!isUserAdmin) {
         message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
         return;
@@ -1046,19 +1090,21 @@ if (userMessageLower.startsWith('ingatkan')) {
     }
 
     const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
-
     message.reply(`⏳ Mencari pegawai dengan nama *${namaTarget}*...`);
+
     try {
-        // ... (Logika pencarian pegawai tetap sama)
         const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`;
         let pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
+
         if (pegawaiDitemukan.length === 0) {
+            // Jika tidak ketemu, coba cari "saya" (untuk diri sendiri)
             if (namaTarget.toLowerCase() === 'saya') {
-                 const selfQuery = `*[_type == "pegawai" && _id == "${message.from.replace(/[@.]/g, '-')}"][0]`;
+                 const selfQuery = `*[_type == "pegawai" && _id == "${authorId.replace(/[@.]/g, '-')}"][0]`;
                  const selfData = await clientSanity.fetch(selfQuery);
                  if(selfData) pegawaiDitemukan = [selfData];
             }
         }
+
         if (pegawaiDitemukan.length === 0) {
             message.reply(`Maaf, pegawai dengan nama "${namaTarget}" tidak ditemukan.`);
             return;
@@ -1067,11 +1113,10 @@ if (userMessageLower.startsWith('ingatkan')) {
             message.reply(`Ditemukan ${pegawaiDitemukan.length} pegawai dengan nama mirip "${namaTarget}". Mohon gunakan nama yang lebih spesifik.`);
             return;
         }
+
         const target = pegawaiDitemukan[0];
         const targetNomorHp = target._id.replace('-c-us', '@c.us');
         const targetNama = target.nama;
-
-        // --- MENGGUNAKAN FUNGSI PARSER BARU KITA ---
         const waktuKirim = parseWaktuIndonesia(waktuString);
 
         if (!waktuKirim) {
@@ -1086,7 +1131,7 @@ if (userMessageLower.startsWith('ingatkan')) {
         await clientSanity.create(newPengingat);
 
         const waktuLokal = waktuKirim.toLocaleString('id-ID', {
-            timeZone: 'Asia/Makassar', // <-- INI PERBAIKANNYA
+            timeZone: 'Asia/Makassar',
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
             hour: '2-digit', minute: '2-digit'
         });
