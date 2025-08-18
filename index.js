@@ -887,41 +887,32 @@ client.on('message', async (message) => {
             await showMainMenu(message);
         
         } else if (userMessageLower.startsWith('info gempa')) {
-            const userId = message.from;
-            const command = userMessageLower.split(' ')[2];
+        const userId = message.from;
+        const command = userMessageLower.split(' ')[2];
 
-            if (command === 'on') {
-                const docId = userId.replace(/[@.]/g, '-');
-                const existing = await clientSanity.fetch(`*[_type == "pelangganGempa" && _id == $docId][0]`, { docId });
-                if (existing) return message.reply('Anda sudah terdaftar dalam sistem notifikasi gempa.');
-                
-                const contact = await message.getContact();
-                const newSubscriber = { _type: 'pelangganGempa', _id: docId, userId: userId, namaPengguna: contact.pushname || 'Tanpa Nama', tanggalDaftar: new Date().toISOString() };
-                await clientSanity.create(newSubscriber);
-                return message.reply('✅ Berhasil! Anda sekarang akan menerima notifikasi gempa otomatis.');
+        if (command === 'on') {
+            const docId = userId.replace(/[@.]/g, '-');
+            const existing = await clientSanity.fetch(`*[_type == "pelangganGempa" && _id == $docId][0]`, { docId });
+            if (existing) return message.reply('Anda sudah terdaftar dalam sistem notifikasi gempa.');
+            
+            const contact = await message.getContact();
+            const newSubscriber = { _type: 'pelangganGempa', _id: docId, userId: userId, namaPengguna: contact.pushname || 'Tanpa Nama', tanggalDaftar: new Date().toISOString() };
+            await clientSanity.create(newSubscriber);
+            return message.reply('✅ Berhasil! Anda sekarang akan menerima notifikasi gempa otomatis.');
 
-            } else if (command === 'off') {
-                const docId = userId.replace(/[@.]/g, '-');
-                const existing = await clientSanity.fetch(`*[_type == "pelangganGempa" && _id == $docId][0]`, { docId });
-                if (!existing) return message.reply('Anda memang belum terdaftar.');
+        } else if (command === 'off') {
+            const docId = userId.replace(/[@.]/g, '-');
+            const existing = await clientSanity.fetch(`*[_type == "pelangganGempa" && _id == $docId][0]`, { docId });
+            if (!existing) return message.reply('Anda memang belum terdaftar.');
 
-                await clientSanity.delete(docId);
-                return message.reply('✅ Anda telah berhenti berlangganan notifikasi gempa.');
-
-            } else {
-                message.reply('⏳ Mengambil data gempa terakhir dari BMKG...');
-                const gempaData = await getGempa();
-                if (gempaData.error) return message.reply(gempaData.error);
-                const reply = `*Info Gempa Terkini*\n\n` +
-                    `*Waktu:* ${gempaData.tanggal}, ${gempaData.waktu}\n` +
-                    `*Magnitudo:* ${gempaData.magnitudo} SR\n` +
-                    `*Kedalaman:* ${gempaData.kedalaman}\n` +
-                    `*Wilayah:* ${gempaData.wilayah}\n` +
-                    `*Potensi:* ${gempaData.potensi}`;
-                return message.reply(reply);
-            }
+            await clientSanity.delete(docId);
+            return message.reply('✅ Anda telah berhenti berlangganan notifikasi gempa.');
         
-        } else if (userMessageLower.startsWith('panda simpan ')) {
+        } else {
+            // Jika bukan 'on' atau 'off', teruskan ke blok AI di bawah
+            // sengaja dikosongkan agar jatuh ke blok 'else' terakhir
+        }
+    } else if (userMessageLower.startsWith('panda simpan ')) {
             if (!message.hasQuotedMsg) return message.reply('Anda harus membalas file yang ingin disimpan.');
             const quotedMsg = await message.getQuotedMessage();
             if (!quotedMsg.hasMedia) return message.reply('Anda harus membalas sebuah file.');
@@ -994,11 +985,27 @@ client.on('message', async (message) => {
         
         } else {
             // BLOK 3: Pemicu Mode AI (HANYA JIKA TIDAK ADA PERINTAH LAIN YANG COCOK)
-            const aiTriggerCommands = ['tanya ai', 'mode ai', 'sesi ai', 'panda ai'];
+            
+            // 1. 'info gempa' ditambahkan ke daftar pemicu
+            const aiTriggerCommands = ['tanya ai', 'mode ai', 'sesi ai', 'panda ai', 'info gempa'];
+            
             if (!chat.isGroup && aiTriggerCommands.some(cmd => userMessageLower.startsWith(cmd))) {
+                
+                // 2. Logika baru untuk memulai sesi DAN langsung menjawab
                 userState[message.from] = { type: 'ai_mode', history: [] };
-                const welcomeMsg = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`);
-                message.reply(welcomeMsg ? welcomeMsg.jawaban : "Sesi AI dimulai.");
+                
+                // Beri tahu pengguna bahwa sesi dimulai (opsional, bisa dihapus jika tidak mau ada pesan pembuka)
+                message.reply("Sesi AI dimulai. Saya akan segera menjawab pertanyaan Anda...");
+                
+                // Langsung proses pertanyaan pertamanya tanpa menunggu balasan lagi
+                await chat.sendStateTyping();
+                const aiResponse = await getGeminiResponse(userMessage, userState[message.from].history);
+                message.reply(aiResponse);
+
+                // Simpan percakapan pertama ke dalam history
+                userState[message.from].history.push({ role: 'user', parts: [{ text: userMessage }] });
+                userState[message.from].history.push({ role: 'model', parts: [{ text: aiResponse }] });
+
             }
         }
 
