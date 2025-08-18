@@ -1027,9 +1027,9 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
         // AWAL BLOK: MEMBUAT PENGINGAT PRIBADI (HANYA ADMIN)
 if (userMessageLower.startsWith('ingatkan')) {
-    // --- PERBAIKAN UTAMA: Dapatkan info kontak pengirim untuk ID asli ---
+    // Dapatkan info kontak pengirim untuk mendapatkan ID asli (selalu 628...@c.us)
     const contact = await message.getContact();
-    const authorId = contact.id._serialized; // Ini akan selalu 628...@c.us
+    const authorId = contact.id._serialized;
 
     const isUserAdmin = await isAdmin(authorId);
     if (!isUserAdmin) {
@@ -1056,18 +1056,13 @@ if (userMessageLower.startsWith('ingatkan')) {
         const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`;
         let pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
 
-        if (pegawaiDitemukan.length === 0) {
-            // Jika tidak ketemu, coba cari "saya" (untuk diri sendiri)
-            if (namaTarget.toLowerCase() === 'saya') {
-                    // --- TAMBAHKAN LOG UNTUK DEBUGGING ---
-                const idToSearch = authorId.replace(/[@.]/g, '-');
-                console.log("--- DEBUGGING PENCARIAN 'SAYA' ---");
-                console.log("Mencari pegawai dengan _id:", idToSearch);
-                console.log("---------------------------------");
-                // ------------------------------------
-                 const selfQuery = `*[_type == "pegawai" && _id == "${authorId.replace(/[@.]/g, '-')}"][0]`;
-                 const selfData = await clientSanity.fetch(selfQuery);
-                 if(selfData) pegawaiDitemukan = [selfData];
+        if (pegawaiDitemukan.length === 0 && namaTarget.toLowerCase() === 'saya') {
+            // Logika khusus saat pengguna mengetik "saya"
+            const idToSearch = authorId.replace('@c.us', '-c-us');
+            const selfQuery = `*[_type == "pegawai" && _id == "${idToSearch}"][0]`;
+            const selfData = await clientSanity.fetch(selfQuery);
+            if (selfData) {
+                pegawaiDitemukan = [selfData];
             }
         }
 
@@ -1109,6 +1104,7 @@ if (userMessageLower.startsWith('ingatkan')) {
     }
     return;
 }
+
 
         // ▲▲▲ AKHIR DARI BLOK PENGINGAT ▲▲▲
 
