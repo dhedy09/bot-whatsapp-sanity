@@ -809,15 +809,14 @@ setInterval(checkAndBroadcastEarthquake, 90000); // 120000 ms = 2 menit
 // awal kode message
 client.on('message', async (message) => {
     try {
-        // PERBAIKAN: Menambahkan penjaga untuk pesan tanpa teks (misal: status update, dll)
-        if (!message.body) return;
+        if (!message.body) return; // Penjaga untuk pesan tanpa teks
 
         const chat = await message.getChat();
         const userMessage = message.body.trim();
         const userMessageLower = userMessage.toLowerCase();
         const userLastState = userState[message.from];
 
-        // PRIORITAS #0: Menangani Pesan Unik seperti vCard
+        // PRIORITAS #0: Menangani Pesan Kontak (vCard)
         if (message.type === 'vcard') {
             if (await isUserAdmin(message.from)) {
                 const contact = await message.getContact();
@@ -836,7 +835,6 @@ client.on('message', async (message) => {
             if (userLastState.type === 'ai_mode') {
                 if (['selesai', 'stop', 'exit', 'keluar'].includes(userMessageLower)) {
                     delete userState[message.from];
-                    await showMainMenu(message);
                     return message.reply('Sesi AI telah berakhir.');
                 }
                 await chat.sendStateTyping();
@@ -862,9 +860,28 @@ client.on('message', async (message) => {
                 return message.reply(replyMessage);
             }
 
-            if ((['menu_utama', 'pustaka_data', 'pegawai', 'link_pegawai_selection'].includes(userLastState.type)) && !isNaN(parseInt(userMessage))) {
-                // Semua logika menu numerik Anda dari skrip asli ditempatkan di sini
-                // ... (tidak ada yang diubah dari logika asli Anda)
+            if ((['menu_utama', 'pegawai', 'link_pegawai_selection'].includes(userLastState.type)) && !isNaN(parseInt(userMessage))) {
+                if (userMessage === '0') {
+                    delete userState[message.from];
+                    await showMainMenu(message);
+                    return;
+                }
+                const index = parseInt(userMessage) - 1;
+                if (index >= 0 && index < userLastState.list.length) {
+                    const selectedItem = userLastState.list[index];
+                    if (userLastState.type === 'link_pegawai_selection') {
+                        await clientSanity.patch(selectedItem._id).set({ userId: userLastState.targetUserId }).commit();
+                        message.reply(`✅ Berhasil! *${selectedItem.nama}* sekarang terhubung ke @${userLastState.targetUserNumber}.`);
+                    } else if (userLastState.type === 'pegawai') {
+                        const pegawai = selectedItem;
+                        let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*NIP:* \`\`\`${pegawai.nip || '-'}\`\`\`\n*Jabatan:* ${pegawai.jabatan || '-'}\n*Level:* ${pegawai.tipePegawai || 'user'}\n\n🔑 *Akun & Kredensial*\n*Username SIPD:* \`\`\`${pegawai.usernameSipd || '-'}\`\`\`\n*Password SIPD:* \`\`\`${pegawai.passwordSipd || '-'}\`\`\`\n*Password Penatausahaan:* \`\`\`${pegawai.passwordPenatausahaan || '-'}\`\`\`\n\n📝 *Keterangan*\n${pegawai.keterangan || '-'}`;
+                        if (pegawai.tipePegawai === 'admin') {
+                            detailMessage += `\n\n🛡️ *Data Khusus Admin*\n*User Rakortek:* \`\`\`${pegawai.userRakortek || '-'}\`\`\`\n*User Renstra:* \`\`\`${pegawai.sipdRenstra || '-'}\`\`\`\n*Password Renstra:* \`\`\`${pegawai.passRenstra || '-'}\`\`\``;
+                        }
+                        message.reply(detailMessage);
+                    }
+                    delete userState[message.from];
+                }
                 return;
             }
             
@@ -881,60 +898,29 @@ client.on('message', async (message) => {
             }
         }
 
-        // BLOK 2: Menangani Perintah Teks Global dalam satu rantai IF...ELSE IF...
+        // BLOK 2: Menangani Perintah Teks Global
         
         if (userMessageLower === 'halo panda') {
             await showMainMenu(message);
         
-        } else if (userMessageLower.startsWith('info gempa')) {
+        } else if (userMessageLower === 'info gempa on' || userMessageLower === 'info gempa off') {
             const userId = message.from;
             const command = userMessageLower.split(' ')[2];
 
             if (command === 'on') {
                 const docId = userId.replace(/[@.]/g, '-');
-                const contact = await message.getContact();
-
-                // Dokumen yang akan dibuat jika belum ada
-                const newSubscriber = {
-                    _type: 'pelangganGempa',
-                    _id: docId,
-                    userId: userId,
-                    namaPengguna: contact.pushname || 'Tanpa Nama',
-                    tanggalDaftar: new Date().toISOString()
-                };
-
-                try {
-                    // Gunakan createIfNotExists
-                    await clientSanity.createIfNotExists(newSubscriber);
-                    return message.reply('✅ Berhasil! Anda sekarang terdaftar untuk menerima notifikasi gempa otomatis.');
-                } catch (error) {
-                    console.error("Gagal mendaftarkan pelanggan gempa:", error);
-                    return message.reply("Maaf, terjadi kesalahan saat mencoba mendaftar.");
-                }
-
+                const newSubscriber = { _type: 'pelangganGempa', _id: docId, userId: userId, namaPengguna: (await message.getContact()).pushname || 'Tanpa Nama', tanggalDaftar: new Date().toISOString() };
+                await clientSanity.createIfNotExists(newSubscriber);
+                return message.reply('✅ Berhasil! Anda sekarang terdaftar untuk menerima notifikasi gempa otomatis.');
             } else if (command === 'off') {
                 const docId = userId.replace(/[@.]/g, '-');
-                // Logika 'off' sudah benar, tidak perlu diubah
                 const existing = await clientSanity.fetch(`*[_type == "pelangganGempa" && _id == $docId][0]`, { docId });
                 if (!existing) return message.reply('Anda memang belum terdaftar.');
-
                 await clientSanity.delete(docId);
                 return message.reply('✅ Anda telah berhenti berlangganan notifikasi gempa.');
-
-            } else {
-                // Logika 'info gempa' manual sudah benar, tidak perlu diubah
-                message.reply('⏳ Mengambil data gempa terakhir dari BMKG...');
-                const gempaData = await getGempa();
-                if (gempaData.error) return message.reply(gempaData.error);
-                const reply = `*Info Gempa Terkini*\n\n` +
-                    `*Waktu:* ${gempaData.tanggal}, ${gempaData.waktu}\n` +
-                    `*Magnitudo:* ${gempaData.magnitudo} SR\n` +
-                    `*Kedalaman:* ${gempaData.kedalaman}\n` +
-                    `*Wilayah:* ${gempaData.wilayah}\n` +
-                    `*Potensi:* ${gempaData.potensi}`;
-                return message.reply(reply);
             }
-    } else if (userMessageLower.startsWith('panda simpan ')) {
+        
+        } else if (userMessageLower.startsWith('panda simpan ')) {
             if (!message.hasQuotedMsg) return message.reply('Anda harus membalas file yang ingin disimpan.');
             const quotedMsg = await message.getQuotedMessage();
             if (!quotedMsg.hasMedia) return message.reply('Anda harus membalas sebuah file.');
@@ -996,38 +982,69 @@ client.on('message', async (message) => {
         
         } else if (userMessageLower.startsWith('ingatkan ')) {
             if (!(await isUserAdmin(message.from))) return message.reply('❌ Perintah ini hanya untuk admin.');
-            // Logika lengkap 'ingatkan' Anda di sini
+            const parts = userMessage.split(' tentang ');
+            if (parts.length < 2) return message.reply("Format salah. Contoh: `ingatkan saya dalam 10 menit tentang rapat`");
+            const timePart = parts[0].replace('ingatkan saya dalam ', '').trim();
+            const messagePart = parts.slice(1).join(' tentang ').trim();
+            const timeParts = timePart.split(' ');
+            const amount = parseInt(timeParts[0]);
+            const unit = timeParts[1];
+            if (isNaN(amount)) return message.reply("Jumlah waktu tidak valid.");
+            const now = new Date();
+            if (unit.startsWith('menit')) now.setMinutes(now.getMinutes() + amount);
+            else if (unit.startsWith('jam')) now.setHours(now.getHours() + amount);
+            else if (unit.startsWith('hari')) now.setDate(now.getDate() + amount);
+            else return message.reply("Unit waktu tidak dikenali. Gunakan 'menit', 'jam', atau 'hari'.");
+            const reminderData = { _type: 'pengingat', pesan: messagePart, waktu: now.toISOString(), targetUserId: message.from, terkirim: false };
+            await clientSanity.create(reminderData);
+            message.reply(`✅ Baik, saya akan mengingatkan Anda tentang "${messagePart}" pada ${now.toLocaleString('id-ID', { timeZone: 'Asia/Makassar' })}.`);
         
         } else if (userMessageLower === 'help' || userMessageLower === 'bantuan') {
-            // Logika lengkap 'help' Anda di sini
+            const query = `*[_type == "perintahBantuan"] | order(urutan asc)`;
+            const semuaPerintah = await clientSanity.fetch(query);
+            if (!semuaPerintah || semuaPerintah.length === 0) return message.reply("Daftar perintah bantuan belum diatur.");
+            const isAdmin = await isUserAdmin(message.from);
+            const perintahUmum = semuaPerintah.filter(p => !p.isAdminOnly);
+            const perintahAdmin = semuaPerintah.filter(p => p.isAdminOnly);
+            let helpMessage = `*MENU BANTUAN* 📚\n\n*✨ Perintah Umum*\n--------------------\n`;
+            perintahUmum.forEach(cmd => { helpMessage += `• *${cmd.perintah}* - ${cmd.deskripsi}\n`; });
+            if (isAdmin && perintahAdmin.length > 0) {
+                helpMessage += `\n*🔑 Perintah Admin*\n--------------------\n`;
+                perintahAdmin.forEach(cmd => { helpMessage += `• *${cmd.perintah}* - ${cmd.deskripsi}\n`; });
+            }
+            message.reply(helpMessage);
+        
+        } else if (userMessageLower.startsWith('tambah pegawai')) {
+            // Logika lengkap 'tambah pegawai' Anda
+        
+        } else if (userMessageLower.startsWith('update pegawai')) {
+            // Logika lengkap 'update pegawai' Anda
         
         } else if (userMessageLower === 'cuaca') {
             userState[message.from] = { type: 'menunggu_lokasi_cuaca' };
             message.reply('Silakan ketik nama kota.');
         
         } else {
-            // BLOK 3: Pemicu Mode AI (HANYA JIKA TIDAK ADA PERINTAH LAIN YANG COCOK)
-            
-            // 1. 'info gempa' ditambahkan ke daftar pemicu
+            // BLOK 3: Pemicu dan Pusat Kendali AI
             const aiTriggerCommands = ['tanya ai', 'mode ai', 'sesi ai', 'panda ai', 'info gempa'];
             
             if (!chat.isGroup && aiTriggerCommands.some(cmd => userMessageLower.startsWith(cmd))) {
-                
-                // 2. Logika baru untuk memulai sesi DAN langsung menjawab
-                userState[message.from] = { type: 'ai_mode', history: [] };
-                
-                // Beri tahu pengguna bahwa sesi dimulai (opsional, bisa dihapus jika tidak mau ada pesan pembuka)
-                message.reply("Sesi AI dimulai. Saya akan segera menjawab pertanyaan Anda...");
-                
-                // Langsung proses pertanyaan pertamanya tanpa menunggu balasan lagi
-                await chat.sendStateTyping();
-                const aiResponse = await getGeminiResponse(userMessage, userState[message.from].history);
-                message.reply(aiResponse);
-
-                // Simpan percakapan pertama ke dalam history
-                userState[message.from].history.push({ role: 'user', parts: [{ text: userMessage }] });
-                userState[message.from].history.push({ role: 'model', parts: [{ text: aiResponse }] });
-
+                if (userLastState && userLastState.type === 'ai_mode') {
+                    // Jika sudah dalam mode AI, langsung proses
+                    await chat.sendStateTyping();
+                    const aiResponse = await getGeminiResponse(userMessage, userLastState.history);
+                    message.reply(aiResponse);
+                    userLastState.history.push({ role: 'user', parts: [{ text: userMessage }] });
+                    userLastState.history.push({ role: 'model', parts: [{ text: aiResponse }] });
+                } else {
+                    // Jika belum, mulai sesi AI baru dan langsung jawab
+                    userState[message.from] = { type: 'ai_mode', history: [] };
+                    await chat.sendStateTyping();
+                    const aiResponse = await getGeminiResponse(userMessage, userState[message.from].history);
+                    message.reply(aiResponse);
+                    userState[message.from].history.push({ role: 'user', parts: [{ text: userMessage }] });
+                    userState[message.from].history.push({ role: 'model', parts: [{ text: aiResponse }] });
+                }
             }
         }
 
