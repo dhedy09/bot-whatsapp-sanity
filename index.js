@@ -20,6 +20,7 @@ const stream = require('stream'); // Diperlukan untuk Google Drive
 const { evaluate } = require('mathjs');
 const axios = require('axios');
 const app = express();
+const path = require('path');
 
 
 // --- INISIALISASI KLIEN GOOGLE (DRIVE, SEARCH, DLL) ---
@@ -782,10 +783,8 @@ async function uploadKeDrive(media, namaFile) {
     try {
         const fileMetadata = {
             name: namaFile,
-            parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] // Ambil ID folder dari .env
+            parents: [process.env.GOOGLE_DRIVE_FOLDER_ID]
         };
-
-        // Mengubah data base64 menjadi stream yang bisa dibaca
         const bufferStream = new stream.PassThrough();
         bufferStream.end(Buffer.from(media.data, 'base64'));
 
@@ -799,7 +798,7 @@ async function uploadKeDrive(media, namaFile) {
             media: mediaData,
             fields: 'id',
             supportsAllDrives: true,
-            convert: false // Parameter penting agar format Excel, Word, dll tidak berubah
+            convert: false // <-- WAJIB ADA: Mencegah konversi ke Google Sheets
         });
 
         console.log(`[Drive] File berhasil diunggah dengan ID: ${response.data.id}`);
@@ -956,56 +955,64 @@ client.on('message', async (message) => {
         }
 
         // ▼▼▼ TAMBAHKAN BLOK BARU UNTUK SIMPAN FILE DI SINI ▼▼▼
-        const simpanPrefix = 'panda simpan ';
-        if (userMessageLower.startsWith(simpanPrefix)) {
-            // Pemeriksaan 1: Apakah ini sebuah balasan?
-            if (!message.hasQuotedMsg) {
-                return message.reply('❌ Perintah ini hanya berfungsi jika Anda membalas file yang ingin disimpan.');
-            }
+const simpanPrefix = 'panda simpan ';
+if (userMessageLower.startsWith(simpanPrefix)) {
+    // Pemeriksaan 1: Apakah ini sebuah balasan?
+    if (!message.hasQuotedMsg) {
+        return message.reply('❌ Perintah ini hanya berfungsi jika Anda membalas file yang ingin disimpan.');
+    }
 
-            const quotedMsg = await message.getQuotedMessage();
+    const quotedMsg = await message.getQuotedMessage();
 
-            // Pemeriksaan 2: Apakah yang dibalas adalah file?
-            if (!quotedMsg.hasMedia) {
-                return message.reply('❌ Anda harus membalas sebuah file (PDF, Dokumen, Gambar), bukan pesan teks.');
-            }
+    // Pemeriksaan 2: Apakah yang dibalas adalah file dengan nama?
+    if (!quotedMsg.hasMedia || !quotedMsg.filename) {
+        return message.reply('❌ Anda harus membalas sebuah file (bukan teks) dan file tersebut harus memiliki nama asli.');
+    }
+    
+    try {
+        // --- LOGIKA BARU UNTUK MENANGANI NAMA & EKSTENSI FILE ---
+        const originalFilename = quotedMsg.filename; // Contoh: "laporan_asli.xlsx"
+        const extension = path.extname(originalFilename); // Contoh: ".xlsx"
+        
+        let namaKustom = userMessage.substring(simpanPrefix.length).trim();
+        let namaFileFinal;
 
-            const namaFile = userMessage.substring(simpanPrefix.length).trim();
+        if (namaKustom) {
+            // Jika pengguna memberi nama baru, gabungkan dengan ekstensi asli
+            namaFileFinal = namaKustom + extension;
+        } else {
+            // Jika pengguna hanya mengetik "panda simpan" (tanpa nama), gunakan nama file asli
+            namaFileFinal = originalFilename;
+        }
+        // --- AKHIR LOGIKA BARU ---
 
-            // Pemeriksaan 3: Apakah nama file diberikan?
-            if (!namaFile) {
-                return message.reply('❌ Silakan berikan nama untuk file Anda.\nContoh: `panda simpan Laporan Keuangan`');
-            }
+        message.reply(`⏳ Sedang memproses *"${namaFileFinal}"*, mohon tunggu...`);
+        const media = await quotedMsg.downloadMedia();
+        
+        // Langkah 1: Upload ke Google Drive dengan nama file yang sudah benar
+        const driveId = await uploadKeDrive(media, namaFileFinal);
+        if (!driveId) {
+            return message.reply(' Gagal mengunggah file ke Google Drive.');
+        }
 
-            try {
-                message.reply('⏳ Sedang memproses, mohon tunggu...');
-                const media = await quotedMsg.downloadMedia();
-                
-                // Langkah 1: Upload ke Google Drive
-                const driveId = await uploadKeDrive(media, namaFile);
-                if (!driveId) {
-                    return message.reply(' Gagal mengunggah file ke Google Drive.');
-                }
+        // Langkah 2: Simpan informasi ke Sanity
+        const contact = await message.getContact();
+        const dataFile = {
+            namaFile: namaFileFinal, // Simpan nama file lengkap dengan ekstensi
+            googleDriveId: driveId,
+            diunggahOleh: contact.pushname || message.author,
+            groupId: chat.isGroup ? chat.id._serialized : 'pribadi',
+            tipeFile: media.mimetype,
+        };
+        await simpanDataFileKeSanity(dataFile);
 
-                // Langkah 2: Simpan informasi ke Sanity
-                const contact = await message.getContact();
-                const dataFile = {
-                    namaFile: namaFile,
-                    googleDriveId: driveId,
-                    diunggahOleh: contact.pushname || message.author,
-                    groupId: chat.isGroup ? chat.id._serialized : 'pribadi',
-                    tipeFile: media.mimetype,
-                };
-                await simpanDataFileKeSanity(dataFile);
+        return message.reply(`✅ Berhasil! File telah diarsipkan dengan nama *"${namaFileFinal}"*.`);
 
-                return message.reply(`✅ Berhasil! File dengan nama *"${namaFile}"* telah diarsipkan.`);
-
-            } catch (error) {
-                console.error("Error di blok simpan file:", error);
-                return message.reply(' Gagal memproses file. Terjadi kesalahan tak terduga.');
-            }
-
-        }
+    } catch (error) {
+        console.error("Error di blok simpan file:", error);
+        return message.reply(' Gagal memproses file. Terjadi kesalahan tak terduga.');
+    }
+}
         // ▲▲▲ BATAS AKHIR BLOK BARU SIMPAN FILE▲▲▲
 
         // Tambahkan setelah blok "BLOK 2: MENANGANI PERINTAH TEKS"
