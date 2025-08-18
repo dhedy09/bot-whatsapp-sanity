@@ -1048,7 +1048,7 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
     let initialHistory = [];
     try {
         const userId = message.from;
-        const sanitizedId = userId.replace(/[@.]/g, '-');
+        const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
         const memoryQuery = `*[_type == "memoriPengguna" && _id == $id][0]`;
         const memoryDoc = await clientSanity.fetch(memoryQuery, { id: sanitizedId });
 
