@@ -208,18 +208,33 @@ function evaluateMathExpression(expression) {
  * @returns {Promise<object>} Sebuah objek berisi daftar artikel berita.
  */
 async function getLatestNews(query) {
-    console.log(`[Tool] Menjalankan tes di getLatestNews untuk query: ${query}`);
+    console.log(`[Tool] Mencari berita untuk query: ${query}`);
+    try {
+        const response = await axios.get('https://newsapi.org/v2/top-headlines', {
+            params: {
+                q: query,
+                country: 'id',
+                apiKey: process.env.NEWS_API_KEY,
+                pageSize: 5
+            }
+        });
 
-    // --- BLOK TES SEMENTARA ---
-    // Fungsi ini sekarang HANYA akan mengembalikan objek sederhana ini.
-    const dataTes = {
-        status: "sukses",
-        pesan: "Ini adalah data tes dari KODE TERBARU."
-    };
-    
-    console.log("MENGEMBALIKAN DATA TES:", JSON.stringify(dataTes, null, 2));
-    return dataTes;
-    // --- AKHIR BLOK TES ---
+        if (!response.data.articles || response.data.articles.length === 0) {
+            return { error: `Tidak ada berita yang ditemukan untuk topik "${query}".` };
+        }
+        
+        const articles = response.data.articles.map(article => ({
+            title: article.title,
+            source: article.source.name,
+            url: article.url
+        }));
+
+        return { articles: articles };
+
+    } catch (error) {
+        console.error("Error fetching news:", error.message);
+        return { error: "Gagal mengambil data berita." };
+    }
 }
 // ▲▲▲ AKHIR DARI FUNGSI GET BERITA ▲▲▲
 
