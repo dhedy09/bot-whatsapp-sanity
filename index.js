@@ -149,7 +149,45 @@ const userState = {};
 // =================================================================
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
-// ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
+
+// AWAL FUNGSI BARU MEMORI▼▼▼
+
+/**
+ * Menyimpan atau memperbarui memori untuk seorang pengguna di Sanity.
+ * @param {string} userId ID unik pengguna WhatsApp.
+ * @param {string} memoryText Teks yang ingin disimpan sebagai memori.
+ * @param {object} contact Objek kontak dari whatsapp-web.js.
+ */
+async function saveUserMemory(userId, memoryText, contact) {
+    try {
+        console.log(`[Memori] Menyimpan memori untuk ${userId}...`);
+        
+        // Membuat ID dokumen yang aman untuk Sanity
+        const docId = userId.replace(/[@.]/g, '-');
+        
+        // Menyiapkan dokumen yang akan disimpan
+        const memoryDoc = {
+            _type: 'memoriPengguna',
+            _id: docId,
+            userId: userId,
+            namaPengguna: contact.pushname || contact.name || 'Tanpa Nama',
+            ringkasanMemori: memoryText, // Langsung simpan teks dari pengguna
+            terakhirUpdate: new Date().toISOString(),
+        };
+
+        // Menggunakan patch.set() untuk membuat dokumen jika belum ada, atau menimpanya jika sudah ada.
+        // Ini adalah cara paling aman untuk 'upsert' (update or insert).
+        await clientSanity.patch(docId).set(memoryDoc).commit({ autoGenerateArrayKeys: true });
+
+        console.log(`[Memori] Berhasil menyimpan memori untuk ${userId}.`);
+        return true; // Kembalikan true jika berhasil
+
+    } catch (error) {
+        console.error(`[Memori] Gagal menyimpan memori untuk ${userId}:`, error);
+        return false; // Kembalikan false jika gagal
+    }
+}
+// ▲▲▲ BATAS AKHIR FUNGSI BARU MEMORI ▲▲▲
 
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI HAPUS FILE▼▼▼
 
@@ -894,870 +932,351 @@ client.on('qr', async (qr) => {
 });
 
 client.on('ready', () => {
-    console.log('✅ Bot WhatsApp berhasil terhubung dan siap digunakan!');
-    qrCodeUrl = null; // Baris ini penting untuk web server Anda, JANGAN DIHAPUS
+    console.log('✅ Bot WhatsApp berhasil terhubung dan siap digunakan!');
+    qrCodeUrl = null; // Baris ini penting untuk web server Anda, JANGAN DIHAPUS
 
-    // Menjalankan alarm pengingat setiap 60 detik (1 menit)
-    console.log('[Pengingat] Alarm pengingat diaktifkan, akan memeriksa setiap menit.');
-    setInterval(checkAndSendReminders, 60000); 
+    // Menjalankan alarm pengingat setiap 60 detik (1 menit)
+    console.log('[Pengingat] Alarm pengingat diaktifkan, akan memeriksa setiap menit.');
+    setInterval(checkAndSendReminders, 60000); 
 
     // Menjalankan broadcast gempa setiap 5 menit
     console.log('[Gempa] Broadcast info gempa diaktifkan, akan memeriksa setiap 5 menit.');
-    setInterval(checkAndBroadcastGempa, 300000); // 5 menit
+    setInterval(checkAndBroadcastGempa, 300000); // 300000 ms = 5 menit
 });
 
 // awal kode message
+// ▼▼▼ GANTI SELURUH BLOK DARI client.on('message',...) SAMPAI AKHIR DENGAN INI ▼▼▼
+
 client.on('message', async (message) => {
-    const chat = await message.getChat();
-    try {
-        const userMessage = message.body.trim();
-        const userMessageLower = userMessage.toLowerCase();
-        const userLastState = userState[message.from] || userState[message.author];
-
-        // BLOK 1: MENANGANI "MODE AI"
-        if (userLastState && userLastState.type === 'ai_mode') {
-            const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
-            if (exitCommands.includes(userMessageLower)) {
-                delete userState[message.from];
-                message.reply('Sesi AI telah berakhir. Anda kembali ke mode normal.');
-                await showMainMenu(message);
-                return;
-            }
-
-            // ▼▼▼ PASTE BLOK BARU INI DI TEMPAT YANG SAMA ▼▼▼
-            // BLOK BARU: MENYIMPAN MEMORI JANGKA PANJANG (VERSI PERBAIKAN)
-            const memoryTriggers = ['ingat ini:', 'ingat saya:'];
-            const trigger = memoryTriggers.find(t => userMessageLower.startsWith(t));
-
-            if (trigger) {
-                const memoryToSave = userMessage.substring(trigger.length).trim();
-
-                if (!memoryToSave) {
-                    message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
-                    return;
-                }
-
-                try {
-                    const userId = message.from;
-                    const sanitizedId = userId.replace(/[@.]/g, '-');
-                    const contact = await message.getContact();
-                    const userName = contact.pushname || userId;
-
-                    // LANGKAH 1: Pastikan dokumen untuk user ini sudah ada.
-                    await clientSanity.createIfNotExists({
-                        _id: sanitizedId,
-                        _type: 'memoriPengguna',
-                        userId: userId,
-                        namaPengguna: userName,
-                        daftarMemori: []
-                    });
-
-                    // LANGKAH 2: Setelah dokumen dijamin ada, tambahkan memori baru.
-                    await clientSanity
-                        .patch(sanitizedId)
-                        .append('daftarMemori', [memoryToSave])
-                        .commit({ autoGenerateArrayKeys: true });
-
-                    message.reply("Baik, saya akan mengingatnya.");
-                    console.log(`Memori baru disimpan untuk user ${userName}: "${memoryToSave}"`);
-
-                } catch (error) {
-                    console.error("Gagal menyimpan memori ke Sanity:", error);
-                    message.reply("Maaf, terjadi kesalahan saat saya mencoba mengingat informasi ini.");
-                }
-                return; // Hentikan proses agar tidak dikirim ke AI
-            }
-            // ▲▲▲ AKHIR BLOK BARU ▲▲▲
-
-            try {
-                await chat.sendStateTyping();
-                const aiResponse = await getGeminiResponse(userMessage, userLastState.history);
-
-                message.reply(aiResponse);
-                
-                userLastState.history.push({ role: 'user', parts: [{ text: userMessage }] });
-                userLastState.history.push({ role: 'model', parts: [{ text: aiResponse }] });
-                
-                const MAX_HISTORY = 10;
-                if (userLastState.history.length > MAX_HISTORY) {
-                    userLastState.history = userLastState.history.slice(-MAX_HISTORY);
-                }
-            } catch (error) {
-                console.error("Error di dalam blok AI Mode:", error);
-                message.reply("Maaf, terjadi gangguan. Coba ulangi pertanyaan Anda.");
-            }
-            return;
-        }
-
-        // BLOK 2: MENANGANI PERINTAH TEKS
-        if (userMessageLower === 'halo panda') {
-            await showMainMenu(message);
-            return;
-        }
-
-// ▼▼▼ TAMBAHKAN BLOK TES DIAGNOSTIK INI ▼▼▼
-
-if (userMessageLower === 'cek pesan') {
-    let debugInfo = '--- Info Pesan ---\n\n';
-    debugInfo += `Memiliki Balasan (hasQuotedMsg): *${message.hasQuotedMsg}*\n`;
-
-    if (message.hasQuotedMsg) {
-        try {
-            const quotedMsg = await message.getQuotedMessage();
-            debugInfo += `\n--- Info Pesan yang Dibalas ---\n`;
-            debugInfo += `Punya Media (quoted.hasMedia): *${quotedMsg.hasMedia}*\n`;
-            debugInfo += `Nama File (quoted.filename): *${quotedMsg.filename || 'Tidak ada'}*\n`;
-        } catch (e) {
-            debugInfo += `\nGagal mendapatkan info pesan balasan: ${e.message}`;
-        }
-    }
-
-    return message.reply(debugInfo);
-}
-
-// ▲▲▲ AKHIR DARI BLOK TES ▲▲▲
-
-        // ▼▼▼ TAMBAHKAN BLOK BARU UNTUK SIMPAN FILE DI SINI ▼▼▼
-const simpanPrefix = 'panda simpan ';
-if (userMessageLower.startsWith(simpanPrefix)) {
-    if (!message.hasQuotedMsg) {
-        return message.reply('❌ Perintah ini hanya berfungsi jika Anda membalas file yang ingin disimpan.');
-    }
-
-    const quotedMsg = await message.getQuotedMessage();
-    if (!quotedMsg.hasMedia) {
-        return message.reply('❌ Anda harus membalas sebuah file (bukan teks).');
-    }
-    
     try {
-        message.reply('⏳ Menganalisis file, mohon tunggu...');
+        if (!message.body) return; // Penjaga untuk pesan tanpa teks
 
-        // --- PERUBAHAN UTAMA: UNDUH MEDIA TERLEBIH DAHULU ---
-        const media = await quotedMsg.downloadMedia();
-        if (!media) {
-            return message.reply('❌ Gagal mengunduh file. Coba lagi.');
+        const chat = await message.getChat();
+        const userMessage = message.body.trim();
+        const userMessageLower = userMessage.toLowerCase();
+        const userLastState = userState[message.from];
+
+        // PRIORITAS #0: Menangani Pesan Kontak (vCard) - Diambil dari referensi Anda
+        if (message.type === 'vcard') {
+            if (await isUserAdmin(message.from)) {
+                const contact = await message.getContact();
+                userState[message.from] = {
+                    type: 'link_pegawai_contact_received',
+                    targetUserId: contact.id._serialized,
+                    targetUserNumber: contact.number,
+                };
+                return message.reply(`Anda mengirim kontak *${contact.name || contact.pushname}*.\n\nSekarang, balas dengan namanya yang terdaftar di Sanity.`);
+            }
+            return;
         }
 
-        // Sekarang kita punya semua info yang kita butuhkan
-        const originalFilename = quotedMsg.filename;
-        const mimetype = media.mimetype; // Ambil mimetype dari media yang sudah diunduh
-        let namaKustom = userMessage.substring(simpanPrefix.length).trim();
-        let namaFileFinal;
-        
-        const { default: mime } = await import('mime-types');
+        // BLOK 1: Menangani Interaksi Berbasis State - Diambil dari referensi Anda
+        if (userLastState) {
+            if (userLastState.type === 'ai_mode') {
+                const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
+                if (exitCommands.includes(userMessageLower)) {
+                    await summarizeAndSaveMemory(message.from, userLastState.history);
+                    delete userState[message.from];
+                    await showMainMenu(message);
+                    return message.reply('Sesi AI telah berakhir.');
+                }
 
-        if (originalFilename) {
-            // ALUR CERDAS (JIKA NAMA FILE ASLI TERDETEKSI)
-            const extension = path.extname(originalFilename);
-            namaFileFinal = namaKustom ? namaKustom + extension : originalFilename;
-        } else {
-            // ALUR SUPER CERDAS (JIKA NAMA FILE ASLI TIDAK ADA)
-            if (!namaKustom) {
-                return message.reply('❌ Bot tidak bisa mendeteksi nama file asli.\n\nMohon berikan nama yang Anda inginkan (tanpa perlu ekstensi). Contoh:\n`panda simpan Laporan Penting`');
+                // --- PERBAIKAN LOGIKA GANDA ADA DI SINI ---
+                // Perintah "ingat saya" sekarang hanya ditangani di dalam mode AI.
+                const memoryTriggers = ['ingat ini:', 'ingat saya:'];
+                const trigger = memoryTriggers.find(t => userMessageLower.startsWith(t));
+
+                if (trigger) {
+                    const memoryText = userMessage.substring(trigger.length).trim();
+                    if (!memoryText) return message.reply('Silakan berikan informasi yang ingin saya ingat.');
+                    
+                    const contact = await message.getContact();
+                    const success = await saveUserMemory(message.from, memoryText, contact);
+                    return message.reply(success ? '✅ Baik, saya sudah menyimpannya.' : '❌ Gagal menyimpan memori.');
+                }
+                // --- AKHIR PERBAIKAN ---
+                
+                await chat.sendStateTyping();
+                const aiResponse = await getGeminiResponse(userMessage, userLastState.history);
+                message.reply(aiResponse);
+                userLastState.history.push({ role: 'user', parts: [{ text: userMessage }] });
+                userLastState.history.push({ role: 'model', parts: [{ text: aiResponse }] });
+                return;
+            }
+
+            if ((['menu_utama', 'pegawai', 'link_pegawai_selection', 'file_search_result'].includes(userLastState.type)) && !isNaN(parseInt(userMessage))) {
+                const isNumericChoice = true; // Variabel ini sudah ada dari referensi Anda
+                if (isNumericChoice) {
+                    if (userMessage === '0') {
+                        delete userState[message.from];
+                        await showMainMenu(message);
+                        return;
+                    }
+                    const index = parseInt(userMessage) - 1;
+                    if (index >= 0 && index < userLastState.list.length) {
+                        const selectedItem = userLastState.list[index];
+                        delete userState[message.from];
+
+                        if (userLastState.type === 'menu_utama') {
+                            if (selectedItem.subMenuRef) {
+                                const subMenuQuery = `*[_type == "pustakaDataItem" && category._ref == $categoryId] | order(judul asc)`;
+                                const subMenuItems = await clientSanity.fetch(subMenuQuery, { categoryId: selectedItem.subMenuRef._ref });
+                                if (subMenuItems && subMenuItems.length > 0) {
+                                    userState[message.from] = { type: 'pustaka_data', list: subMenuItems, parentMenu: selectedItem.namaMenu };
+                                    let subMenuMessage = `*${selectedItem.namaMenu}*\n\n`;
+                                    subMenuItems.forEach((item, i) => {
+                                        subMenuMessage += `${i + 1}. ${item.judul}\n`;
+                                    });
+                                    subMenuMessage += '\nBalas dengan *nomor* untuk melihat detail. Balas *0* untuk kembali.';
+                                    message.reply(subMenuMessage);
+                                } else {
+                                    message.reply(`Maaf, belum ada data untuk kategori "${selectedItem.namaMenu}".`);
+                                }
+                            } else if (selectedItem.perintahKhusus === 'mulai_sesi_ai') {
+                                const nomorBot = client.info.wid._serialized;
+                                const teksOtomatis = encodeURIComponent("tanya ai");
+                                const linkWa = `https://wa.me/${nomorBot}?text=${teksOtomatis}`;
+                                const replyMessage = `Untuk memulai sesi privat dengan Asisten AI, silakan klik link di bawah ini. Anda akan diarahkan ke chat pribadi dengan saya.\n\n${linkWa}`;
+                                message.reply(replyMessage);
+                            } else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
+                                const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
+                                if (result) {
+                                    message.reply(result.jawaban + '\n\nBalas dengan *0* untuk kembali.');
+                                    userState[message.from] = { type: 'menu_utama', list: userLastState.list }; // Mengatur ulang state agar bisa kembali
+                                }
+                            }
+                        } else if (userLastState.type === 'pegawai') {
+                            const pegawai = selectedItem;
+                            let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*NIP:* \`\`\`${pegawai.nip || '-'}\`\`\`\n*Jabatan:* ${pegawai.jabatan || '-'}\n*Level:* ${pegawai.tipePegawai || 'user'}\n\n🔑 *Akun & Kredensial*\n*Username SIPD:* \`\`\`${pegawai.usernameSipd || '-'}\`\`\`\n*Password SIPD:* \`\`\`${pegawai.passwordSipd || '-'}\`\`\`\n*Password Penatausahaan:* \`\`\`${pegawai.passwordPenatausahaan || '-'}\`\`\`\n\n📝 *Keterangan*\n${pegawai.keterangan || '-'}`;
+                            if (pegawai.tipePegawai === 'admin') {
+                                detailMessage += `\n\n🛡️ *Data Khusus Admin*\n*User Rakortek:* \`\`\`${pegawai.userRakortek || '-'}\`\`\`\n*User Renstra:* \`\`\`${pegawai.sipdRenstra || '-'}\`\`\`\n*Password Renstra:* \`\`\`${pegawai.passRenstra || '-'}\`\`\``;
+                            }
+                            message.reply(detailMessage);
+                        } else if (userLastState.type === 'link_pegawai_selection') {
+                            await clientSanity.patch(selectedItem._id).set({ userId: userLastState.targetUserId }).commit();
+                            message.reply(`✅ Berhasil! *${selectedItem.nama}* sekarang terhubung ke @${userLastState.targetUserNumber}.`);
+                        } else if (userLastState.type === 'file_search_result') {
+                            message.reply(`Pilihan tidak valid. Gunakan perintah \`kirim file ${userMessage}\` atau \`hapus file ${userMessage}\`.`);
+                        }
+                    }
+                }
+                return;
+            }
+
+            if (userLastState.type === 'menunggu_lokasi_cuaca') {
+                message.reply(`⏳ Mencari cuaca untuk *${userMessage}*...`);
+                const weatherResult = await getCurrentWeather(userMessage);
+                if (weatherResult.error) {
+                    message.reply(weatherResult.error);
+                } else {
+                    message.reply(`Cuaca di ${weatherResult.kota}: ${weatherResult.kondisi}, Suhu ${weatherResult.suhu}.`);
+                }
+                delete userState[message.from];
+                return;
+            }
+        }
+        
+        // BLOK 2: Menangani Perintah Teks Global - Diambil dari referensi Anda
+        
+        if (userMessageLower === 'halo panda') {
+            await showMainMenu(message);
+        
+        } else if (userMessageLower.startsWith('panda simpan ')) {
+            if (!message.hasQuotedMsg) return message.reply('Anda harus membalas file yang ingin disimpan.');
+            const quotedMsg = await message.getQuotedMessage();
+            if (!quotedMsg.hasMedia) return message.reply('Anda harus membalas sebuah file.');
+            const namaFile = userMessage.substring('panda simpan '.length).trim();
+            if (!namaFile) return message.reply('Silakan berikan nama untuk file.');
+            message.reply('⏳ Memproses...');
+            const media = await quotedMsg.downloadMedia();
+            const driveId = await uploadKeDrive(media, namaFile);
+            if (driveId) {
+                const contact = await message.getContact();
+                const dataFile = { _type: 'fileArsip', namaFile, googleDriveId: driveId, diunggahOleh: contact.pushname, groupId: chat.isGroup ? chat.id._serialized : 'pribadi', tipeFile: media.mimetype };
+                await simpanDataFileKeSanity(dataFile);
+                message.reply(`✅ Berhasil! File *"${namaFile}"* telah diarsipkan.`);
+            } else {
+                message.reply('Gagal mengunggah file.');
+            }
+        
+        } else if (userMessageLower.startsWith('cari file ')) {
+            const kataKunci = userMessage.substring('cari file '.length).trim();
+            if (!kataKunci) return message.reply('Masukkan kata kunci pencarian.');
+            const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
+            const hasil = await cariFileDiSanity(kataKunci, groupId);
+            if (hasil.length === 0) return message.reply(`Tidak ada file ditemukan dengan kata kunci "${kataKunci}".`);
+            
+            userState[message.from] = { type: 'file_search_result', list: hasil };
+            let reply = `Ditemukan ${hasil.length} file:\n\n`;
+            hasil.forEach((f, i) => { reply += `${i + 1}. 📄 *${f.namaFile}*\n`; });
+            reply += `\nBalas dengan \`kirim file <nomor>\` atau \`hapus file <nomor>\`. Balas *0* untuk batal.`;
+            message.reply(reply);
+        
+        } else if (userMessageLower.startsWith('hapus file ')) {
+            const state = userState[message.from];
+            if (!state || state.type !== 'file_search_result') {
+                return message.reply('Sesi pencarian tidak ditemukan. Lakukan `cari file` dahulu.');
+            }
+            const nomorPilihanStr = userMessage.substring('hapus file '.length).trim();
+            const nomorPilihan = parseInt(nomorPilihanStr);
+            if (isNaN(nomorPilihan) || nomorPilihan < 1 || nomorPilihan > state.list.length) {
+                return message.reply(`Nomor tidak valid. Harap masukkan nomor antara 1 dan ${state.list.length}.`);
             }
             
-            const extension = mime.extension(mimetype);
-            if (!extension) {
-                // Pesan error sekarang lebih informatif
-                return message.reply(`❌ Gagal mendeteksi ekstensi untuk tipe file: ${mimetype}.`);
+            const fileData = state.list[nomorPilihan - 1];
+            message.reply(`⏳ Menghapus file *"${fileData.namaFile}"*...`);
+
+            const driveSuccess = await hapusFileDiDrive(fileData.googleDriveId);
+            if (!driveSuccess) {
+                message.reply('⚠️ Gagal menghapus file dari Google Drive (mungkin sudah dihapus). Melanjutkan penghapusan dari katalog...');
             }
-            namaFileFinal = `${namaKustom}.${extension}`;
-        }
+            await clientSanity.delete(fileData._id);
+            delete userState[message.from];
+            return message.reply(`✅ Berhasil! File *"${fileData.namaFile}"* telah dihapus dari arsip.`);
 
-        message.reply(`⏳ Mengarsipkan *"${namaFileFinal}"*, mohon tunggu...`);
-        
-        const driveId = await uploadKeDrive(media, namaFileFinal); // Gunakan media yang sudah diunduh
-        if (!driveId) { return message.reply(' Gagal mengunggah file ke Google Drive.'); }
-
-        const contact = await message.getContact();
-        const pengunggah = contact.pushname || contact.name || message.author;
-
-        const dataFile = {
-            namaFile: namaFileFinal,
-            googleDriveId: driveId,
-            diunggahOleh: pengunggah,
-            groupId: chat.isGroup ? chat.id._serialized : 'pribadi',
-            tipeFile: media.mimetype,
-        };
-        await simpanDataFileKeSanity(dataFile);
-
-        return message.reply(`✅ Berhasil! File telah diarsipkan dengan nama *"${namaFileFinal}"*.`);
-
-    } catch (error) {
-        console.error("Error di blok simpan file:", error);
-        return message.reply(' Gagal memproses file. Terjadi kesalahan tak terduga.');
-    }
-}
-        // ▲▲▲ BATAS AKHIR BLOK BARU SIMPAN FILE▲▲▲
-
-        // Tambahkan setelah blok "BLOK 2: MENANGANI PERINTAH TEKS"
-
-        // BLOK LANGGANAN INFO GEMPA
-        if (userMessageLower === 'langganan gempa') {
-            const contact = await message.getContact();
-            const userId = contact.id._serialized;
-            const userName = contact.pushname || contact.name || userId;
-
-            // Cek apakah sudah langganan
-            const query = `*[_type == "langgananGempa" && userId == $userId][0]`;
-            const existing = await clientSanity.fetch(query, { userId });
-
-            if (existing && existing.status === 'aktif') {
-                return message.reply('Anda sudah terdaftar sebagai penerima info gempa.');
+        } else if (userMessageLower.startsWith('kirim file ')) {
+            const state = userState[message.from];
+            if (!state || state.type !== 'file_search_result') {
+                return message.reply('Sesi pencarian tidak ditemukan. Lakukan `cari file` dahulu.');
             }
-
-            if (existing) {
-                // Update status ke aktif
-                await clientSanity.patch(existing._id).set({ status: 'aktif' }).commit();
-            } else {
-                // Buat dokumen baru
-                await clientSanity.create({
-                    _type: 'langgananGempa',
-                    userId,
-                    namaPengguna: userName,
-                    status: 'aktif',
-                    tanggalDaftar: new Date().toISOString()
-                });
+            const nomorPilihanStr = userMessage.substring('kirim file '.length).trim();
+            const nomorPilihan = parseInt(nomorPilihanStr);
+            if (isNaN(nomorPilihan) || nomorPilihan < 1 || nomorPilihan > state.list.length) {
+                return message.reply(`Nomor tidak valid. Harap masukkan nomor antara 1 dan ${state.list.length}.`);
             }
-            return message.reply('✅ Anda berhasil berlangganan info gempa. Jika ada gempa baru, Anda akan menerima notifikasi otomatis.');
-        }
-
-        if (userMessageLower === 'berhenti gempa') {
-            const contact = await message.getContact();
-            const userId = contact.id._serialized;
-
-            const query = `*[_type == "langgananGempa" && userId == $userId][0]`;
-            const existing = await clientSanity.fetch(query, { userId });
-
-            if (!existing || existing.status !== 'aktif') {
-                return message.reply('Anda belum berlangganan info gempa.');
-            }
-
-            await clientSanity.patch(existing._id).set({ status: 'nonaktif' }).commit();
-            return message.reply('🚫 Anda telah berhenti berlangganan info gempa.');
-        }
-        // AKHIR BLOK LANGGANAN INFO GEMPA
-
-// ▼▼▼ BLOK BARU UNTUK MENCARI & MENGIRIM FILE ▼▼▼
-// ▼▼▼ GANTI BLOK 'cari file' LAMA ANDA DENGAN VERSI BARU INI ▼▼▼
-
-const cariPrefix = 'cari file ';
-if (userMessageLower.startsWith(cariPrefix)) {
-    const kataKunci = userMessage.substring(cariPrefix.length).trim();
-    if (!kataKunci) {
-        return message.reply('Silakan masukkan kata kunci. Contoh: `cari file laporan`');
-    }
-
-    try {
-        message.reply(`⏳ Mencari file dengan kata kunci *"${kataKunci}"*...`);
-        const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
+            
+            const fileData = state.list[nomorPilihan - 1];
+            message.reply(`⏳ Mengambil file *"${fileData.namaFile}"*...`);
+            await kirimFileDariDrive(fileData.googleDriveId, fileData.namaFile, message.from);
+            delete userState[message.from];
         
-        // Logika pencarian sekarang ada di sini, tidak di fungsi terpisah
-        const query = `*[_type == "fileArsip" && groupId == $groupId && namaFile match $kataKunci] | order(_createdAt desc)`;
-        const hasilPencarian = await clientSanity.fetch(query, { 
-            groupId: groupId, 
-            kataKunci: `*${kataKunci}*` 
-        });
-
-        if (hasilPencarian.length === 0) {
-            return message.reply(`Tidak ada file yang ditemukan dengan kata kunci *"${kataKunci}"* di arsip ini.`);
-        }
-
-        // Simpan hasil pencarian ke memori sementara (userState)
-        userState[message.from] = {
-            type: 'file_search_result',
-            list: hasilPencarian
-        };
-
-        // Buat pesan balasan dengan daftar bernomor
-        let replyMessage = `✅ Ditemukan ${hasilPencarian.length} file:\n\n`;
-        hasilPencarian.forEach((file, index) => {
-            replyMessage += `*${index + 1}.* ${file.namaFile}\n`;
-        });
-        replyMessage += `\nUntuk mengambil, balas dengan:\n\`kirim file <nomor>\``;
-        
-        return message.reply(replyMessage);
-
-    } catch (error) {
-        console.error("Error di blok cari file:", error);
-        return message.reply("Maaf, terjadi kesalahan saat mencari file.");
-    }
-}
-
-
-// AWAL BLOK KIRIM
-const kirimPrefix = 'kirim file ';
-if (userMessageLower.startsWith(kirimPrefix)) {
-    // --- LOGIKA DIUBAH TOTAL UNTUK MEMBACA NOMOR ---
-    const userLastState = userState[message.from];
-
-    // Cek apakah pengguna sudah melakukan pencarian sebelumnya
-    if (!userLastState || userLastState.type !== 'file_search_result') {
-        return message.reply('Sesi pencarian tidak ditemukan. Silakan lakukan `cari file` terlebih dahulu sebelum mengirim file.');
-    }
-
-    const nomorPilihanStr = userMessage.substring(kirimPrefix.length).trim();
-    const nomorPilihan = parseInt(nomorPilihanStr);
-
-    // Validasi input nomor
-    if (isNaN(nomorPilihan) || nomorPilihan < 1 || nomorPilihan > userLastState.list.length) {
-        return message.reply(`Nomor tidak valid. Harap masukkan nomor antara 1 dan ${userLastState.list.length}.`);
-    }
-
-    try {
-        const fileData = userLastState.list[nomorPilihan - 1]; // Ambil data file dari memori
-
-        message.reply(`⏳ Sedang mengambil file *"${fileData.namaFile}"* dari arsip, mohon tunggu...`);
-        await kirimFileDariDrive(fileData.googleDriveId, fileData.namaFile, message.from);
-        
-        // Hapus state setelah file berhasil dikirim
-        delete userState[message.from];
-        return;
-
-    } catch (error) {
-        console.error("Error di blok kirim file:", error);
-        return message.reply("Maaf, terjadi kesalahan saat mencoba mengirim file.");
-    }
-}
-
-// ▼▼▼ AWAL BLOK HAPUS ▼▼▼
-
-else if (userMessageLower.startsWith('hapus file ')) {
-    const userLastState = userState[message.from];
-
-    // Cek apakah pengguna sudah melakukan pencarian sebelumnya
-    if (!userLastState || userLastState.type !== 'file_search_result') {
-        return message.reply('Sesi pencarian tidak ditemukan. Silakan lakukan `cari file` terlebih dahulu sebelum menghapus file.');
-    }
-
-    const nomorPilihanStr = userMessage.substring('hapus file '.length).trim();
-    const nomorPilihan = parseInt(nomorPilihanStr);
-
-    // Validasi input nomor
-    if (isNaN(nomorPilihan) || nomorPilihan < 1 || nomorPilihan > userLastState.list.length) {
-        return message.reply(`Nomor tidak valid. Harap masukkan nomor antara 1 dan ${userLastState.list.length}.`);
-    }
-
-    try {
-        const fileData = userLastState.list[nomorPilihan - 1]; // Ambil data file dari memori
-        message.reply(`⏳ Menghapus file *"${fileData.namaFile}"* dari arsip...`);
-
-        // Langkah 1: Hapus dari Google Drive
-        const driveSuccess = await hapusFileDiDrive(fileData.googleDriveId);
-        if (!driveSuccess) {
-            // Kita tetap lanjutkan meski gagal di drive, mungkin file sudah dihapus manual
-            message.reply('⚠️ Gagal menghapus file dari Google Drive (mungkin sudah dihapus sebelumnya). Melanjutkan penghapusan dari katalog...');
-        }
-
-        // Langkah 2: Hapus dari Sanity (katalog)
-        await clientSanity.delete(fileData._id);
-
-        // Hapus state setelah selesai agar tidak bisa dihapus dua kali
-        delete userState[message.from];
-        
-        return message.reply(`✅ Berhasil! File *"${fileData.namaFile}"* telah dihapus dari arsip.`);
-
-    } catch (error) {
-        console.error("Error di blok hapus file:", error);
-        return message.reply("Maaf, terjadi kesalahan saat mencoba menghapus file.");
-    }
-}
-
-// ▲▲▲ AKHIR DARI BLOK PERINTAH HAPUS ▲▲▲
-
-        // ▲▲▲ BATAS AKHIR BLOK BARU  PEMANGGIL FILE▲▲▲
-
-        if (userMessageLower.startsWith('cari user ')) {
-            const kataKunci = userMessage.substring('cari user '.length).trim();
-            if (!kataKunci) {
-                return message.reply('Silakan masukkan nama atau jabatan. Contoh: `cari user Kepala Bidang`');
-            }
-            const pegawaiQuery = `*[_type == "pegawai" && (nama match $kataKunci || jabatan match $kataKunci)]`;
-            const pegawaiDitemukan = await clientSanity.fetch(pegawaiQuery, { kataKunci: `*${kataKunci}*` });
-            if (!pegawaiDitemukan || pegawaiDitemukan.length === 0) return message.reply(`Maaf, data untuk "${kataKunci}" tidak ditemukan.`);
+        } else if (userMessageLower.startsWith('cari user ')) {
+            const kataKunci = userMessage.substring('cari user '.length).trim();
+            if (!kataKunci) return message.reply('Silakan masukkan nama atau jabatan.');
+            const pegawaiQuery = `*[_type == "pegawai" && (nama match $kataKunci || jabatan match $kataKunci)]`;
+            const pegawaiDitemukan = await clientSanity.fetch(pegawaiQuery, { kataKunci: `*${kataKunci}*` });
+            if (!pegawaiDitemukan || pegawaiDitemukan.length === 0) return message.reply(`Data untuk "${kataKunci}" tidak ditemukan.`);
+            
             if (pegawaiDitemukan.length === 1) {
                 const pegawai = pegawaiDitemukan[0];
-
-                let detailMessage = `👤 *Profil Pegawai*\n\n`;
-                detailMessage += `*Nama:* ${pegawai.nama || '-'}\n`;
-                detailMessage += `*NIP:* \`\`\`${pegawai.nip || '-'}\`\`\`\n`;
-                detailMessage += `*Jabatan:* ${pegawai.jabatan || '-'}\n`;
-                detailMessage += `*Level:* ${pegawai.tipePegawai || 'user'}\n\n`;
-
-                detailMessage += `🔑 *Akun & Kredensial*\n`;
-                detailMessage += `*Username SIPD:* \`\`\`${pegawai.usernameSipd || '-'}\`\`\`\n`;
-                detailMessage += `*Password SIPD:* \`\`\`${pegawai.passwordSipd || '-'}\`\`\`\n`;
-                detailMessage += `*Password Penatausahaan:* \`\`\`${pegawai.passwordPenatausahaan || '-'}\`\`\`\n\n`;
-
-                detailMessage += `📝 *Keterangan*\n${pegawai.keterangan || '-'}`;
-
+                let detailMessage = `👤 *Profil Pegawai*\n\n*Nama:* ${pegawai.nama || '-'}\n*NIP:* \`\`\`${pegawai.nip || '-'}\`\`\`\n*Jabatan:* ${pegawai.jabatan || '-'}\n*Level:* ${pegawai.tipePegawai || 'user'}\n\n🔑 *Akun & Kredensial*\n*Username SIPD:* \`\`\`${pegawai.usernameSipd || '-'}\`\`\`\n*Password SIPD:* \`\`\`${pegawai.passwordSipd || '-'}\`\`\`\n*Password Penatausahaan:* \`\`\`${pegawai.passwordPenatausahaan || '-'}\`\`\`\n\n📝 *Keterangan*\n${pegawai.keterangan || '-'}`;
                 if (pegawai.tipePegawai === 'admin') {
-                    detailMessage += `\n\n🛡️ *Data Khusus Admin*\n`;
-                    detailMessage += `*User Rakortek:* \`\`\`${pegawai.userRakortek || '-'}\`\`\`\n`;
-                    detailMessage += `*User Renstra:* \`\`\`${pegawai.sipdRenstra || '-'}\`\`\`\n`;
-                    detailMessage += `*Password Renstra:* \`\`\`${pegawai.passRenstra || '-'}\`\`\``;
+                    detailMessage += `\n\n🛡️ *Data Khusus Admin*\n*User Rakortek:* \`\`\`${pegawai.userRakortek || '-'}\`\`\`\n*User Renstra:* \`\`\`${pegawai.sipdRenstra || '-'}\`\`\`\n*Password Renstra:* \`\`\`${pegawai.passRenstra || '-'}\`\`\``;
                 }
-                
-                return message.reply(detailMessage);
+                message.reply(detailMessage);
+            } else {
+                userState[message.from] = { type: 'pegawai', list: pegawaiDitemukan };
+                let pilihanMessage = `Ditemukan beberapa hasil. Balas dengan *nomor*:\n\n`;
+                pegawaiDitemukan.forEach((p, i) => { pilihanMessage += `${i + 1}. ${p.nama} - *(${p.jabatan})*\n`; });
+                message.reply(pilihanMessage);
             }
-            userState[message.from] = { type: 'pegawai', list: pegawaiDitemukan };
-            let pilihanMessage = `Ditemukan beberapa hasil untuk "${kataKunci}". Balas dengan *nomor*:\n\n`;
-            pegawaiDitemukan.forEach((p, i) => { pilihanMessage += `${i + 1}. ${p.nama} - *(${p.jabatan})*\n`; });
-            return message.reply(pilihanMessage);
-        }
         
-        const aiTriggerCommands = [
-            'tanya ai', 
-            'mode ai', 
-            'sesi ai', 
-            'panda ai',
-            'halo panda ai',
-            'mulai sesi ai',
-            'halo, saya ingin memulai sesi ai' // Pastikan ini diketik bersih
-        ];
-// GANTI BLOK aiTriggerCommands ANDA DENGAN YANG INI SECARA KESELURUHAN
-if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
-    await chat.sendStateTyping();
-
-    // ▼▼▼ BAGIAN BARU: MENGAMBIL MEMORI JANGKA PANJANG ▼▼▼
-    let initialHistory = [];
-    try {
-        const userId = message.from;
-        const sanitizedId = userId.replace(/[@.]/g, '-');
-        const memoryQuery = `*[_type == "memoriPengguna" && _id == $id][0]`;
-        const memoryDoc = await clientSanity.fetch(memoryQuery, { id: sanitizedId });
-
-        if (memoryDoc && memoryDoc.daftarMemori && memoryDoc.daftarMemori.length > 0) {
-            const longTermMemories = memoryDoc.daftarMemori;
-            
-            let memoryContext = "Ini adalah beberapa fakta penting tentang saya (pengguna) yang harus selalu kamu ingat di sepanjang percakapan ini:\n";
-            longTermMemories.forEach(fact => {
-                memoryContext += `- ${fact}\n`;
-            });
-
-            // Masukkan konteks ini sebagai "instruksi sistem" di awal sejarah percakapan
-            initialHistory.push({ role: "user", parts: [{ text: memoryContext }] });
-            initialHistory.push({ role: "model", parts: [{ text: "Baik, saya telah menerima dan mengingat semua fakta tersebut. Saya siap untuk memulai percakapan." }] });
-            
-            console.log(`INFO: Memuat ${longTermMemories.length} memori untuk user ${userId}`);
-        }
-    } catch (error) {
-        console.error("Gagal mengambil memori jangka panjang:", error);
-    }
-    // ▲▲▲ AKHIR BAGIAN BARU ▲▲▲
-
-    // Inisialisasi state dengan history yang mungkin sudah berisi memori
-    userState[message.from] = { type: 'ai_mode', history: initialHistory };
-    
-    const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`);
-    const welcomeMessage = result ? result.jawaban : "Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti.";
-    message.reply(welcomeMessage);
-    
-    return;
-}
-
-        // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
-        // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
-
-        // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
-
-        // AWAL BLOK: MEMBUAT PENGINGAT PRIBADI (HANYA ADMIN)
-if (userMessageLower.startsWith('ingatkan')) {
-    // Dapatkan info kontak pengirim untuk mendapatkan ID asli (selalu 628...@c.us)
-    const contact = await message.getContact();
-    const authorId = contact.id._serialized;
-
-    const isUserAdmin = await isAdmin(authorId);
-    if (!isUserAdmin) {
-        message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
-        return;
-    }
-
-    const argsString = userMessage.substring('ingatkan'.length).trim();
-    // const reminderRegex = /^(.*?)\s(.*?)\stentang\s"(.*?)"$/i;
-    const reminderRegex = /^(.+?)\s(.+?)\stentang\s"(.+)"$/i;
-    const match = argsString.match(reminderRegex);
-
-    if (!match) {
-        message.reply(
-            'Format salah. Gunakan:\n`ingatkan <Nama> <Waktu> tentang "<Pesan>"`\n\n' +
-            '*Contoh:*\n`ingatkan Budi besok jam 9 tentang "Rapat evaluasi"`'
-        );
-        return;
-    }
-
-    const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
-    message.reply(`⏳ Mencari pegawai dengan nama *${namaTarget}*...`);
-
-    try {
-        const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`;
-        let pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
-
-        if (pegawaiDitemukan.length === 0 && namaTarget.toLowerCase() === 'saya') {
-            // --- PERBAIKAN UTAMA: Menggunakan Parameterized Query ---
-            const idToSearch = authorId.replace('@c.us', '-c-us');
-            const selfQuery = `*[_type == "pegawai" && _id == $idToSearch][0]`;
-            const selfData = await clientSanity.fetch(selfQuery, { idToSearch: idToSearch });
-            
-            if (selfData) {
-                pegawaiDitemukan = [selfData];
+        } else if (userMessageLower.startsWith('ingatkan ')) {
+            if (!(await isUserAdmin(message.from))) return message.reply('❌ Perintah ini hanya untuk admin.');
+            const parts = userMessage.split(' tentang ');
+            if (parts.length < 2) return message.reply("Format salah. Contoh: `ingatkan saya dalam 10 menit tentang rapat`");
+            const timePart = parts[0].replace('ingatkan saya dalam ', '').trim();
+            const messagePart = parts.slice(1).join(' tentang ').trim();
+            const timeParts = timePart.split(' ');
+            const amount = parseInt(timeParts[0]);
+            const unit = timeParts[1];
+            if (isNaN(amount)) return message.reply("Jumlah waktu tidak valid.");
+            const now = new Date();
+            if (unit.startsWith('menit')) now.setMinutes(now.getMinutes() + amount);
+            else if (unit.startsWith('jam')) now.setHours(now.getHours() + amount);
+            else if (unit.startsWith('hari')) now.setDate(now.getDate() + amount);
+            else return message.reply("Unit waktu tidak dikenali. Gunakan 'menit', 'jam', atau 'hari'.");
+            const reminderData = { _type: 'pengingat', pesan: messagePart, waktu: now.toISOString(), targetUserId: message.from, terkirim: false };
+            await clientSanity.create(reminderData);
+            message.reply(`✅ Baik, saya akan mengingatkan Anda tentang "${messagePart}" pada ${now.toLocaleString('id-ID', { timeZone: 'Asia/Makassar' })}.`);
+        
+        } else if (userMessageLower === 'help' || userMessageLower === 'bantuan') {
+            const query = `*[_type == "perintahBantuan"] | order(urutan asc)`;
+            const semuaPerintah = await clientSanity.fetch(query);
+            if (!semuaPerintah || semuaPerintah.length === 0) return message.reply("Daftar perintah bantuan belum diatur.");
+            const isAdmin = await isUserAdmin(message.from);
+            const perintahUmum = semuaPerintah.filter(p => !p.isAdminOnly);
+            const perintahAdmin = semuaPerintah.filter(p => p.isAdminOnly);
+            let helpMessage = `*MENU BANTUAN* 📚\n\n*✨ Perintah Umum*\n--------------------\n`;
+            perintahUmum.forEach(cmd => { helpMessage += `• *${cmd.perintah}* - ${cmd.deskripsi}\n`; });
+            if (isAdmin && perintahAdmin.length > 0) {
+                helpMessage += `\n*🔑 Perintah Admin*\n--------------------\n`;
+                perintahAdmin.forEach(cmd => { helpMessage += `• *${cmd.perintah}* - ${cmd.deskripsi}\n`; });
             }
-        }
-
-        if (pegawaiDitemukan.length === 0) {
-            message.reply(`Maaf, pegawai dengan nama "${namaTarget}" tidak ditemukan.`);
-            return;
-        }
-        if (pegawaiDitemukan.length > 1) {
-            message.reply(`Ditemukan ${pegawaiDitemukan.length} pegawai dengan nama mirip "${namaTarget}". Mohon gunakan nama yang lebih spesifik.`);
-            return;
-        }
-
-        const target = pegawaiDitemukan[0];
-        const targetNomorHp = target._id.replace('-c-us', '@c.us');
-        const targetNama = target.nama;
-        const waktuKirim = parseWaktuIndonesia(waktuString);
-
-        if (!waktuKirim) {
-            message.reply(`Maaf, saya tidak mengerti format waktu "${waktuString}".\nGunakan format seperti "besok jam 10" atau "dalam 5 menit".`);
-            return;
-        }
-
-        const newPengingat = {
-            _type: 'pengingat', pesan, targetNomorHp, targetNama,
-            waktuKirim: waktuKirim.toISOString(), status: 'menunggu',
-        };
-        await clientSanity.create(newPengingat);
-
-        const waktuLokal = waktuKirim.toLocaleString('id-ID', {
-            timeZone: 'Asia/Makassar',
-            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-            hour: '2-digit', minute: '2-digit'
-        });
-        message.reply(`✅ Pengingat berhasil dibuat!\n\n*Untuk:* ${targetNama}\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`);
-
-    } catch (error) {
-        console.error("Gagal membuat pengingat:", error);
-        message.reply("Maaf, terjadi kesalahan di server saat mencoba membuat pengingat.");
-    }
-    return;
-}
-
-
-        // ▲▲▲ AKHIR DARI BLOK PENGINGAT ▲▲▲
-
-        // AWAL BLOK  MENU BANTUAN (HELP)
-        if (userMessageLower === 'help' || userMessageLower === 'bantuan') {
-            try {
-                const isUserAdmin = await isAdmin(message.from);
-                
-                // 1. Ambil semua data perintah dari Sanity, diurutkan
-                const query = `*[_type == "perintahBantuan"] | order(urutan asc)`;
-                const semuaPerintah = await clientSanity.fetch(query);
-
-                if (!semuaPerintah || semuaPerintah.length === 0) {
-                    message.reply("Maaf, daftar perintah bantuan belum diatur di Sanity.");
-                    return;
-                }
-
-                // 2. Pisahkan perintah umum dan perintah admin
-                const perintahUmum = semuaPerintah.filter(p => !p.isAdminOnly);
-                const perintahAdmin = semuaPerintah.filter(p => p.isAdminOnly);
-
-                // 3. Bangun pesan bantuan (tampilan tetap sama)
-                let helpMessage = `*MENU BANTUAN* 📚\n\n`;
-                helpMessage += `Berikut adalah daftar perintah yang bisa Anda gunakan:\n\n`;
-                
-                // Tampilkan Perintah Umum
-                helpMessage += `*✨ Perintah Umum*\n`;
-                helpMessage += `--------------------\n`;
-                perintahUmum.forEach(cmd => {
-                    helpMessage += `• *${cmd.perintah}* - ${cmd.deskripsi}\n`;
-                });
-                
-                // Jika pengguna adalah admin dan ada perintah admin, tampilkan
-                if (isUserAdmin && perintahAdmin.length > 0) {
-                    helpMessage += `\n*🔑 Perintah Admin*\n`;
-                    helpMessage += `--------------------\n`;
-                    perintahAdmin.forEach(cmd => {
-                        helpMessage += `• *${cmd.perintah}* - ${cmd.deskripsi}\n`;
-                    });
-                }
-                
-                message.reply(helpMessage);
-
-            } catch (error) {
-                console.error("Gagal mengambil data bantuan dari Sanity:", error);
-                message.reply("Maaf, terjadi kesalahan saat memuat menu bantuan.");
-            }
-            return;
-        }
-
-        // ▲▲▲ AKHIR DARI BLOK PANDUAN▲▲▲
-
-        // AWAL MENAMBAH PEGAWAI DENGAN PANDUAN OTOMATIS ADMIN
-        if (userMessageLower.startsWith('tambah pegawai')) {
-            const isUserAdmin = await isAdmin(message.from);
-            if (!isUserAdmin) {
-                message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
-                return;
-            }
-
-            const argsString = userMessage.substring('tambah pegawai'.length).trim();
-
-            if (!argsString) {
-                let panduanMessage = `📝 *Panduan Menambah Pegawai Baru*\n\n`;
-                panduanMessage += `Salin salah satu template di bawah ini, tempelkan, lalu ganti isinya.\n\n`;
-                panduanMessage += `*Template untuk Pegawai Biasa (User):*\n`;
-                panduanMessage += `\`\`\`tambah pegawai NAMA_LENGKAP, NIP, JABATAN, user\`\`\`\n\n`;
-                panduanMessage += `*Template untuk Admin:*\n`;
-                panduanMessage += `\`\`\`tambah pegawai NAMA_LENGKAP, NIP, JABATAN, admin\`\`\``;
-                
-                message.reply(panduanMessage);
-                return;
-            }
-            
-            // ... (sisa logika prosesnya tetap sama)
-            message.reply('⏳ Memproses data, mohon tunggu...');
-            try {
-                const args = argsString.split(',').map(arg => arg.trim());
-                if (args.length !== 4) {
-                    message.reply('Format salah. Jumlah argumen tidak sesuai. Ketik `tambah pegawai` untuk melihat panduan.');
-                    return;
-                }
-                const [nama, nip, jabatan, level] = args;
-                const levelLower = level.toLowerCase();
-                if (levelLower !== 'user' && levelLower !== 'admin') {
-                    message.reply('Format salah. Nilai <Level> harus `user` atau `admin`.');
-                    return;
-                }
-                const sanitizedId = message.from.replace(/[@.]/g, '-');
-                const newPegawaiDoc = {
-                    _id: sanitizedId,
-                    _type: 'pegawai',
-                    nama: nama,
-                    nip: nip,
-                    jabatan: jabatan,
-                    tipePegawai: levelLower
-                };
-                await clientSanity.createOrReplace(newPegawaiDoc);
-                message.reply(`✅ Pegawai baru dengan nama *${nama}* berhasil ditambahkan/diperbarui.`);
-            } catch (error) {
-                console.error("Gagal menambah pegawai baru:", error);
-                message.reply("Maaf, terjadi kesalahan di server saat mencoba menambah pegawai.");
-            }
-            return;
-        }
-
-        // ▲▲▲ AKHIR DARI KODE PENGGANTI  admin▲▲▲
-
-                // ▼▼▼ TAMBAHKAN BLOK BARU INI update admin▼▼▼
-
-        // BLOK BARU: UPDATE DATA PEGAWAI (HANYA ADMIN)
-        if (userMessageLower.startsWith('update')) {
-            const isUserAdmin = await isAdmin(message.from);
-            if (!isUserAdmin) {
-                message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
-                return;
-            }
-
-            const argsString = userMessage.substring('update'.length).trim();
-            
-            // Daftar field yang diizinkan untuk diubah via bot
-            const allowedFields = {
-                'nama': 'Nama Lengkap', 'nip': 'NIP', 'jabatan': 'Jabatan', 'level': 'Level Akses',
-                'usernamesipd': 'Username SIPD', 'passwordsipd': 'Password SIPD',
-                'passwordpenatausahaan': 'Password Penatausahaan', 'keterangan': 'Keterangan',
-                'userrakortek': 'User Rakortek', 'sipdrenstra': 'User SIPD Renstra', 'passrenstra': 'Password SIPD Renstra'
+            message.reply(helpMessage);
+        
+        } else if (userMessageLower.startsWith('tambah pegawai')) {
+            if (!(await isUserAdmin(message.from))) return message.reply('❌ Perintah ini hanya untuk admin.');
+            const mentions = await message.getMentions();
+            if (!mentions || mentions.length === 0) return message.reply('Anda harus me-mention pengguna yang ingin ditambahkan.');
+            const targetUser = mentions[0];
+            const newPegawai = {
+                _type: 'pegawai',
+                nama: targetUser.pushname || targetUser.name || 'Nama Belum Diatur',
+                userId: targetUser.id._serialized,
+                tipePegawai: 'user' 
             };
-
-            if (!argsString) {
-                let panduanMessage = `📝 *Panduan Mengubah Data Pegawai*\n\n`;
-                panduanMessage += `Gunakan format berikut:\n`;
-                panduanMessage += `\`\`\`update <Nama Target> <Nama Field> menjadi <Nilai Baru>\`\`\`\n\n`;
-                panduanMessage += `*Contoh Penggunaan:*\n`;
-                panduanMessage += `\`\`\`update Budi Santoso jabatan menjadi Analis Senior\`\`\`\n\n`;
-                panduanMessage += `*Field yang bisa diubah:*\n`;
-                panduanMessage += `\`\`\`${Object.keys(allowedFields).join(', ')}\`\`\`\n\n`;
-                panduanMessage += `*💡 Tips:* Jika Anda tidak yakin dengan nama lengkap target, gunakan perintah \`cari user <nama>\` terlebih dahulu untuk memastikan.`;
-                
-                message.reply(panduanMessage);
-                return;
+            try {
+                await clientSanity.create(newPegawai, { ifNotExists: `userId == "${targetUser.id._serialized}"` });
+                message.reply(`✅ Pegawai baru *${newPegawai.nama}* telah ditambahkan.`);
+            } catch (error) {
+                message.reply('Gagal menambahkan pegawai. Mungkin sudah ada.');
             }
-
-            const updateRegex = /^(.*?)\s(.*?)\smenjadi\s(.*)$/i;
-            const match = argsString.match(updateRegex);
-
-            if (!match) {
-                message.reply('Format salah. Ketik `update` untuk melihat panduan.');
-                return;
-            }
+        
+        } else if (userMessageLower.startsWith('update pegawai')) {
+            if (!(await isUserAdmin(message.from))) return message.reply('❌ Perintah ini hanya untuk admin.');
+            const mentions = await message.getMentions();
+            if (!mentions || mentions.length === 0) return message.reply('Anda harus me-mention pengguna yang ingin di-update.');
+            const targetUser = mentions[0];
+            const commandBody = userMessage.split(' ').slice(2).join(' ');
+            const [field, value] = commandBody.split('=').map(s => s.trim());
+            if (!field || !value) return message.reply('Format salah. Contoh: `update pegawai @user tipePegawai = admin`');
             
-            const [, namaTarget, fieldToUpdate, nilaiBaru] = match.map(s => s.trim());
-            const fieldKey = fieldToUpdate.toLowerCase().replace(/\s/g, '');
-
-            if (!allowedFields[fieldKey]) {
-                message.reply(`Maaf, field "${fieldToUpdate}" tidak valid. Ketik \`update\` untuk melihat daftar field yang bisa diubah.`);
-                return;
-            }
-
-            const finalFieldKey = fieldKey === 'level' ? 'tipePegawai' : fieldToUpdate;
-
-            message.reply(`⏳ Mencari *${namaTarget}* untuk memperbarui *${allowedFields[fieldKey]}*...`);
+            const query = `*[_type == "pegawai" && userId == "${targetUser.id._serialized}"][0]`;
+            const pegawaiDoc = await clientSanity.fetch(query);
+            if (!pegawaiDoc) return message.reply('Pegawai tidak ditemukan.');
 
             try {
-                const query = `*[_type == "pegawai" && lower(nama) == lower($namaTarget)]`;
-                const pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
-
-                if (pegawaiDitemukan.length === 0) {
-                    message.reply(`Maaf, pegawai dengan nama "${namaTarget}" tidak ditemukan. Pastikan penulisan nama sudah benar.`);
-                    return;
-                }
-
-                if (pegawaiDitemukan.length > 1) {
-                    message.reply(`Ditemukan ${pegawaiDitemukan.length} pegawai dengan nama "${namaTarget}". Mohon gunakan nama yang lebih spesifik.`);
-                    return;
-                }
-
-                const pegawaiId = pegawaiDitemukan[0]._id;
-                await clientSanity.patch(pegawaiId).set({ [finalFieldKey]: nilaiBaru }).commit();
-
-                message.reply(`✅ Data *${namaTarget}* berhasil diperbarui:\n*${allowedFields[fieldKey]}* sekarang menjadi *${nilaiBaru}*`);
-
+                await clientSanity.patch(pegawaiDoc._id).set({ [field]: value }).commit();
+                message.reply(`✅ Data pegawai *${pegawaiDoc.nama}* telah di-update: *${field}* sekarang menjadi *${value}*.`);
             } catch (error) {
-                console.error("Gagal mengupdate pegawai:", error);
-                message.reply("Maaf, terjadi kesalahan di server saat mencoba mengupdate data.");
+                message.reply('Gagal meng-update data pegawai.');
             }
-
-            return;
-        }
-
-        // ▲▲▲ AKHIR DARI BLOK BARU update admin ▲▲▲
-
-        // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
-
-        // BLOK BARU: FITUR CUACA INTERAKTIF
-        // Bagian 1: Memicu permintaan cuaca
-        if (userMessageLower === 'cuaca') {
+        
+        } else if (userMessageLower === 'cuaca') {
             userState[message.from] = { type: 'menunggu_lokasi_cuaca' };
-            message.reply('Tentu, ingin tahu prakiraan cuaca di kota atau daerah mana?');
-            return;
+            await message.reply('Silakan ketik nama kota.');
+        
+        } else {
+            // BLOK 3: Pemicu Mode AI (JIKA TIDAK ADA PERINTAH LAIN YANG COCOK)
+            const aiTriggerCommands = ['tanya ai', 'mode ai', 'sesi ai', 'panda ai', 'info gempa'];
+            if (!chat.isGroup && aiTriggerCommands.some(cmd => userMessageLower.startsWith(cmd))) {
+                
+                const memoryContext = await loadMemory(message.from);
+                const initialHistory = [
+                    { role: 'user', parts: [{ text: "Konteks tentang saya: " + memoryContext }] },
+                    { role: 'model', parts: [{ text: "Baik, saya mengerti." }] }
+                ];
+
+                userState[message.from] = { type: 'ai_mode', history: initialHistory };
+                
+                await chat.sendStateTyping();
+                const aiResponse = await getGeminiResponse(userMessage, userState[message.from].history);
+                message.reply(aiResponse);
+
+                userState[message.from].history.push({ role: 'user', parts: [{ text: userMessage }] });
+                userState[message.from].history.push({ role: 'model', parts: [{ text: aiResponse }] });
+            }
         }
 
-        // Bagian 2: Menangani jawaban lokasi dari pengguna dan MEMANGGIL FUNGSI ANDA
-        if (userLastState && userLastState.type === 'menunggu_lokasi_cuaca') {
-            const lokasi = userMessage;
-            message.reply(`⏳ Sedang mencari prakiraan cuaca untuk *${lokasi}*, mohon tunggu...`);
-
-            // Memanggil fungsi `getCurrentWeather` Anda yang sudah ada!
-            const weatherResult = await getCurrentWeather(lokasi); 
-
-            message.reply(weatherResult);
-
-            delete userState[message.from]; // Hapus state setelah selesai
-            return;
+    } catch (error) {
+        console.error('Terjadi error fatal di event message:', error);
+        if (message && !message.isStatus) {
+            message.reply('Maaf, terjadi kesalahan tak terduga.');
         }
-
-        // ▲▲▲ AKHIR DARI BLOK BARU  CUACA▲▲▲
-
-
-
-        // ▼▼▼ TAMBAHKAN BLOK PENJAGA INI ▼▼▼
-        if (userLastState && (userLastState.type === 'menu_utama' || userLastState.type === 'pustaka_data' || userLastState.type === 'pegawai')) {
-            if (message.hasMedia) {
-                // Pengguna mengirim file saat bot sedang dalam mode menu. Abaikan saja.
-                return;
-            }
-        }
-        // ▲▲▲ BATAS AKHIR BLOK PENJAGA ▲▲▲
-
-        // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
-        const isNumericChoice = !isNaN(parseInt(userMessage));
-        if (userLastState && isNumericChoice) {
-            if (userMessage === '0') {
-                if (userLastState.type === 'pustaka_data' && userLastState.currentCategoryId) {
-                    const parent = await clientSanity.fetch(`*[_type == "kategoriPustaka" && _id == "${userLastState.currentCategoryId}"][0]{"parentId": indukKategori._ref}`);
-                    await showPustakaMenu(message, parent ? parent.parentId : null);
-                } else {
-                    await showMainMenu(message);
-                }
-                return;
-            }
-
-            const index = parseInt(userMessage) - 1;
-            if (index >= 0 && index < userLastState.list.length) {
-                const selectedItem = userLastState.list[index];
-                
-                if (userLastState.type === 'pustaka_data') {
-                    if (selectedItem._type === 'kategoriPustaka') {
-                        await showPustakaMenu(message, selectedItem._id);
-                    } else if (selectedItem._type === 'dokumenPustaka') {
-                        let detailMessage = `📄 *Detail Dokumen*\n\n*Nama:* ${selectedItem.namaDokumen}\n*Tahun:* ${selectedItem.tahunDokumen || '-'}\n*Deskripsi:* ${selectedItem.deskripsi || '-'}\n\n*Link:* ${selectedItem.linkDokumen}`;
-                        message.reply(detailMessage);
-                        delete userState[message.from];
-                    }
-                    } else if (userLastState.type === 'pegawai') {
-                        const pegawai = selectedItem;
-
-                        let detailMessage = `👤 *Profil Pegawai*\n\n`;
-                        detailMessage += `*Nama:* ${pegawai.nama || '-'}\n`;
-                        detailMessage += `*NIP:* \`\`\`${pegawai.nip || '-'}\`\`\`\n`;
-                        detailMessage += `*Jabatan:* ${pegawai.jabatan || '-'}\n`;
-                        detailMessage += `*Level:* ${pegawai.tipePegawai || 'user'}\n\n`;
-
-                        detailMessage += `🔑 *Akun & Kredensial*\n`;
-                        detailMessage += `*Username SIPD:* \`\`\`${pegawai.usernameSipd || '-'}\`\`\`\n`;
-                        detailMessage += `*Password SIPD:* \`\`\`${pegawai.passwordSipd || '-'}\`\`\`\n`;
-                        detailMessage += `*Password Penatausahaan:* \`\`\`${pegawai.passwordPenatausahaan || '-'}\`\`\`\n\n`;
-
-                        detailMessage += `📝 *Keterangan*\n${pegawai.keterangan || '-'}`;
-
-                        if (pegawai.tipePegawai === 'admin') {
-                            detailMessage += `\n\n🛡️ *Data Khusus Admin*\n`;
-                            detailMessage += `*User Rakortek:* \`\`\`${pegawai.userRakortek || '-'}\`\`\`\n`;
-                            detailMessage += `*User Renstra:* \`\`\`${pegawai.sipdRenstra || '-'}\`\`\`\n`;
-                            detailMessage += `*Password Renstra:* \`\`\`${pegawai.passRenstra || '-'}\`\`\``;
-                        }
-
-                        message.reply(detailMessage);
-                        delete userState[message.from];
-                        return;
-                    }else if (userLastState.type === 'menu_utama') {
-                    if (selectedItem.tipeLink === 'kategori_pustaka') {
-                        await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
-                    } else if (selectedItem.tipeLink === 'perintah_khusus') {
-                        if (selectedItem.perintahKhusus === 'mulai_sesi_ai') {
-                            const nomorBot = '6287849305181'; // <-- GANTI DENGAN NOMOR BOT ANDA YANG BENAR
-                            const teksOtomatis = encodeURIComponent("Halo, saya ingin memulai sesi AI");
-                            const linkWa = `https://wa.me/${nomorBot}?text=${teksOtomatis}`;
-                            const replyMessage = `Untuk memulai sesi privat dengan Asisten AI, silakan klik link di bawah ini. Anda akan diarahkan ke chat pribadi dengan saya.\n\n${linkWa}`;
-                            message.reply(replyMessage);
-                        }else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
-                            const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
-                            if (result) {
-                                message.reply(result.jawaban + '\n\nBalas dengan *0* untuk kembali.');
-                                userState[message.from] = { type: 'info', list: [] };
-                            }
-                        }
-                    }
-                }
-                return;
-            }
-        }
-
-// JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
-// ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
-if (!chat.isGroup) {
-    const responseText = await getGeminiResponse(userMessage, userHistory[message.from] || []);
-    message.reply(responseText);
-}
-// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
-
-    } catch (error) {
-        console.error('Terjadi error fatal di event message:', error);
-        message.reply('Maaf, terjadi kesalahan tak terduga. Silakan coba lagi.');
-    }
+    }
 });
+// ▲▲▲ AKHIR DARI BLOK message ▲▲▲
 // akhir kode message
 
 
