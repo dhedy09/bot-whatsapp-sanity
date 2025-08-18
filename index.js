@@ -204,36 +204,29 @@ function evaluateMathExpression(expression) {
 /**
  * Fungsi ini mengambil topik berita sebagai input,
  * mencari berita menggunakan News API, dan mengembalikan hasilnya dalam format JSON.
- * @param {string} query Topik berita yang ingin dicari.
- * @returns {Promise<object>} Sebuah objek berisi daftar artikel berita.
+ * @param {string} topik - Topik berita yang ingin dicari.
+ * @returns {Promise<object>} - Hasil pencarian berita dalam format JSON.
  */
-async function getLatestNews(query) {
-    console.log(`[Tool] Mencari berita untuk query: ${query}`);
+async function getLatestNews(query) { // <-- Nama fungsi & parameter diubah
+    console.log(`[Tool] Menjalankan getLatestNews dengan query: ${query}`);
     try {
-        const response = await axios.get('https://newsapi.org/v2/top-headlines', {
-            params: {
-                q: query,
-                country: 'id',
-                apiKey: process.env.NEWS_API_KEY,
-                pageSize: 5
-            }
-        });
-
-        if (!response.data.articles || response.data.articles.length === 0) {
+        // ... (seluruh isi logikanya tetap sama persis)
+        const apiKey = process.env.NEWS_API_KEY;
+        if (!apiKey) { return { error: "NEWS_API_KEY tidak diatur." }; }
+        const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=id&sortBy=publishedAt&pageSize=5&apiKey=${apiKey}`;
+        const response = await axios.get(apiUrl);
+        if (response.data.articles && response.data.articles.length > 0) {
+            const articles = response.data.articles.map(article => ({
+                title: article.title, description: article.description,
+                url: article.url, source: article.source.name
+            }));
+            return { articles: articles };
+        } else {
             return { error: `Tidak ada berita yang ditemukan untuk topik "${query}".` };
         }
-        
-        const articles = response.data.articles.map(article => ({
-            title: article.title,
-            source: article.source.name,
-            url: article.url
-        }));
-
-        return { articles: articles };
-
     } catch (error) {
-        console.error("Error fetching news:", error.message);
-        return { error: "Gagal mengambil data berita." };
+        console.error("Error saat mengambil berita:", error.message);
+        return { error: "Gagal mengambil data berita dari News API." };
     }
 }
 // ▲▲▲ AKHIR DARI FUNGSI GET BERITA ▲▲▲
