@@ -1027,10 +1027,11 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
         // AWAL BLOK: MEMBUAT PENGINGAT PRIBADI (HANYA ADMIN)
 if (userMessageLower.startsWith('ingatkan')) {
-    message.reply('🤖 Tes Versi Kode Baru v1.0...');
-    // Dapatkan info kontak pengirim untuk mendapatkan ID asli (selalu 628...@c.us)
+    // --- TES DEBUGGING BARU ---
     const contact = await message.getContact();
     const authorId = contact.id._serialized;
+    message.reply(`[DEBUG] ID Pengirim Terdeteksi: ${authorId}`);
+    // -------------------------
 
     const isUserAdmin = await isAdmin(authorId);
     if (!isUserAdmin) {
