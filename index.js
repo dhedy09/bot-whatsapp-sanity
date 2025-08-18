@@ -979,50 +979,53 @@ if (userMessageLower === 'cek pesan') {
         // ▼▼▼ TAMBAHKAN BLOK BARU UNTUK SIMPAN FILE DI SINI ▼▼▼
 const simpanPrefix = 'panda simpan ';
 if (userMessageLower.startsWith(simpanPrefix)) {
-    // Pemeriksaan 1: Apakah ini sebuah balasan?
     if (!message.hasQuotedMsg) {
         return message.reply('❌ Perintah ini hanya berfungsi jika Anda membalas file yang ingin disimpan.');
     }
 
     const quotedMsg = await message.getQuotedMessage();
-
-    // Pemeriksaan 2: Apakah yang dibalas adalah file dengan nama?
-    if (!quotedMsg.hasMedia || !quotedMsg.filename) {
-        return message.reply('❌ Anda harus membalas sebuah file (bukan teks) dan file tersebut harus memiliki nama asli.');
+    if (!quotedMsg.hasMedia) {
+        return message.reply('❌ Anda harus membalas sebuah file (bukan teks).');
     }
     
     try {
-        // --- LOGIKA BARU UNTUK MENANGANI NAMA & EKSTENSI FILE ---
-        const originalFilename = quotedMsg.filename; // Contoh: "laporan_asli.xlsx"
-        const extension = path.extname(originalFilename); // Contoh: ".xlsx"
-        
+        const originalFilename = quotedMsg.filename; // Ini bisa jadi null (tidak ada)
         let namaKustom = userMessage.substring(simpanPrefix.length).trim();
         let namaFileFinal;
 
-        if (namaKustom) {
-            // Jika pengguna memberi nama baru, gabungkan dengan ekstensi asli
-            namaFileFinal = namaKustom + extension;
+        if (originalFilename) {
+            // --- ALUR CERDAS (JIKA NAMA FILE ASLI TERDETEKSI) ---
+            const extension = path.extname(originalFilename);
+            if (namaKustom) {
+                namaFileFinal = namaKustom + extension;
+            } else {
+                namaFileFinal = originalFilename;
+            }
         } else {
-            // Jika pengguna hanya mengetik "panda simpan" (tanpa nama), gunakan nama file asli
-            namaFileFinal = originalFilename;
+            // --- ALUR CADANGAN (JIKA NAMA FILE ASLI TIDAK ADA) ---
+            if (!namaKustom) {
+                return message.reply('❌ Bot tidak bisa mendeteksi nama file asli.\n\nMohon berikan nama file lengkap beserta ekstensinya. Contoh:\n`panda simpan Laporan Penting.pdf`');
+            }
+            // Cek sederhana apakah ada ekstensi di nama yang diberikan
+            if (!namaKustom.includes('.')) {
+                return message.reply('❌ Nama yang Anda berikan tidak memiliki ekstensi file (contoh: .pdf, .xlsx).\n\nMohon sertakan ekstensi di akhir nama file.');
+            }
+            namaFileFinal = namaKustom;
         }
-        // --- AKHIR LOGIKA BARU ---
 
         message.reply(`⏳ Sedang memproses *"${namaFileFinal}"*, mohon tunggu...`);
         const media = await quotedMsg.downloadMedia();
         
-        // Langkah 1: Upload ke Google Drive dengan nama file yang sudah benar
         const driveId = await uploadKeDrive(media, namaFileFinal);
-        if (!driveId) {
-            return message.reply(' Gagal mengunggah file ke Google Drive.');
-        }
+        if (!driveId) { return message.reply(' Gagal mengunggah file ke Google Drive.'); }
 
-        // Langkah 2: Simpan informasi ke Sanity
         const contact = await message.getContact();
+        const pengunggah = contact.pushname || contact.name || message.author;
+
         const dataFile = {
-            namaFile: namaFileFinal, // Simpan nama file lengkap dengan ekstensi
+            namaFile: namaFileFinal,
             googleDriveId: driveId,
-            diunggahOleh: contact.pushname || message.author,
+            diunggahOleh: pengunggah,
             groupId: chat.isGroup ? chat.id._serialized : 'pribadi',
             tipeFile: media.mimetype,
         };
