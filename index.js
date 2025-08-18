@@ -1054,29 +1054,26 @@ if (userMessageLower.startsWith(cariPrefix)) {
     try {
         message.reply(`⏳ Mencari file dengan kata kunci *"${kataKunci}"*...`);
         const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
-        
-        // --- PERBAIKAN UTAMA PADA QUERY SANITY ---
-        const query = `*[_type == "fileArsip" && groupId == $groupId && namaFile match $kataKunci]`;
-        const hasilPencarian = await clientSanity.fetch(query, { 
-            groupId: groupId, 
-            kataKunci: `*${kataKunci}*` 
-        });
+        const hasilPencarian = await cariFileDiSanity(kataKunci, groupId);
 
         if (hasilPencarian.length === 0) {
             return message.reply(`Tidak ada file yang ditemukan dengan kata kunci *"${kataKunci}"* di arsip ini.`);
         }
 
-        // Simpan hasil pencarian ke memori sementara (userState)
+        // --- PERUBAHAN UTAMA DI SINI ---
+        // 1. Simpan hasil pencarian ke memori sementara (userState)
         userState[message.from] = {
-            type: 'file_search_result',
+            type: 'file_search_result', // State baru untuk hasil pencarian file
             list: hasilPencarian
         };
 
-        // Buat pesan balasan dengan daftar bernomor
+        // 2. Buat pesan balasan dengan daftar bernomor
         let replyMessage = `✅ Ditemukan ${hasilPencarian.length} file:\n\n`;
         hasilPencarian.forEach((file, index) => {
             replyMessage += `*${index + 1}.* ${file.namaFile}\n`;
         });
+
+        // 3. Ubah instruksi untuk pengguna
         replyMessage += `\nUntuk mengambil, balas dengan:\n\`kirim file <nomor>\``;
         
         return message.reply(replyMessage);
@@ -1086,6 +1083,7 @@ if (userMessageLower.startsWith(cariPrefix)) {
         return message.reply("Maaf, terjadi kesalahan saat mencari file.");
     }
 }
+
 
         const kirimPrefix = 'kirim file ';
         if (userMessageLower.startsWith(kirimPrefix)) {
