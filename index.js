@@ -1027,11 +1027,9 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
         // AWAL BLOK: MEMBUAT PENGINGAT PRIBADI (HANYA ADMIN)
 if (userMessageLower.startsWith('ingatkan')) {
-    // --- TES DEBUGGING BARU ---
+    // Dapatkan info kontak pengirim untuk mendapatkan ID asli (selalu 628...@c.us)
     const contact = await message.getContact();
     const authorId = contact.id._serialized;
-    message.reply(`[DEBUG] ID Pengirim Terdeteksi: ${authorId}`);
-    // -------------------------
 
     const isUserAdmin = await isAdmin(authorId);
     if (!isUserAdmin) {
@@ -1059,10 +1057,11 @@ if (userMessageLower.startsWith('ingatkan')) {
         let pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
 
         if (pegawaiDitemukan.length === 0 && namaTarget.toLowerCase() === 'saya') {
-            // Logika khusus saat pengguna mengetik "saya"
+            // --- PERBAIKAN UTAMA: Menggunakan Parameterized Query ---
             const idToSearch = authorId.replace('@c.us', '-c-us');
-            const selfQuery = `*[_type == "pegawai" && _id == "${idToSearch}"][0]`;
-            const selfData = await clientSanity.fetch(selfQuery);
+            const selfQuery = `*[_type == "pegawai" && _id == $idToSearch][0]`;
+            const selfData = await clientSanity.fetch(selfQuery, { idToSearch: idToSearch });
+            
             if (selfData) {
                 pegawaiDitemukan = [selfData];
             }
