@@ -1026,24 +1026,12 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
         // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
         // AWAL BLOK: MEMBUAT PENGINGAT PRIBADI (HANYA ADMIN)
-// ▼▼▼ GANTI KESELURUHAN BLOK 'ingatkan' ANDA DENGAN YANG INI ▼▼▼
-
 if (userMessageLower.startsWith('ingatkan')) {
-    const authorId = message.author || message.from;
-
-    // --- TAMBAHKAN LOG UNTUK DEBUGGING ---
-    console.log("--- DEBUGGING ADMIN DI GRUP ---");
-    console.log("ID Grup (message.from):", message.from);
-    console.log("ID Pengirim (message.author):", message.author);
-    console.log("ID yang akan dicek (authorId):", authorId);
-    // ------------------------------------
+    // --- PERBAIKAN UTAMA: Dapatkan info kontak pengirim untuk ID asli ---
+    const contact = await message.getContact();
+    const authorId = contact.id._serialized; // Ini akan selalu 628...@c.us
 
     const isUserAdmin = await isAdmin(authorId);
-
-    // --- TAMBAHKAN LOG KEDUA ---
-    console.log("Hasil pengecekan isAdmin:", isUserAdmin);
-    console.log("-----------------------------");
-    // ---------------------------
     if (!isUserAdmin) {
         message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.');
         return;
