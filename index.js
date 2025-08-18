@@ -227,7 +227,6 @@ function parseWaktuIndonesia(teks) {
 // ▲▲▲ AKHIR DARI FUNGSI PERSEINDONESIA ▲▲▲
 
     // ▼▼▼ TAMBAHKAN FUNGSI ALARM ▼▼▼
-
     /**
      * Memeriksa Sanity untuk pengingat yang sudah jatuh tempo,
      * mengirimkannya, lalu memperbarui statusnya.
@@ -269,6 +268,63 @@ function parseWaktuIndonesia(teks) {
 
     // ▲▲▲ AKHIR DARI ALARM▲▲▲
 
+    // AWAL BROADCAST GEMPA
+            // Tambahkan setelah fungsi checkAndSendReminders()
+
+        /**
+         * Mengecek gempa terbaru dari BMKG dan broadcast ke semua pelanggan aktif jika ada gempa baru.
+         */
+        let lastGempaId = null; // Simpan ID gempa terakhir yang sudah dikirim
+
+       // ...existing code...
+        async function checkAndBroadcastGempa() {
+            try {
+                const gempa = await getGempa();
+                if (
+                    !gempa ||
+                    gempa.error ||
+                    !gempa.tanggal ||
+                    !gempa.waktu ||
+                    !gempa.magnitudo ||
+                    !gempa.wilayah
+                ) return;
+
+                // Gunakan kombinasi waktu & magnitudo sebagai ID unik gempa
+                const currentGempaId = `${gempa.tanggal}_${gempa.waktu}_${gempa.magnitudo}`;
+
+                if (lastGempaId === currentGempaId) return; // Tidak ada gempa baru
+
+                // Ambil semua pelanggan aktif
+                const query = `*[_type == "langgananGempa" && status == "aktif"]`;
+                const subscribers = await clientSanity.fetch(query);
+
+                if (!subscribers || subscribers.length === 0) return;
+
+                // Susun pesan broadcast
+                const pesanGempa = 
+        `⚠️ *Info Gempa Terkini BMKG* ⚠️
+        Waktu: ${gempa.tanggal} ${gempa.waktu}
+        Magnitudo: ${gempa.magnitudo}
+        Kedalaman: ${gempa.kedalaman}
+        Wilayah: ${gempa.wilayah}
+        Potensi: ${gempa.potensi}
+        Dirasakan: ${gempa.dirasakan || '-'}
+        \n\nUntuk berhenti menerima info gempa, kirim: *berhenti gempa*`;
+
+                // Kirim ke semua pelanggan
+                for (const user of subscribers) {
+                    await client.sendMessage(user.userId, pesanGempa);
+                }
+
+                lastGempaId = currentGempaId; // Update ID gempa terakhir
+                console.log(`[Broadcast Gempa] Info gempa dikirim ke ${subscribers.length} pelanggan.`);
+            } catch (error) {
+                console.error("[Broadcast Gempa] Gagal broadcast info gempa:", error);
+            }
+        }
+        // ...existing code...
+// ▲▲▲ AKHIR DARI FUNGSI BROADCAST GEMPA ▲▲▲
+        
 /**
  * Mengevaluasi ekspresi matematika menggunakan math.js.
  * @param {string} expression Ekspresi yang akan dihitung, contoh: "5 * (2 + 3)".
@@ -741,6 +797,10 @@ client.on('ready', () => {
     // Menjalankan alarm pengingat setiap 60 detik (1 menit)
     console.log('[Pengingat] Alarm pengingat diaktifkan, akan memeriksa setiap menit.');
     setInterval(checkAndSendReminders, 60000); 
+
+    // Menjalankan broadcast gempa setiap 5 menit
+    console.log('[Gempa] Broadcast info gempa diaktifkan, akan memeriksa setiap 5 menit.');
+    setInterval(checkAndBroadcastGempa, 300000); // 5 menit
 });
 
 // awal kode message
@@ -884,6 +944,54 @@ client.on('message', async (message) => {
 
         }
         // ▲▲▲ BATAS AKHIR BLOK BARU SIMPAN FILE▲▲▲
+
+        // Tambahkan setelah blok "BLOK 2: MENANGANI PERINTAH TEKS"
+
+        // BLOK LANGGANAN INFO GEMPA
+        if (userMessageLower === 'langganan gempa') {
+            const contact = await message.getContact();
+            const userId = contact.id._serialized;
+            const userName = contact.pushname || contact.name || userId;
+
+            // Cek apakah sudah langganan
+            const query = `*[_type == "langgananGempa" && userId == $userId][0]`;
+            const existing = await clientSanity.fetch(query, { userId });
+
+            if (existing && existing.status === 'aktif') {
+                return message.reply('Anda sudah terdaftar sebagai penerima info gempa.');
+            }
+
+            if (existing) {
+                // Update status ke aktif
+                await clientSanity.patch(existing._id).set({ status: 'aktif' }).commit();
+            } else {
+                // Buat dokumen baru
+                await clientSanity.create({
+                    _type: 'langgananGempa',
+                    userId,
+                    namaPengguna: userName,
+                    status: 'aktif',
+                    tanggalDaftar: new Date().toISOString()
+                });
+            }
+            return message.reply('✅ Anda berhasil berlangganan info gempa. Jika ada gempa baru, Anda akan menerima notifikasi otomatis.');
+        }
+
+        if (userMessageLower === 'berhenti gempa') {
+            const contact = await message.getContact();
+            const userId = contact.id._serialized;
+
+            const query = `*[_type == "langgananGempa" && userId == $userId][0]`;
+            const existing = await clientSanity.fetch(query, { userId });
+
+            if (!existing || existing.status !== 'aktif') {
+                return message.reply('Anda belum berlangganan info gempa.');
+            }
+
+            await clientSanity.patch(existing._id).set({ status: 'nonaktif' }).commit();
+            return message.reply('🚫 Anda telah berhenti berlangganan info gempa.');
+        }
+        // AKHIR BLOK LANGGANAN INFO GEMPA
 
 // ▼▼▼ BLOK BARU UNTUK MENCARI & MENGIRIM FILE ▼▼▼
         const cariPrefix = 'cari file ';
