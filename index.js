@@ -755,47 +755,37 @@ async function getGeminiResponse(prompt, history) {
 // AKHIR GEMINI RESPONSE
 
 /**
- * Mengunggah file media ke folder Google Drive yang ditentukan.
- * @param {MessageMedia} media Objek media dari whatsapp-web.js (berisi data base64, mimetype, dll).
- * @param {string} namaFileKustom Nama file yang akan digunakan saat menyimpan di Drive.
- * @returns {Promise<string|null>} Mengembalikan ID file di Google Drive jika berhasil, atau null jika gagal.
+ * Mengunggah file ke folder spesifik di Google Drive.
+ * @param {object} media Objek media dari whatsapp-web.js.
+ * @param {string} namaFile Nama yang akan diberikan untuk file di Drive.
+ * @returns {Promise<string|null>} ID file di Google Drive atau null jika gagal.
  */
-async function uploadKeDrive(media, namaFileKustom) {
+async function uploadKeDrive(media, namaFile) {
     try {
-        // Mengambil kredensial dari environment variable
-        const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
-
-        const auth = new google.auth.GoogleAuth({
-            credentials, // Gunakan kredensial yang sudah di-parse
-            scopes: ['https://www.googleapis.com/auth/drive'],
-        });
-
-        const drive = google.drive({ version: 'v3', auth });
-
-        // Ubah data base64 dari media menjadi buffer, lalu stream
-        const buffer = Buffer.from(media.data, 'base64');
-        const stream = new Readable();
-        stream.push(buffer);
-        stream.push(null);
+        const fileMetadata = {
+            name: namaFile,
+            parents: [process.env.GOOGLE_DRIVE_FOLDER_ID]
+        };
+        const mediaData = {
+            mimeType: media.mimetype,
+            body: Buffer.from(media.data, 'base64').toString('binary')
+        };
 
         const response = await drive.files.create({
-            requestBody: {
-                name: namaFileKustom,
-                parents: [FOLDER_DRIVE_ID]
-            },
-            media: {
-                mimeType: media.mimetype,
-                body: stream,
-            },
-            fields: 'id',
-            supportsAllDrives: true, // <-- BARIS PENTING INI DITAMBAHKAN
-        });
+            resource: fileMetadata,
+            media: mediaData,
+            fields: 'id',
+            // --- PERBAIKAN UTAMA ADA DI SINI ---
+            supportsAllDrives: true,
+            // Memberitahu Google Drive untuk tidak mengonversi file ke format Google Docs/Sheets
+            convert: false 
+        });
 
-        console.log(`✅ File berhasil diunggah ke Drive. ID: ${response.data.id}`);
-        return response.data.id; // Kembalikan ID file di Drive
+        console.log(`[Drive] File berhasil diunggah dengan ID: ${response.data.id}`);
+        return response.data.id;
 
     } catch (error) {
-        console.error("Error saat mengunggah ke Google Drive:", error);
+        console.error("Error saat mengunggah ke Google Drive:", error.message);
         return null;
     }
 }
