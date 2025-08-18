@@ -989,28 +989,32 @@ if (userMessageLower.startsWith(simpanPrefix)) {
     }
     
     try {
-        const originalFilename = quotedMsg.filename; // Ini bisa jadi null (tidak ada)
+        const originalFilename = quotedMsg.filename;
         let namaKustom = userMessage.substring(simpanPrefix.length).trim();
         let namaFileFinal;
+        
+        // Menggunakan dynamic import untuk library mime-types
+        const { default: mime } = await import('mime-types');
 
         if (originalFilename) {
             // --- ALUR CERDAS (JIKA NAMA FILE ASLI TERDETEKSI) ---
             const extension = path.extname(originalFilename);
-            if (namaKustom) {
-                namaFileFinal = namaKustom + extension;
-            } else {
-                namaFileFinal = originalFilename;
-            }
+            namaFileFinal = namaKustom ? namaKustom + extension : originalFilename;
+
         } else {
-            // --- ALUR CADANGAN (JIKA NAMA FILE ASLI TIDAK ADA) ---
+            // --- ALUR SUPER CERDAS (JIKA NAMA FILE ASLI TIDAK ADA) ---
             if (!namaKustom) {
-                return message.reply('❌ Bot tidak bisa mendeteksi nama file asli.\n\nMohon berikan nama file lengkap beserta ekstensinya. Contoh:\n`panda simpan Laporan Penting.pdf`');
+                return message.reply('❌ Bot tidak bisa mendeteksi nama file asli.\n\nMohon berikan nama yang Anda inginkan (tanpa perlu ekstensi). Contoh:\n`panda simpan Laporan Penting`');
             }
-            // Cek sederhana apakah ada ekstensi di nama yang diberikan
-            if (!namaKustom.includes('.')) {
-                return message.reply('❌ Nama yang Anda berikan tidak memiliki ekstensi file (contoh: .pdf, .xlsx).\n\nMohon sertakan ekstensi di akhir nama file.');
+            
+            const mimetype = quotedMsg.mimetype;
+            const extension = mime.extension(mimetype); // Mendeteksi ekstensi dari tipe file
+
+            if (!extension) {
+                return message.reply(`❌ Gagal mendeteksi ekstensi untuk tipe file: ${mimetype}.`);
             }
-            namaFileFinal = namaKustom;
+
+            namaFileFinal = `${namaKustom}.${extension}`; // Menambahkan ekstensi secara otomatis
         }
 
         message.reply(`⏳ Sedang memproses *"${namaFileFinal}"*, mohon tunggu...`);
