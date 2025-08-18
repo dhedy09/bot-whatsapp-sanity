@@ -1059,6 +1059,12 @@ if (userMessageLower.startsWith('ingatkan')) {
         if (pegawaiDitemukan.length === 0) {
             // Jika tidak ketemu, coba cari "saya" (untuk diri sendiri)
             if (namaTarget.toLowerCase() === 'saya') {
+                    // --- TAMBAHKAN LOG UNTUK DEBUGGING ---
+                const idToSearch = authorId.replace(/[@.]/g, '-');
+                console.log("--- DEBUGGING PENCARIAN 'SAYA' ---");
+                console.log("Mencari pegawai dengan _id:", idToSearch);
+                console.log("---------------------------------");
+                // ------------------------------------
                  const selfQuery = `*[_type == "pegawai" && _id == "${authorId.replace(/[@.]/g, '-')}"][0]`;
                  const selfData = await clientSanity.fetch(selfQuery);
                  if(selfData) pegawaiDitemukan = [selfData];
