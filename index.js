@@ -18,7 +18,7 @@ const { Readable } = require('stream');
 const { evaluate } = require('mathjs');
 const axios = require('axios');
 const FOLDER_DRIVE_ID = '17LsEyvyF06v3dPN7wMv_3NOiaajY8sQk'; // Ganti dengan ID folder Google Drive Anda
-app.get('/health', (req, res) => {
+app.get('/health', (_, res) => {
     res.status(200).send('OK');
 });
 
@@ -58,7 +58,7 @@ const port = process.env.PORT || 8080;
 
 let qrCodeUrl = null;
 
-app.get('/', (req, res) => {
+app.get('/', (_, res) => {
     if (qrCodeUrl) {
         res.send(`
             <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:100vh; font-family: Arial, sans-serif; background-color:#f0f2f5; color:#4a4a4a;">
@@ -151,12 +151,7 @@ async function getGempa() {
 // ▲▲▲ AKHIR DARI FUNGSI BARU gempa▲▲▲
 
 // Tambahkan ini bersama fungsi lainnya
-async function getCurrentWeather(location) {
-    return { error: "Fitur cuaca belum terhubung." };
-}
-function evaluateMathExpression(expression) {
-    return { error: "Fitur kalkulator belum terhubung." };
-}
+// (Removed unused stub functions for getCurrentWeather and evaluateMathExpression)
 
 //AWAL FUNGSI GET BERITA
 /**
@@ -269,6 +264,50 @@ function parseWaktuIndonesia(teks) {
 
     // ▲▲▲ AKHIR DARI ALARM▲▲▲
 
+// AWAL BROADCAST GEMPA
+let lastGempaId = null; // Simpan ID gempa terakhir yang sudah dikirim
+
+async function checkAndBroadcastGempa() {
+    try {
+        const gempa = await getGempa();
+        if (!gempa || gempa.error) return;
+
+        // Gunakan kombinasi waktu & magnitudo sebagai ID unik gempa
+        const currentGempaId = `${gempa.tanggal}_${gempa.waktu}_${gempa.magnitudo}`;
+
+        if (lastGempaId === currentGempaId) return; // Tidak ada gempa baru
+
+        // Ambil semua pelanggan aktif
+        const query = `*[_type == "langgananGempa" && status == "aktif"]`;
+        const subscribers = await clientSanity.fetch(query);
+
+        if (!subscribers || subscribers.length === 0) return;
+
+        // Susun pesan broadcast
+        const pesanGempa = 
+        `⚠️ *Info Gempa Terkini BMKG* ⚠️
+        Waktu: ${gempa.tanggal} ${gempa.waktu}
+        Magnitudo: ${gempa.magnitudo}
+        Kedalaman: ${gempa.kedalaman}
+        Wilayah: ${gempa.wilayah}
+        Potensi: ${gempa.potensi}
+        Dirasakan: ${gempa.dirasakan || '-'}
+        \n\nUntuk berhenti menerima info gempa, kirim: *berhenti gempa*`;
+
+        // Kirim ke semua pelanggan
+        for (const user of subscribers) {
+            await client.sendMessage(user.userId, pesanGempa);
+        }
+
+        lastGempaId = currentGempaId; // Update ID gempa terakhir
+        console.log(`[Broadcast Gempa] Info gempa dikirim ke ${subscribers.length} pelanggan.`);
+    } catch (error) {
+        console.error("[Broadcast Gempa] Gagal broadcast info gempa:", error);
+    }
+}
+
+// ▲▲▲ AKHIR BROADCAST GEMPA
+
 /**
  * Mengevaluasi ekspresi matematika menggunakan math.js.
  * @param {string} expression Ekspresi yang akan dihitung, contoh: "5 * (2 + 3)".
@@ -326,12 +365,12 @@ async function kirimFileDariDrive(fileId, fileName, userChatId) {
             response.headers['content-type'],
             base64data,
             fileName
+        const { MessageMedia } = require('whatsapp-web.js');
+        const media = new MessageMedia(
+            response.headers['content-type'],
+            base64data,
+            fileName
         );
-
-        // Mengirim file ke pengguna
-        await client.sendMessage(userChatId, media, { caption: `Ini file yang Anda minta: *${fileName}*` });
-        return true;
-
     } catch (error) {
         console.error("Error saat mengirim file dari Drive:", error);
         await client.sendMessage(userChatId, `Maaf, terjadi kesalahan saat mencoba mengambil file "${fileName}".`);
@@ -478,46 +517,9 @@ async function isAdmin(userId) {
  * @returns {Promise<string>} String berisi informasi gempa terkini.
  */
 async function getInfoGempa() {
-    try {
-        const url = 'https://data.bmkg.go.id/DataMKG/TEWS/autogempa.json';
-        const response = await fetch(url);
-
-        if (!response.ok) {
-            throw new Error(`Gagal mengambil data dari BMKG (Status: ${response.status})`);
-        }
-
-        const data = await response.json();
-        const gempa = data.Infogempa.gempa;
-
-        const waktu = `${gempa.Tanggal}, ${gempa.Jam}`;
-        const magnitudo = gempa.Magnitude;
-        const kedalaman = gempa.Kedalaman;
-        const lokasi = `${gempa.Wilayah} | Koordinat: ${gempa.Lintang}, ${gempa.Bujur}`;
-        const potensi = gempa.Potensi;
-        const arahan = gempa.Dirasakan;
-
-        let gempaMessage = `⚠️ *Info Gempa Bumi Terkini (BMKG)*\n\n`;
-        gempaMessage += `*Waktu:* ${waktu}\n`;
-        gempaMessage += `*Magnitudo:* ${magnitudo} SR\n`;
-        gempaMessage += `*Kedalaman:* ${kedalaman}\n`;
-        gempaMessage += `*Lokasi:* ${lokasi}\n`;
-        gempaMessage += `*Potensi:* ${potensi}\n\n`;
-        gempaMessage += `*Arahan:* ${arahan}`;
-
-        return gempaMessage;
-
-    } catch (error) {
-        console.error("Error di dalam fungsi getInfoGempa:", error.message);
-        throw error; // Lemparkan error agar ditangani logika interaksi
-    }
-}
+/* (Removed unused getInfoGempa function) */
 
 // ▲▲▲ AKHIR DARI FUNGSI BARU ▲▲▲
-
-// ▲▲▲ AKHIR DARI KODE PENGGANTI ▲▲▲
-
-async function showMainMenu(message) {
-    // ... (Fungsi ini sudah benar, tidak ada perubahan)
     const contact = await message.getContact();
     const userName = contact.pushname || contact.name || 'Pengguna';
     const salamQuery = `*[_type == "botReply" && keyword == "salam_menu_utama"][0]`;
@@ -735,12 +737,16 @@ client.on('qr', async (qr) => {
 });
 
 client.on('ready', () => {
-    console.log('✅ Bot WhatsApp berhasil terhubung dan siap digunakan!');
-    qrCodeUrl = null; // Baris ini penting untuk web server Anda, JANGAN DIHAPUS
+    console.log('✅ Bot WhatsApp berhasil terhubung dan siap digunakan!');
+    qrCodeUrl = null;
 
-    // Menjalankan alarm pengingat setiap 60 detik (1 menit)
-    console.log('[Pengingat] Alarm pengingat diaktifkan, akan memeriksa setiap menit.');
-    setInterval(checkAndSendReminders, 60000); 
+    // Menjalankan alarm pengingat setiap 60 detik (1 menit)
+    console.log('[Pengingat] Alarm pengingat diaktifkan, akan memeriksa setiap menit.');
+    setInterval(checkAndSendReminders, 60000);
+
+    // Menjalankan broadcast gempa setiap 5 menit
+    console.log('[Gempa] Broadcast info gempa diaktifkan, akan memeriksa setiap 5 menit.');
+    setInterval(checkAndBroadcastGempa, 300000); // 5 menit
 });
 
 // awal kode message
@@ -850,17 +856,17 @@ client.on('message', async (message) => {
             const namaFile = userMessage.substring(simpanPrefix.length).trim();
 
             // Pemeriksaan 3: Apakah nama file diberikan?
-            if (!namaFile) {
-                return message.reply('❌ Silakan berikan nama untuk file Anda.\nContoh: `panda simpan Laporan Keuangan`');
-            }
+                const aiResponse = await getGeminiResponse(userMessage, userLastState.history);
 
-            try {
-                message.reply('⏳ Sedang memproses, mohon tunggu...');
-                const media = await quotedMsg.downloadMedia();
+                message.reply(aiResponse);
                 
-                // Langkah 1: Upload ke Google Drive
-                const driveId = await uploadKeDrive(media, namaFile);
-                if (!driveId) {
+                userLastState.history.push({ role: 'user', parts: [{ text: userMessage }] });
+                userLastState.history.push({ role: 'model', parts: [{ text: aiResponse }] });
+                
+                const MAX_HISTORY = 10;
+                if (userLastState.history.length > MAX_HISTORY) {
+                    userLastState.history = userLastState.history.slice(-MAX_HISTORY);
+                }
                     return message.reply(' Gagal mengunggah file ke Google Drive.');
                 }
 
@@ -884,6 +890,54 @@ client.on('message', async (message) => {
 
         }
         // ▲▲▲ BATAS AKHIR BLOK BARU SIMPAN FILE▲▲▲
+
+// Tambahkan setelah blok "BLOK 2: MENANGANI PERINTAH TEKS"
+
+// BLOK LANGGANAN INFO GEMPA
+if (userMessageLower === 'langganan gempa') {
+    const contact = await message.getContact();
+    const userId = contact.id._serialized;
+    const userName = contact.pushname || contact.name || userId;
+
+    // Cek apakah sudah langganan
+    const query = `*[_type == "langgananGempa" && userId == $userId][0]`;
+    const existing = await clientSanity.fetch(query, { userId });
+
+    if (existing && existing.status === 'aktif') {
+        return message.reply('Anda sudah terdaftar sebagai penerima info gempa.');
+    }
+
+    if (existing) {
+        // Update status ke aktif
+        await clientSanity.patch(existing._id).set({ status: 'aktif' }).commit();
+    } else {
+        // Buat dokumen baru
+        await clientSanity.create({
+            _type: 'langgananGempa',
+            userId,
+            namaPengguna: userName,
+            status: 'aktif',
+            tanggalDaftar: new Date().toISOString()
+        });
+    }
+    return message.reply('✅ Anda berhasil berlangganan info gempa. Jika ada gempa baru, Anda akan menerima notifikasi otomatis.');
+}
+
+if (userMessageLower === 'berhenti gempa') {
+    const contact = await message.getContact();
+    const userId = contact.id._serialized;
+
+    const query = `*[_type == "langgananGempa" && userId == $userId][0]`;
+    const existing = await clientSanity.fetch(query, { userId });
+
+    if (!existing || existing.status !== 'aktif') {
+        return message.reply('Anda belum berlangganan info gempa.');
+    }
+
+    await clientSanity.patch(existing._id).set({ status: 'nonaktif' }).commit();
+    return message.reply('🚫 Anda telah berhenti berlangganan info gempa.');
+}
+// AKHIR BLOK LANGGANAN INFO GEMPA
 
 // ▼▼▼ BLOK BARU UNTUK MENCARI & MENGIRIM FILE ▼▼▼
         const cariPrefix = 'cari file ';
@@ -1429,4 +1483,6 @@ if (!chat.isGroup) {
 // BAGIAN 5: MENJALANKAN BOT
 // =================================================================
 console.log('Memulai inisialisasi bot WhatsApp...');
-client.initialize();
+client.initialize();    getGeminiResponse(userMessage, userHistory[message.from] || []).then(responseText => {
+        message.reply(responseText);
+    });
