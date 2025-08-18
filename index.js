@@ -1040,7 +1040,7 @@ if (userMessageLower.startsWith('ingatkan')) {
     }
 
     const argsString = userMessage.substring('ingatkan'.length).trim();
-    const reminderRegex = /^(.+?)\s(.+?)\stentang\s"(.+)"$/i;
+    const reminderRegex = /^(.*?)\s(.*?)\stentang\s"(.*?)"$/i;
     const match = argsString.match(reminderRegex);
 
     // --- PERBAIKAN UTAMA: Cek format di awal ---
