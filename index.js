@@ -1012,38 +1012,43 @@ if (userMessageLower.startsWith(simpanPrefix)) {
     }
     
     try {
+        message.reply('⏳ Menganalisis file, mohon tunggu...');
+
+        // --- PERUBAHAN UTAMA: UNDUH MEDIA TERLEBIH DAHULU ---
+        const media = await quotedMsg.downloadMedia();
+        if (!media) {
+            return message.reply('❌ Gagal mengunduh file. Coba lagi.');
+        }
+
+        // Sekarang kita punya semua info yang kita butuhkan
         const originalFilename = quotedMsg.filename;
+        const mimetype = media.mimetype; // Ambil mimetype dari media yang sudah diunduh
         let namaKustom = userMessage.substring(simpanPrefix.length).trim();
         let namaFileFinal;
         
-        // Menggunakan dynamic import untuk library mime-types
         const { default: mime } = await import('mime-types');
 
         if (originalFilename) {
-            // --- ALUR CERDAS (JIKA NAMA FILE ASLI TERDETEKSI) ---
+            // ALUR CERDAS (JIKA NAMA FILE ASLI TERDETEKSI)
             const extension = path.extname(originalFilename);
             namaFileFinal = namaKustom ? namaKustom + extension : originalFilename;
-
         } else {
-            // --- ALUR SUPER CERDAS (JIKA NAMA FILE ASLI TIDAK ADA) ---
+            // ALUR SUPER CERDAS (JIKA NAMA FILE ASLI TIDAK ADA)
             if (!namaKustom) {
                 return message.reply('❌ Bot tidak bisa mendeteksi nama file asli.\n\nMohon berikan nama yang Anda inginkan (tanpa perlu ekstensi). Contoh:\n`panda simpan Laporan Penting`');
             }
             
-            const mimetype = quotedMsg.mimetype;
-            const extension = mime.extension(mimetype); // Mendeteksi ekstensi dari tipe file
-
+            const extension = mime.extension(mimetype);
             if (!extension) {
+                // Pesan error sekarang lebih informatif
                 return message.reply(`❌ Gagal mendeteksi ekstensi untuk tipe file: ${mimetype}.`);
             }
-
-            namaFileFinal = `${namaKustom}.${extension}`; // Menambahkan ekstensi secara otomatis
+            namaFileFinal = `${namaKustom}.${extension}`;
         }
 
-        message.reply(`⏳ Sedang memproses *"${namaFileFinal}"*, mohon tunggu...`);
-        const media = await quotedMsg.downloadMedia();
+        message.reply(`⏳ Mengarsipkan *"${namaFileFinal}"*, mohon tunggu...`);
         
-        const driveId = await uploadKeDrive(media, namaFileFinal);
+        const driveId = await uploadKeDrive(media, namaFileFinal); // Gunakan media yang sudah diunduh
         if (!driveId) { return message.reply(' Gagal mengunggah file ke Google Drive.'); }
 
         const contact = await message.getContact();
