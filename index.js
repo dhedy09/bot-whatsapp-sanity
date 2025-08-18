@@ -746,6 +746,11 @@ client.on('ready', () => {
 
 // awal kode message
 client.on('message', async (message) => {
+        // ▼▼▼ TAMBAHKAN PENJAGA INI ▼▼▼
+    if (!message.body) {
+        return; // Abaikan pesan tanpa teks dan berhenti
+    }
+    // ▲▲▲ BATAS AKHIR PENJAGA ▲▲▲
     const chat = await message.getChat();
     try {
         const userMessage = message.body.trim();
