@@ -1044,43 +1044,48 @@ client.on('message', async (message) => {
         // AKHIR BLOK LANGGANAN INFO GEMPA
 
 // ▼▼▼ BLOK BARU UNTUK MENCARI & MENGIRIM FILE ▼▼▼
-        const cariPrefix = 'cari file ';
-        if (userMessageLower.startsWith(cariPrefix)) {
-            const kataKunci = userMessage.substring(cariPrefix.length).trim();
-            if (!kataKunci) {
-                return message.reply('Silakan masukkan kata kunci. Contoh: `cari file laporan`');
-            }
+const cariPrefix = 'cari file ';
+if (userMessageLower.startsWith(cariPrefix)) {
+    const kataKunci = userMessage.substring(cariPrefix.length).trim();
+    if (!kataKunci) {
+        return message.reply('Silakan masukkan kata kunci. Contoh: `cari file laporan`');
+    }
 
-            try {
-                message.reply(`⏳ Mencari file dengan kata kunci *"${kataKunci}"*...`);
-                const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
-                const hasilPencarian = await cariFileDiSanity(kataKunci, groupId);
+    try {
+        message.reply(`⏳ Mencari file dengan kata kunci *"${kataKunci}"*...`);
+        const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
+        
+        // --- PERBAIKAN UTAMA PADA QUERY SANITY ---
+        const query = `*[_type == "fileArsip" && groupId == $groupId && namaFile match $kataKunci]`;
+        const hasilPencarian = await clientSanity.fetch(query, { 
+            groupId: groupId, 
+            kataKunci: `*${kataKunci}*` 
+        });
 
-                if (hasilPencarian.length === 0) {
-                    return message.reply(`Tidak ada file yang ditemukan dengan kata kunci *"${kataKunci}"* di arsip ini.`);
-                }
-
-                // --- PERUBAHAN UTAMA DI SINI ---
-                // Simpan hasil pencarian ke memori sementara (userState)
-                userState[message.from] = {
-                    type: 'file_search_result', // State baru untuk hasil pencarian file
-                    list: hasilPencarian
-                };
-
-                // Buat pesan balasan dengan daftar bernomor
-                let replyMessage = `✅ Ditemukan ${hasilPencarian.length} file:\n\n`;
-                hasilPencarian.forEach((file, index) => {
-                    replyMessage += `*${index + 1}.* ${file.namaFile}\n`;
-                });
-                replyMessage += `\nUntuk mengambil, balas dengan:\n\`kirim file <nomor>\``;
-                
-                return message.reply(replyMessage);
-
-            } catch (error) {
-                console.error("Error di blok cari file:", error);
-                return message.reply("Maaf, terjadi kesalahan saat mencari file.");
-            }
+        if (hasilPencarian.length === 0) {
+            return message.reply(`Tidak ada file yang ditemukan dengan kata kunci *"${kataKunci}"* di arsip ini.`);
         }
+
+        // Simpan hasil pencarian ke memori sementara (userState)
+        userState[message.from] = {
+            type: 'file_search_result',
+            list: hasilPencarian
+        };
+
+        // Buat pesan balasan dengan daftar bernomor
+        let replyMessage = `✅ Ditemukan ${hasilPencarian.length} file:\n\n`;
+        hasilPencarian.forEach((file, index) => {
+            replyMessage += `*${index + 1}.* ${file.namaFile}\n`;
+        });
+        replyMessage += `\nUntuk mengambil, balas dengan:\n\`kirim file <nomor>\``;
+        
+        return message.reply(replyMessage);
+
+    } catch (error) {
+        console.error("Error di blok cari file:", error);
+        return message.reply("Maaf, terjadi kesalahan saat mencari file.");
+    }
+}
 
         const kirimPrefix = 'kirim file ';
         if (userMessageLower.startsWith(kirimPrefix)) {
