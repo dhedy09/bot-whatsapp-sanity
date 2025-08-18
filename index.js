@@ -4,32 +4,53 @@
 // BAGIAN 1: INISIALISASI & KONFIGURASI AWAL
 // =================================================================
 
+// ▼▼▼ GANTI KESELURUHAN BAGIAN ATAS KODE ANDA DENGAN INI ▼▼▼
+
+// BAGIAN 1: INISIALISASI & KONFIGURASI AWAL
+// =================================================================
+
 require('dotenv').config();
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const express = require('express');
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js'); // MessageMedia ditambahkan
 const { createClient } = require('@sanity/client');
 const qrcode = require('qrcode');
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-const app = express();
 const { google } = require('googleapis');
-const { Readable } = require('stream');
+const stream = require('stream'); // Diperlukan untuk Google Drive
 const { evaluate } = require('mathjs');
 const axios = require('axios');
-const FOLDER_DRIVE_ID = '17LsEyvyF06v3dPN7wMv_3NOiaajY8sQk'; // Ganti dengan ID folder Google Drive Anda
-app.get('/health', (req, res) => {
-    res.status(200).send('OK');
+const app = express();
+
+
+// --- INISIALISASI KLIEN GOOGLE (DRIVE, SEARCH, DLL) ---
+const credentialsJsonString = process.env.GOOGLE_CREDENTIALS_JSON;
+if (!credentialsJsonString) {
+    console.error("FATAL ERROR: Variabel GOOGLE_CREDENTIALS_JSON tidak ditemukan!");
+    process.exit(1); 
+}
+const credentials = JSON.parse(credentialsJsonString);
+
+const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: [
+        'https://www.googleapis.com/auth/drive', // Izin penuh untuk Google Drive
+    ],
 });
 
+const drive = google.drive({ version: 'v3', auth });
+// --- AKHIR INISIALISASI KLIEN GOOGLE ---
 
-// ▼▼▼ HAPUS SEMUA 'const tools' LAMA DAN GANTI DENGAN YANG INI ▼▼▼
 
-// ▼▼▼ GANTI 'const tools' LAMA DENGAN VERSI BARU INI ▼▼▼
+// --- INISIALISASI KLIEN GEMINI AI ---
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+
+
+// --- DEFINISI ALAT-ALAT UNTUK AI ---
 const tools = [{
     functionDeclarations: [
         {
-            name: "googleSearch", // <-- ALAT BARU DITAMBAHKAN
+            name: "googleSearch",
             description: "Mencari informasi umum di internet menggunakan Google. Gunakan ini untuk pertanyaan tentang fakta, orang, tempat, peristiwa terkini, atau topik apa pun yang tidak tercakup oleh alat lain.",
             parameters: { type: "OBJECT", properties: { query: { type: "STRING", description: "Pertanyaan atau kata kunci pencarian." } }, required: ["query"] },
         },
@@ -54,13 +75,15 @@ const tools = [{
         },
     ],
 }];
-// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
-// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
+// --- KONFIGURASI SERVER WEB (EXPRESS) ---
 const port = process.env.PORT || 8080;
-
 let qrCodeUrl = null;
+
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
 
 app.get('/', (req, res) => {
     if (qrCodeUrl) {
@@ -78,23 +101,24 @@ app.get('/', (req, res) => {
 
 app.listen(port, () => console.log(`Server web berjalan di port ${port}`));
 
+
 // =================================================================
 // BAGIAN 2: KONFIGURASI CLIENT (SANITY & WHATSAPP)
 // =================================================================
 
 if (!process.env.SANITY_TOKEN) {
     console.error('FATAL ERROR: SANITY_TOKEN tidak ditemukan!');
-    // process.exit(1); // Sebaiknya hentikan aplikasi jika token krusial tidak ada
+    process.exit(1);
 }
 if (!process.env.GEMINI_API_KEY) {
     console.error('FATAL ERROR: GEMINI_API_KEY tidak ditemukan!');
+    process.exit(1);
 }
 
 const clientSanity = createClient({
     projectId: 'dk0so8pj',
     dataset: 'production',
-    // ▼▼▼ PERBAIKAN KRUSIAL ▼▼▼
-    apiVersion: '2024-01-01', // Ganti dengan tanggal valid di masa lalu
+    apiVersion: '2024-01-01',
     token: process.env.SANITY_TOKEN,
     useCdn: false,
 });
@@ -115,8 +139,11 @@ const client = new Client({
         ],
     }
 });
+
 const userHistory = {};
 const userState = {};
+
+// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
 // =================================================================
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
@@ -388,54 +415,43 @@ function evaluateMathExpression(expression) {
     }
 }
 
+// ▼▼▼ FUNGSI UNTUK MENGAMBIL & MENGIRIM FILE DARI DRIVE ▼▼▼
+
 /**
- * Mengambil file dari Google Drive dan mengirimkannya sebagai media.
+ * Mengunduh file dari Google Drive dan mengirimkannya via WhatsApp.
  * @param {string} fileId ID file di Google Drive.
- * @param {string} fileName Nama file yang akan ditampilkan ke pengguna.
- * @param {string} userChatId ID chat tujuan.
+ * @param {string} namaFile Nama asli file.
+ * @param {string} recipientId ID penerima (chat/grup) di WhatsApp.
  */
-async function kirimFileDariDrive(fileId, fileName, userChatId) {
+async function kirimFileDariDrive(fileId, namaFile, recipientId) {
     try {
-        // Otentikasi sama seperti saat upload
-        const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
-        const auth = new google.auth.GoogleAuth({
-            credentials,
-            scopes: ['https://www.googleapis.com/auth/drive.readonly'],
-        });
-        const drive = google.drive({ version: 'v3', auth });
-
-        // Mengunduh file dari Drive sebagai stream
+        // Mengunduh file dari Drive sebagai buffer
         const response = await drive.files.get(
-            { fileId: fileId, alt: 'media', supportsAllDrives: true },
-            { responseType: 'stream' }
+            { fileId: fileId, alt: 'media' },
+            { responseType: 'arraybuffer' }
         );
 
-        // Mengumpulkan data dari stream menjadi satu buffer
-        const chunks = [];
-        for await (const chunk of response.data) {
-            chunks.push(chunk);
-        }
-        const buffer = Buffer.concat(chunks);
-        const base64data = buffer.toString('base64');
+        const fileBuffer = Buffer.from(response.data);
 
-        // Membuat objek MessageMedia dari data base64
-        const { MessageMedia } = require('whatsapp-web.js');
-        const media = new MessageMedia(
-            response.headers['content-type'],
-            base64data,
-            fileName
-        );
+        // Mendapatkan tipe mime dari Sanity atau dari nama file jika perlu
+        // Di sini kita asumsikan kita akan tahu tipe mime-nya
+        const { default: mime } = await import('mime-types');
+        const mimetype = mime.lookup(namaFile) || 'application/octet-stream';
 
-        // Mengirim file ke pengguna
-        await client.sendMessage(userChatId, media, { caption: `Ini file yang Anda minta: *${fileName}*` });
-        return true;
+        // Membuat objek MessageMedia dari buffer
+        const media = new MessageMedia(mimetype, fileBuffer.toString('base64'), namaFile);
+
+        // Mengirim file ke pengguna/grup
+        await client.sendMessage(recipientId, media, { caption: `Berikut file yang Anda minta: *${namaFile}*` });
+        console.log(`[Drive] Berhasil mengirim file "${namaFile}" ke ${recipientId}`);
 
     } catch (error) {
-        console.error("Error saat mengirim file dari Drive:", error);
-        await client.sendMessage(userChatId, `Maaf, terjadi kesalahan saat mencoba mengambil file "${fileName}".`);
-        return false;
+        console.error(`Error saat mengambil atau mengirim file dari Drive:`, error.message);
+        client.sendMessage(recipientId, `Maaf, gagal mengambil file *"${namaFile}"* dari arsip. Mungkin file telah dihapus.`);
     }
 }
+
+// ▲▲▲ AKHIR DARI FUNGSI KIRIM ▲▲▲
 
 /**
  * Mencari file di Sanity berdasarkan kata kunci dan ID grup.
@@ -754,6 +770,8 @@ async function getGeminiResponse(prompt, history) {
 
 // AKHIR GEMINI RESPONSE
 
+// ▼▼▼ FUNGSI UNTUK UPLOAD FILE KE DRIVE ▼▼▼
+
 /**
  * Mengunggah file ke folder spesifik di Google Drive.
  * @param {object} media Objek media dari whatsapp-web.js.
@@ -764,21 +782,24 @@ async function uploadKeDrive(media, namaFile) {
     try {
         const fileMetadata = {
             name: namaFile,
-            parents: [process.env.GOOGLE_DRIVE_FOLDER_ID]
+            parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] // Ambil ID folder dari .env
         };
+
+        // Mengubah data base64 menjadi stream yang bisa dibaca
+        const bufferStream = new stream.PassThrough();
+        bufferStream.end(Buffer.from(media.data, 'base64'));
+
         const mediaData = {
             mimeType: media.mimetype,
-            body: Buffer.from(media.data, 'base64').toString('binary')
+            body: bufferStream
         };
 
         const response = await drive.files.create({
             resource: fileMetadata,
             media: mediaData,
             fields: 'id',
-            // --- PERBAIKAN UTAMA ADA DI SINI ---
             supportsAllDrives: true,
-            // Memberitahu Google Drive untuk tidak mengonversi file ke format Google Docs/Sheets
-            convert: false 
+            convert: false // Parameter penting agar format Excel, Word, dll tidak berubah
         });
 
         console.log(`[Drive] File berhasil diunggah dengan ID: ${response.data.id}`);
@@ -789,6 +810,8 @@ async function uploadKeDrive(media, namaFile) {
         return null;
     }
 }
+
+// ▲▲▲ AKHIR DARI FUNGSI UPLOAD ▲▲▲
 
 /**
  * Menyimpan metadata file ke Sanity.io.
