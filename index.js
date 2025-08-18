@@ -1492,6 +1492,4 @@ if (!chat.isGroup) {
 // BAGIAN 5: MENJALANKAN BOT
 // =================================================================
 console.log('Memulai inisialisasi bot WhatsApp...');
-client.initialize();    getGeminiResponse(userMessage, userHistory[message.from] || []).then(responseText => {
-        message.reply(responseText);
-    });
+client.initialize();
