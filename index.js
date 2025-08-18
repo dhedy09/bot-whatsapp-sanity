@@ -151,6 +151,29 @@ const userState = {};
 // =================================================================
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
 
+// ▼▼▼ TAMBAHKAN FUNGSI BARU INI HAPUS FILE▼▼▼
+
+/**
+ * Menghapus file dari Google Drive berdasarkan ID-nya.
+ * @param {string} fileId ID file di Google Drive.
+ * @returns {Promise<boolean>} True jika berhasil, false jika gagal.
+ */
+async function hapusFileDiDrive(fileId) {
+    try {
+        await drive.files.delete({
+            fileId: fileId,
+            supportsAllDrives: true,
+        });
+        console.log(`[Drive] Berhasil menghapus file dengan ID: ${fileId}`);
+        return true;
+    } catch (error) {
+        console.error(`[Drive] Gagal menghapus file dengan ID ${fileId}:`, error.message);
+        return false;
+    }
+}
+
+// ▲▲▲ AKHIR DARI FUNGSI BARU HAPUS FILE ▲▲▲
+
 // AWAL FUNGSI GOOGLE SEARCH
 /**
  * Melakukan pencarian di Google untuk mendapatkan jawaban atas pertanyaan umum.
@@ -1139,7 +1162,7 @@ if (userMessageLower.startsWith(cariPrefix)) {
 }
 
 
-
+// AWAL BLOK KIRIM
 const kirimPrefix = 'kirim file ';
 if (userMessageLower.startsWith(kirimPrefix)) {
     // --- LOGIKA DIUBAH TOTAL UNTUK MEMBACA NOMOR ---
@@ -1173,6 +1196,52 @@ if (userMessageLower.startsWith(kirimPrefix)) {
         return message.reply("Maaf, terjadi kesalahan saat mencoba mengirim file.");
     }
 }
+
+// ▼▼▼ AWAL BLOK HAPUS ▼▼▼
+
+else if (userMessageLower.startsWith('hapus file ')) {
+    const userLastState = userState[message.from];
+
+    // Cek apakah pengguna sudah melakukan pencarian sebelumnya
+    if (!userLastState || userLastState.type !== 'file_search_result') {
+        return message.reply('Sesi pencarian tidak ditemukan. Silakan lakukan `cari file` terlebih dahulu sebelum menghapus file.');
+    }
+
+    const nomorPilihanStr = userMessage.substring('hapus file '.length).trim();
+    const nomorPilihan = parseInt(nomorPilihanStr);
+
+    // Validasi input nomor
+    if (isNaN(nomorPilihan) || nomorPilihan < 1 || nomorPilihan > userLastState.list.length) {
+        return message.reply(`Nomor tidak valid. Harap masukkan nomor antara 1 dan ${userLastState.list.length}.`);
+    }
+
+    try {
+        const fileData = userLastState.list[nomorPilihan - 1]; // Ambil data file dari memori
+        message.reply(`⏳ Menghapus file *"${fileData.namaFile}"* dari arsip...`);
+
+        // Langkah 1: Hapus dari Google Drive
+        const driveSuccess = await hapusFileDiDrive(fileData.googleDriveId);
+        if (!driveSuccess) {
+            // Kita tetap lanjutkan meski gagal di drive, mungkin file sudah dihapus manual
+            message.reply('⚠️ Gagal menghapus file dari Google Drive (mungkin sudah dihapus sebelumnya). Melanjutkan penghapusan dari katalog...');
+        }
+
+        // Langkah 2: Hapus dari Sanity (katalog)
+        await clientSanity.delete(fileData._id);
+
+        // Hapus state setelah selesai agar tidak bisa dihapus dua kali
+        delete userState[message.from];
+        
+        return message.reply(`✅ Berhasil! File *"${fileData.namaFile}"* telah dihapus dari arsip.`);
+
+    } catch (error) {
+        console.error("Error di blok hapus file:", error);
+        return message.reply("Maaf, terjadi kesalahan saat mencoba menghapus file.");
+    }
+}
+
+// ▲▲▲ AKHIR DARI BLOK PERINTAH HAPUS ▲▲▲
+
         // ▲▲▲ BATAS AKHIR BLOK BARU  PEMANGGIL FILE▲▲▲
 
         if (userMessageLower.startsWith('cari user ')) {
