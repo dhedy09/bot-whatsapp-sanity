@@ -786,8 +786,7 @@ client.on('message', async (message) => {
 
                 try {
                     const userId = message.from;
-                    // Gunakan prefix agar tidak bentrok dengan schema pegawai
-                    const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
+                    const sanitizedId = userId.replace(/[@.]/g, '-');
                     const contact = await message.getContact();
                     const userName = contact.pushname || userId;
 
@@ -1048,7 +1047,7 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
     let initialHistory = [];
     try {
         const userId = message.from;
-        const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
+        const sanitizedId = userId.replace(/[@.]/g, '-');
         const memoryQuery = `*[_type == "memoriPengguna" && _id == $id][0]`;
         const memoryDoc = await clientSanity.fetch(memoryQuery, { id: sanitizedId });
 
@@ -1088,6 +1087,7 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
         // AWAL BLOK: MEMBUAT PENGINGAT PRIBADI (HANYA ADMIN)
 if (userMessageLower.startsWith('ingatkan')) {
+    // Dapatkan info kontak pengirim untuk mendapatkan ID asli (selalu 628...@c.us)
     const contact = await message.getContact();
     const authorId = contact.id._serialized;
 
@@ -1098,10 +1098,10 @@ if (userMessageLower.startsWith('ingatkan')) {
     }
 
     const argsString = userMessage.substring('ingatkan'.length).trim();
+    // const reminderRegex = /^(.*?)\s(.*?)\stentang\s"(.*?)"$/i;
     const reminderRegex = /^(.+?)\s(.+?)\stentang\s"(.+)"$/i;
     const match = argsString.match(reminderRegex);
 
-    // --- PERBAIKAN: Jika format salah, langsung return ---
     if (!match) {
         message.reply(
             'Format salah. Gunakan:\n`ingatkan <Nama> <Waktu> tentang "<Pesan>"`\n\n' +
@@ -1110,17 +1110,63 @@ if (userMessageLower.startsWith('ingatkan')) {
         return;
     }
 
-    // Jika format benar, baru lanjut mencari pegawai
     const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
     message.reply(`⏳ Mencari pegawai dengan nama *${namaTarget}*...`);
 
     try {
-        // ...existing code pencarian pegawai dan pembuatan pengingat...
+        const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`;
+        let pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
+
+        if (pegawaiDitemukan.length === 0 && namaTarget.toLowerCase() === 'saya') {
+            // --- PERBAIKAN UTAMA: Menggunakan Parameterized Query ---
+            const idToSearch = authorId.replace('@c.us', '-c-us');
+            const selfQuery = `*[_type == "pegawai" && _id == $idToSearch][0]`;
+            const selfData = await clientSanity.fetch(selfQuery, { idToSearch: idToSearch });
+            
+            if (selfData) {
+                pegawaiDitemukan = [selfData];
+            }
+        }
+
+        if (pegawaiDitemukan.length === 0) {
+            message.reply(`Maaf, pegawai dengan nama "${namaTarget}" tidak ditemukan.`);
+            return;
+        }
+        if (pegawaiDitemukan.length > 1) {
+            message.reply(`Ditemukan ${pegawaiDitemukan.length} pegawai dengan nama mirip "${namaTarget}". Mohon gunakan nama yang lebih spesifik.`);
+            return;
+        }
+
+        const target = pegawaiDitemukan[0];
+        const targetNomorHp = target._id.replace('-c-us', '@c.us');
+        const targetNama = target.nama;
+        const waktuKirim = parseWaktuIndonesia(waktuString);
+
+        if (!waktuKirim) {
+            message.reply(`Maaf, saya tidak mengerti format waktu "${waktuString}".\nGunakan format seperti "besok jam 10" atau "dalam 5 menit".`);
+            return;
+        }
+
+        const newPengingat = {
+            _type: 'pengingat', pesan, targetNomorHp, targetNama,
+            waktuKirim: waktuKirim.toISOString(), status: 'menunggu',
+        };
+        await clientSanity.create(newPengingat);
+
+        const waktuLokal = waktuKirim.toLocaleString('id-ID', {
+            timeZone: 'Asia/Makassar',
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        });
+        message.reply(`✅ Pengingat berhasil dibuat!\n\n*Untuk:* ${targetNama}\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`);
+
     } catch (error) {
-        // ...existing error handling...
+        console.error("Gagal membuat pengingat:", error);
+        message.reply("Maaf, terjadi kesalahan di server saat mencoba membuat pengingat.");
     }
     return;
 }
+
 
         // ▲▲▲ AKHIR DARI BLOK PENGINGAT ▲▲▲
 
