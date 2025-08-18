@@ -1056,16 +1056,21 @@ if (userMessageLower.startsWith(cariPrefix)) {
     try {
         message.reply(`⏳ Mencari file dengan kata kunci *"${kataKunci}"*...`);
         const groupId = chat.isGroup ? chat.id._serialized : 'pribadi';
-        const hasilPencarian = await cariFileDiSanity(kataKunci, groupId);
+        
+        // Logika pencarian sekarang ada di sini, tidak di fungsi terpisah
+        const query = `*[_type == "fileArsip" && groupId == $groupId && namaFile match $kataKunci] | order(_createdAt desc)`;
+        const hasilPencarian = await clientSanity.fetch(query, { 
+            groupId: groupId, 
+            kataKunci: `*${kataKunci}*` 
+        });
 
         if (hasilPencarian.length === 0) {
             return message.reply(`Tidak ada file yang ditemukan dengan kata kunci *"${kataKunci}"* di arsip ini.`);
         }
 
-        // --- PERUBAHAN UTAMA DI SINI ---
         // Simpan hasil pencarian ke memori sementara (userState)
         userState[message.from] = {
-            type: 'file_search_result', // State baru untuk hasil pencarian file
+            type: 'file_search_result',
             list: hasilPencarian
         };
 
