@@ -154,21 +154,36 @@ const userState = {};
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI HAPUS FILE▼▼▼
 
 /**
- * Menghapus file dari Google Drive berdasarkan ID-nya. (VERSI DIAGNOSTIK)
+ * Menghapus file dari Google Drive berdasarkan ID-nya.
  * @param {string} fileId ID file di Google Drive.
  * @returns {Promise<boolean>} True jika berhasil, false jika gagal.
  */
 async function hapusFileDiDrive(fileId) {
     try {
+        // --- PERBAIKAN UTAMA ADA DI SINI ---
+        // 1. Muat kredensial Google dari environment variable
+        const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+        
+        // 2. Buat objek autentikasi
+        const auth = new google.auth.GoogleAuth({
+            credentials,
+            scopes: ['https://www.googleapis.com/auth/drive'], // Gunakan scope penuh untuk bisa menghapus
+        });
+
+        // 3. Buat koneksi ke Drive dengan autentikasi yang benar
+        const drive = google.drive({ version: 'v3', auth });
+        // --- AKHIR PERBAIKAN ---
+
+        // 4. Jalankan perintah hapus
         await drive.files.delete({
             fileId: fileId,
             supportsAllDrives: true,
         });
+
         console.log(`[Drive] Berhasil menghapus file dengan ID: ${fileId}`);
         return true;
+
     } catch (error) {
-        // --- PERUBAHAN ADA DI SINI ---
-        // Kita akan mencetak keseluruhan objek error untuk melihat detailnya
         console.error(`[Drive] Gagal menghapus file dengan ID ${fileId}.`);
         console.error("================= DETAIL ERROR LENGKAP DARI GOOGLE =================\n", error, "\n==================================================================");
         return false;
