@@ -453,7 +453,8 @@ async function getLatestNews(query) {
  * @param {string} userId ID WhatsApp pengguna (misal: "62812...@c.us").
  * @returns {Promise<boolean>} Mengembalikan true jika admin, false jika bukan.
  */
-async function isAdmin(userId) {
+async function isUserAdmin(userId) {
+    if (!userId) return false;
     try {
         const sanitizedId = userId.replace(/[@.]/g, '-');
         const query = `*[_type == "pegawai" && _id == $id][0]`;
