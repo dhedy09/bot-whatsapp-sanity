@@ -22,7 +22,6 @@ export default defineType({
       of: [{type: 'text'}] // Array berisi teks panjang
     })
   ],
-  // Tampilkan nama pengguna di daftar agar mudah dibaca
   preview: {
     select: {
       title: 'namaPengguna',

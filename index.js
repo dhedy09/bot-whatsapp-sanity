@@ -29,8 +29,13 @@ app.get('/health', (req, res) => {
 const tools = [{
     functionDeclarations: [
         {
+            name: "googleSearch", // <-- ALAT BARU DITAMBAHKAN
+            description: "Mencari informasi umum di internet menggunakan Google. Gunakan ini untuk pertanyaan tentang fakta, orang, tempat, peristiwa terkini, atau topik apa pun yang tidak tercakup oleh alat lain.",
+            parameters: { type: "OBJECT", properties: { query: { type: "STRING", description: "Pertanyaan atau kata kunci pencarian." } }, required: ["query"] },
+        },
+        {
             name: "getLatestNews",
-            description: "Mendapatkan berita terkini berdasarkan topik atau kata kunci.",
+            description: "Mendapatkan berita terkini berdasarkan topik atau kata kunci spesifik.",
             parameters: { type: "OBJECT", properties: { query: { type: "STRING", description: "Topik berita." } }, required: ["query"] },
         },
         {
@@ -39,13 +44,12 @@ const tools = [{
             parameters: { type: "OBJECT", properties: { location: { type: "STRING", description: "Nama kota." } }, required: ["location"] },
         },
         {
-            name: "getGempa", // <-- ALAT BARU
-            description: "Mendapatkan informasi gempa bumi terkini yang terjadi di wilayah Indonesia dari BMKG.",
-            // Tidak ada parameters karena tidak butuh input
+            name: "getGempa",
+            description: "Mendapatkan informasi gempa bumi terkini dari BMKG.",
         },
         {
             name: "calculate",
-            description: "Mengevaluasi ekspresi matematika atau formula. Gunakan ini untuk semua perhitungan.",
+            description: "Mengevaluasi ekspresi matematika.",
             parameters: { type: "OBJECT", properties: { expression: { type: "STRING", description: "Ekspresi matematika." } }, required: ["expression"] },
         },
     ],
@@ -118,6 +122,44 @@ const userState = {};
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
+
+// AWAL FUNGSI GOOGLE SEARCH
+/**
+ * Melakukan pencarian di Google untuk mendapatkan jawaban atas pertanyaan umum.
+ * @param {string} query Pertanyaan atau topik yang ingin dicari.
+ * @returns {Promise<object>} Ringkasan hasil pencarian.
+ */
+async function googleSearch(query) {
+    console.log(`[Tool] Menjalankan googleSearch untuk query: ${query}`);
+    try {
+        const customsearch = google.customsearch('v1');
+        const response = await customsearch.cse.list({
+            auth: process.env.GOOGLE_API_KEY,
+            cx: process.env.SEARCH_ENGINE_ID,
+            q: query,
+            num: 3, // Ambil 3 hasil teratas
+        });
+
+        const items = response.data.items;
+        if (!items || items.length === 0) {
+            return { error: `Tidak ada hasil pencarian di Google untuk "${query}".` };
+        }
+
+        // Susun ringkasan dari hasil pencarian untuk diberikan ke AI
+        const searchResults = items.map(item => ({
+            judul: item.title,
+            link: item.link,
+            cuplikan: item.snippet,
+        }));
+
+        return { ringkasan: `Berikut adalah hasil pencarian teratas untuk "${query}"`, hasil: searchResults };
+
+    } catch (error) {
+        console.error("Error saat melakukan Google Search:", error.message);
+        return { error: "Gagal melakukan pencarian di Google." };
+    }
+}
+// ▲▲▲ AKHIR DARI FUNGSI GOOGLE SEARCH▲▲▲
 
 /**
  * Mengambil data gempa bumi terkini dari server BMKG gempa
@@ -641,7 +683,11 @@ async function showPustakaMenu(message, categoryId) {
         message.reply("Maaf, terjadi kesalahan saat memuat Pustaka Data.");
     }
 }
+// ▲▲▲ AKHIR DARI KODE PENGGANTI ▲▲▲
 
+// AWAL GEMINI RESPONSE
+/**
+ * Mengirim prompt ke API Gemini, menangani function calling, dan mengembalikan respons.
 /**
  * Mengirim prompt ke API Gemini, menangani function calling, dan mengembalikan respons.
  * @param {string} prompt Pesan baru dari pengguna.
@@ -662,42 +708,46 @@ async function getGeminiResponse(prompt, history) {
                 console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
                 
                 let functionResponse;
-                if (call.name === 'getCurrentWeather') {
+                // --- Kumpulan Alat AI ---
+                if (call.name === 'googleSearch') { // <-- LOGIKA BARU UNTUK GOOGLE SEARCH
+                    functionResponse = await googleSearch(call.args.query);
+                } else if (call.name === 'getCurrentWeather') {
                     functionResponse = await getCurrentWeather(call.args.location);
                 } else if (call.name === 'getLatestNews') {
                     functionResponse = await getLatestNews(call.args.query);
-                } else if (call.name === 'getGempa') { // <-- LOGIKA BARU
+                } else if (call.name === 'getGempa') {
                     functionResponse = await getGempa();
                 } else if (call.name === 'calculate') {
                     functionResponse = evaluateMathExpression(call.args.expression);
                 } else {
                     console.error(`❌ Nama fungsi tidak dikenali: ${call.name}`);
-                    functionResponse = null;
+                    functionResponse = { error: `Fungsi ${call.name} tidak ada.` };
                 }
 
-                if (functionResponse) {
-                    const result2 = await chat.sendMessage([
-                        { functionResponse: { name: call.name, response: { content: JSON.stringify(functionResponse) } } } // Dibungkus JSON.stringify
-                    ]);
-                    return result2.response.text();
-                } else {
-                    return "Maaf, saya tidak mengenali alat yang diminta.";
-                }
-            }
+                // --- Perbaikan kecil pada format balasan ke AI ---
+                const result2 = await chat.sendMessage([
+                    { functionResponse: { name: call.name, response: functionResponse } }
+                ]);
+                return result2.response.text();
             
-            return result.response.text();
+            } else {
+                 // Jika tidak ada panggilan fungsi, langsung kembalikan respons teks
+                return result.response.text();
+            }
 
         } catch (error) {
-            if (error.status === 503) {
-                console.log(`Attempt ${attempt}: Gagal (503), server sibuk. Mencoba lagi dalam ${delay / 1000} detik...`);
-                if (attempt === maxRetries) {
-                    return "Maaf, Asisten AI sedang sangat sibuk saat ini. Coba lagi nanti.";
+            // --- Perbaikan pada penanganan error agar lebih kuat ---
+            console.error(`Error pada percobaan ${attempt} saat memanggil API Gemini:`, error);
+
+            if (attempt === maxRetries) {
+                console.error("Gagal setelah percobaan maksimal.");
+                if (error.message && error.message.includes('response was blocked')) {
+                    return "Maaf, respons saya diblokir karena kebijakan keamanan. Mungkin pertanyaan Anda sensitif.";
                 }
-                await new Promise(resolve => setTimeout(resolve, delay));
-            } else {
-                console.error("Error saat memanggil API Gemini:", error);
-                return "Maaf, terjadi kesalahan yang tidak terduga saat menghubungi Asisten AI.";
+                return "Maaf, Asisten AI sedang mengalami gangguan. Silakan coba lagi beberapa saat lagi.";
             }
+            
+            await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
 }
