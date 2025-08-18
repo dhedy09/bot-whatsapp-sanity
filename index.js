@@ -1029,34 +1029,6 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 // ▼▼▼ GANTI KESELURUHAN BLOK 'ingatkan' ANDA DENGAN YANG INI ▼▼▼
 
 if (userMessageLower.startsWith('ingatkan')) {
-    // --- PERBAIKAN UTAMA: Dapatkan info kontak pengirim untuk ID asli ---
-    const contact = await message.getContact();
-    const authorId = contact.id._serialized; // Ini akan selalu 628...@c.us
-    console.log("--- DEBUGGING ADMIN DI GRUP ---");
-    console.log("ID Grup (message.from):", message.from);
-    console.log("ID Pengirim (message.author):", message.author);
-    console.log("ID yang akan dicek (authorId):", authorId);
-
-    const isUserAdmin = await isAdmin(authorId);
-    Oke, ini sangat aneh dan membuat frustrasi, terutama karena Anda sudah memastikan status admin Anda di Sanity. Jika kode perbaikan sudah diterapkan tapi hasilnya masih sama, berarti ada sesuatu yang tidak beres di salah satu dari tiga area ini:
-
-Bot salah mengidentifikasi ID Anda di grup.
-
-Fungsi isAdmin gagal mencocokkan ID tersebut.
-
-Ada kesalahan data di Sanity.
-
-Mari kita lakukan investigasi singkat untuk menemukan masalahnya. Kita akan menambahkan beberapa console.log untuk "mengintip" apa yang sebenarnya dilihat oleh bot saat Anda mengirim perintah di grup.
-
-## Langkah Investigasi
-1. Tambahkan "Mata-mata" (Console.log) ke Kode Anda
-Buka file index.js Anda dan cari blok if (userMessageLower.startsWith('ingatkan')). Tambahkan beberapa baris console.log seperti di bawah ini untuk melihat variabel-variabel penting.
-
-JavaScript
-
-// ▼▼▼ MODIFIKASI BLOK 'ingatkan' ANDA SEPERTI INI ▼▼▼
-
-if (userMessageLower.startsWith('ingatkan')) {
     const authorId = message.author || message.from;
 
     // --- TAMBAHKAN LOG UNTUK DEBUGGING ---
