@@ -1048,10 +1048,13 @@ if (userMessageLower.startsWith('ingatkan')) {
             const match = argsString.match(reminderRegex);
 
             // STRUKTUR BARU YANG LEBIH AMAN: IF...ELSE
-            if (match) {
-                // HANYA JIKA FORMAT BENAR, LANJUTKAN PROSES
-                const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
-                message.reply(`⏳ Mencari pegawai dengan nama *${namaTarget}*...`);
+            if (!match) {
+                message.reply(
+                    'Format salah. Gunakan:\n`ingatkan <Nama> <Waktu> tentang "<Pesan>"`\n\n' +
+                    '*Contoh:*\n`ingatkan Budi besok jam 9 tentang "Rapat evaluasi"`'
+                );
+                return; // Hentikan proses jika format salah
+            }
 
                 try {
                     const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`;
