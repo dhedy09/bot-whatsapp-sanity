@@ -807,7 +807,10 @@ async function getGeminiResponse(prompt, history) {
 
         if (isResearchQuery) {
             console.log("[Mode] AI masuk ke mode Peneliti.");
-            const instruction = "PERINTAH MUTLAK: Tugas utamamu adalah menjadi asisten peneliti. Jangan pernah menjawab dari ingatan. Kamu WAJIB mengikuti proses ini: LANGKAH 1: Gunakan 'googleSearch' untuk menemukan URL yang relevan. LANGKAH 2: SEGERA setelah itu, WAJIB gunakan 'readWebPage' untuk membaca isi dari URL tersebut. LANGKAH 3: Jawab pertanyaan pengguna HANYA berdasarkan informasi yang kamu dapat dari 'readWebPage'. JANGAN PERNAH mengatakan kamu tidak bisa mengakses internet atau memeriksa URL.";
+            const instruction = `PERINTAH UTAMA: Tugasmu adalah menjadi asisten peneliti yang akurat.
+            ATURAN 1: Jika pertanyaan pengguna secara spesifik meminta 'berita', 'kabar terkini', atau 'headlines', kamu WAJIB langsung menggunakan alat 'getLatestNews'.
+            ATURAN 2: Untuk semua pertanyaan riset umum lainnya (seperti siapa, apa, di mana, mengapa, jelaskan), kamu WAJIB mengikuti proses dua langkah: 1. Gunakan 'googleSearch'. 2. Gunakan 'readWebPage'.
+            JANGAN PERNAH menjawab pertanyaan-pertanyaan ini dari ingatanmu sendiri.`;
             finalPrompt = `${instruction}\n\nPertanyaan Pengguna: "${prompt}"`;
         } else {
             console.log("[Mode] AI masuk ke mode Ngobrol Santai.");
