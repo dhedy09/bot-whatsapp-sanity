@@ -1023,48 +1023,89 @@ client.on('message', async (message) => {
                 return;
             }
 
-            // ▼▼▼ PASTE BLOK BARU INI DI TEMPAT YANG SAMA ▼▼▼
-            // BLOK BARU: MENYIMPAN MEMORI JANGKA PANJANG (VERSI PERBAIKAN)
-            const memoryTriggers = ['ingat ini:', 'ingat saya:'];
-            const trigger = memoryTriggers.find(t => userMessageLower.startsWith(t));
+const memoryTriggers = ['ingat ini:', 'ingat saya:'];
+const lowerMsg = message.body.trim().toLowerCase();
+const trigger = memoryTriggers.find(t => lowerMsg.startsWith(t));
 
-            if (trigger) {
-                const memoryToSave = userMessage.substring(trigger.length).trim();
 
-                if (!memoryToSave) {
-                    message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
-                    return;
-                }
+if (userState[message.from]?.type === 'ai_mode') {
+// === 1. Keluar dari sesi AI jika ketik "selesai" atau "stop" ===
+const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
+if (exitCommands.includes(lowerMsg)) {
+delete userState[message.from];
+message.reply('Sesi AI telah berakhir. Anda kembali ke menu utama.');
+await showMainMenu(message);
+return;
+}
 
-                try {
-                    const userId = message.from;
-                    const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
-                    const contact = await message.getContact();
-                    const userName = contact.pushname || userId;
 
-                    await clientSanity.createIfNotExists({
-                        _id: sanitizedId,
-                        _type: 'memoriPengguna',
-                        userId: userId,
-                        namaPanggilan: userName,
-                        daftarMemori: []
-                    });
+// === 2. Menyimpan memori jika diawali "ingat ini:" atau "ingat saya:" ===
+if (trigger) {
+const memoryToSave = message.body.substring(trigger.length).trim();
+if (!memoryToSave) {
+message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
+return;
+}
 
-                    await clientSanity
-                        .patch(sanitizedId)
-                        .append('daftarMemori', [memoryToSave])
-                        .commit({ autoGenerateArrayKeys: true });
 
-                    message.reply("Baik, saya akan mengingatnya.");
-                    console.log(`Memori baru disimpan untuk user ${userName}: "${memoryToSave}"`);
+try {
+const userId = message.from;
+const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
+const contact = await message.getContact();
+const userName = contact.pushname || userId;
 
-                } catch (error) {
-                    console.error("Gagal menyimpan memori ke Sanity:", error);
-                    message.reply("Maaf, terjadi kesalahan saat saya mencoba mengingat informasi ini.");
-                }
-                return; // Hentikan proses agar tidak dikirim ke AI
-            }
-            // ▲▲▲ AKHIR BLOK BARU ▲▲▲
+
+// Pastikan dokumen memori ada
+await clientSanity.createIfNotExists({
+_id: sanitizedId,
+_type: 'memoriPengguna',
+userId: userId,
+namaPanggilan: userName,
+daftarMemori: []
+});
+
+
+// Tambah memori
+await clientSanity
+.patch(sanitizedId)
+.append('daftarMemori', [memoryToSave])
+.commit({ autoGenerateArrayKeys: true });
+
+
+message.reply("Baik, saya akan mengingatnya.");
+console.log(`Memori baru disimpan untuk ${userId}: ${memoryToSave}`);
+} catch (err) {
+console.error("Gagal menyimpan memori:", err);
+message.reply("Maaf, terjadi kesalahan saat menyimpan informasi ini.");
+}
+
+
+return; // Stop agar tidak dilempar ke AI
+}
+
+
+// === 3. Jika bukan perintah khusus, kirim ke Gemini ===
+try {
+await chat.sendStateTyping();
+const aiResponse = await getGeminiResponse(message.body, userState[message.from].history);
+
+
+message.reply(aiResponse);
+userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
+userState[message.from].history.push({ role: 'model', parts: [{ text: aiResponse }] });
+
+
+if (userState[message.from].history.length > 10) {
+userState[message.from].history = userState[message.from].history.slice(-10);
+}
+} catch (e) {
+console.error("[AI] Gagal merespons:", e);
+message.reply("Maaf, terjadi kesalahan dari AI.");
+}
+
+
+return;
+}
 
             try {
                 await chat.sendStateTyping();
@@ -1211,7 +1252,7 @@ if (userMessageLower.startsWith(simpanPrefix)) {
                 await clientSanity.create({
                     _type: 'langgananGempa',
                     userId,
-                    namaPengguna: userName,
+                    namaPanggilan: userName,
                     status: 'aktif',
                     tanggalDaftar: new Date().toISOString()
                 });
