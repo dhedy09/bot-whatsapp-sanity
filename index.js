@@ -1023,119 +1023,99 @@ client.on('ready', () => {
 // BLOK HANDLER PESAN UTAMA
 // =================================================================
 client.on('message', async (message) => {
-    const chat = await message.getChat();
-    const userMessage = message.body.trim();
-    const userMessageLower = userMessage.toLowerCase();
-    const userLastState = userState[message.from] || userState[message.author];
+  const chat = await message.getChat();
+  const userMessage = message.body.trim();
+  const userMessageLower = userMessage.toLowerCase();
+  const userLastState = userState[message.from] || userState[message.author];
 
-    // === MODE AI ===
-    if (userLastState && userLastState.type === 'ai_mode') {
-        const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
-        const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
-        const match = message.body.match(memoryRegex);
+  // === MODE AI ===
+  if (userLastState && userLastState.type === 'ai_mode') {
+    const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
+    const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
+    const match = message.body.match(memoryRegex);
 
-        // === KELUAR DARI MODE AI ===
-        if (exitCommands.includes(userMessageLower)) {
-        delete userState[message.from];
-        message.reply('Sesi AI telah berakhir. Anda kembali ke menu utama.');
-        await showMainMenu(message);
+    // === KELUAR DARI MODE AI ===
+    if (exitCommands.includes(userMessageLower)) {
+      delete userState[message.from];
+      message.reply('Sesi AI telah berakhir. Anda kembali ke menu utama.');
+      await showMainMenu(message);
+      return;
+    }
+
+    // === JIKA GAMBAR DIKIRIM ===
+    if (message.hasMedia && message.type === 'image') {
+      try {
+        const media = await message.downloadMedia();
+        const imageBuffer = Buffer.from(media.data, 'base64');
+        const caption = message.caption || 'Tolong jelaskan isi gambar ini.';
+
+        const response = await getGeminiVisionResponse(imageBuffer, caption);
+        message.reply(response);
+      } catch (err) {
+        console.error("Gagal memproses gambar:", err);
+        message.reply("Maaf, saya gagal membaca gambar tersebut.");
+      }
+      return;
+    }
+
+    // === SIMPAN MEMORI ===
+    if (match) {
+      const memoryToSave = message.body.replace(memoryRegex, '').trim();
+      if (!memoryToSave) {
+        message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
         return;
-        }
-
-        // === JIKA GAMBAR DIKIRIM ===
-        if (message.hasMedia && message.type === 'image') {
-        try {
-            const media = await message.downloadMedia();
-            const imageBuffer = Buffer.from(media.data, 'base64');
-            const caption = message.caption || 'Tolong jelaskan isi gambar ini.';
-
-            const response = await getGeminiVisionResponse(imageBuffer, caption);
-            message.reply(response);
-        } catch (err) {
-            console.error("Gagal memproses gambar:", err);
-            message.reply("Maaf, saya gagal membaca gambar tersebut.");
-        }
-        return;
-        }
-
-        // === SIMPAN MEMORI ===
-        if (match) {
-        const memoryToSave = message.body.replace(memoryRegex, '').trim();
-        if (!memoryToSave) {
-            message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
-            return;
-        }
-
-        try {
-            const userId = message.from;
-            const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
-            const contact = await message.getContact();
-            const userName = contact.pushname || userId;
-
-            await clientSanity.createIfNotExists({
-            _id: sanitizedId,
-            _type: 'memoriPengguna',
-            userId: userId,
-            namaPanggilan: userName,
-            daftarMemori: []
-            });
-
-            await clientSanity
-            .patch(sanitizedId)
-            .append('daftarMemori', [memoryToSave])
-            .commit({ autoGenerateArrayKeys: true });
-
-            message.reply("Baik, saya akan mengingatnya.");
-            console.log(`Memori baru disimpan untuk ${userId}: ${memoryToSave}`);
-        } catch (err) {
-            console.error("Gagal menyimpan memori:", err);
-            message.reply("Maaf, terjadi kesalahan saat menyimpan informasi ini.");
-        }
-
-        return;
-        }
-
-
-        // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
-        try {
-        await chat.sendStateTyping();
-        const aiResponse = await getGeminiResponse(message.body, userState[message.from].history);
-
-
-        message.reply(aiResponse);
-        userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
-        userState[message.from].history.push({ role: 'model', parts: [{ text: aiResponse }] });
-
-
-        if (userState[message.from].history.length > 10) {
-        userState[message.from].history = userState[message.from].history.slice(-10);
-        }
-        } catch (e) {
-        console.error("[AI] Gagal merespons:", e);
-        message.reply("Maaf, terjadi kesalahan dari AI.");
-        }
-
-
-        return;
-        }
+      }
 
       try {
-        await chat.sendStateTyping()
-        const aiResponse = await getGeminiResponse(userMessage, userLastState.history)
+        const userId = message.from;
+        const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
+        const contact = await message.getContact();
+        const userName = contact.pushname || userId;
 
-        message.reply(aiResponse)
-        userLastState.history.push({role: 'user', parts: [{text: userMessage}]})
-        userLastState.history.push({role: 'model', parts: [{text: aiResponse}]})
-        const MAX_HISTORY = 10
-        if (userLastState.history.length > MAX_HISTORY) {
-          userLastState.history = userLastState.history.slice(-MAX_HISTORY)
-        }
-      } catch (error) {
-        console.error('Error di dalam blok AI Mode:', error)
-        message.reply('Maaf, terjadi gangguan. Coba ulangi pertanyaan Anda.')
+        await clientSanity.createIfNotExists({
+          _id: sanitizedId,
+          _type: 'memoriPengguna',
+          userId: userId,
+          namaPanggilan: userName,
+          daftarMemori: []
+        });
+
+        await clientSanity
+          .patch(sanitizedId)
+          .append('daftarMemori', [memoryToSave])
+          .commit({ autoGenerateArrayKeys: true });
+
+        message.reply("Baik, saya akan mengingatnya.");
+        console.log(`Memori baru disimpan untuk ${userId}: ${memoryToSave}`);
+      } catch (err) {
+        console.error("Gagal menyimpan memori:", err);
+        message.reply("Maaf, terjadi kesalahan saat menyimpan informasi ini.");
       }
-      return
-    } // BLOK 2: MENANGANI PERINTAH TEKS
+
+      return;
+    }
+
+    // === JAWABAN AI ===
+    try {
+      await chat.sendStateTyping();
+      const aiResponse = await getGeminiResponse(message.body, userState[message.from].history);
+
+      message.reply(aiResponse);
+      userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
+      userState[message.from].history.push({ role: 'model', parts: [{ text: aiResponse }] });
+
+      if (userState[message.from].history.length > 10) {
+        userState[message.from].history = userState[message.from].history.slice(-10);
+      }
+    } catch (e) {
+      console.error("[AI] Gagal merespons:", e);
+      message.reply("Maaf, terjadi kesalahan dari AI.");
+    }
+
+    return;
+  }
+    
+    // BLOK 2: MENANGANI PERINTAH TEKS
 
     if (userMessageLower === 'halo panda') {
       await showMainMenu(message)
