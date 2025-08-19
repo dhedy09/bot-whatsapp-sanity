@@ -52,14 +52,14 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 const tools = [{
     functionDeclarations: [
         {
-            name: "readWebPage", // <-- ALAT BARU
-            description: "Membaca konten teks utama dari sebuah halaman web berdasarkan URL. Gunakan ini setelah googleSearch untuk mendapatkan detail lebih dalam dari link yang relevan.",
-            parameters: { type: "OBJECT", properties: { url: { type: "STRING", description: "URL valid dari halaman web yang ingin dibaca." } }, required: ["url"] },
+            name: "googleSearch",
+            description: "Langkah pertama untuk menjawab pertanyaan tentang topik umum, fakta, orang, tempat, atau peristiwa. Selalu gunakan alat ini terlebih dahulu untuk menemukan URL yang relevan.",
+            parameters: { type: "OBJECT", properties: { query: { type: "STRING", description: "Pertanyaan atau kata kunci pencarian." } }, required: ["query"] },
         },
         {
-            name: "googleSearch",
-            description: "Mencari informasi umum di internet menggunakan Google. Gunakan ini untuk pertanyaan tentang fakta, orang, tempat, peristiwa terkini, atau topik apa pun yang tidak tercakup oleh alat lain.",
-            parameters: { type: "OBJECT", properties: { query: { type: "STRING", description: "Pertanyaan atau kata kunci pencarian." } }, required: ["query"] },
+            name: "readWebPage",
+            description: "Langkah kedua setelah menggunakan googleSearch. Gunakan alat ini untuk membaca isi dari URL paling relevan yang ditemukan oleh googleSearch untuk mendapatkan jawaban yang mendalam dan detail.",
+            parameters: { type: "OBJECT", properties: { url: { type: "STRING", description: "URL valid dari halaman web yang ingin dibaca." } }, required: ["url"] },
         },
         {
             name: "getLatestNews",
@@ -806,7 +806,13 @@ async function getGeminiResponse(prompt, history) {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            const chat = model.startChat({ history: history, tools: tools });
+            const systemInstruction = "Kamu adalah Panda Bot, asisten AI peneliti yang cerdas dan teliti. Saat diberi pertanyaan yang membutuhkan pengetahuan eksternal, kamu harus selalu mengikuti proses dua langkah: Pertama, gunakan alat googleSearch untuk menemukan sumber informasi yang relevan. Kedua, gunakan alat readWebPage untuk membaca konten dari URL yang paling menjanjikan. Jangan pernah menjawab hanya berdasarkan ringkasan dari hasil pencarian. Selalu baca sumbernya terlebih dahulu untuk memberikan jawaban yang akurat dan mendalam.";
+
+            const chat = model.startChat({
+                history: history,
+                tools: tools,
+                systemInstruction: systemInstruction, // <-- TAMBAHKAN BARIS INI
+            });
             const result = await chat.sendMessage(prompt);
             const call = result.response.functionCalls()?.[0];
 
