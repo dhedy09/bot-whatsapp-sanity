@@ -22,7 +22,6 @@ const axios = require('axios');
 const app = express();
 const path = require('path');
 const cheerio = require('cheerio');
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 
 // --- INISIALISASI KLIEN GOOGLE (DRIVE, SEARCH, DLL) ---
