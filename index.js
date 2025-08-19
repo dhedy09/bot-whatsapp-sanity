@@ -1539,15 +1539,21 @@ try {
 
 
     // Inisialisasi state dengan history yang mungkin sudah berisi memori
-    userState[message.from] = { type: 'ai_mode', history: initialHistory };
-    
+// Inisialisasi state dengan history yang mungkin sudah berisi memori
+userState[message.from] = { type: 'ai_mode', history: initialHistory };
+
+try {
     const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`);
     const welcomeMessage = result ? result.jawaban : "Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti.";
     message.reply(welcomeMessage);
-    
-    return;
+} catch (error) {
+    console.error("Gagal mengambil salam_sesi_ai:", error);
+    message.reply("Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti.");
 }
+
+return;
 }
+
 
         // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
         // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
@@ -1915,7 +1921,7 @@ if (userMessageLower.startsWith('ingatkan')) {
                         message.reply(detailMessage);
                         delete userState[message.from];
                         return;
-                    }else if (userLastState.type === 'menu_utama') {
+                    } else if (userLastState.type === 'menu_utama') {
                     if (selectedItem.tipeLink === 'kategori_pustaka') {
                         await showPustakaMenu(message, selectedItem.linkKategori?._ref || null);
                     } else if (selectedItem.tipeLink === 'perintah_khusus') {
@@ -1925,7 +1931,7 @@ if (userMessageLower.startsWith('ingatkan')) {
                             const linkWa = `https://wa.me/${nomorBot}?text=${teksOtomatis}`;
                             const replyMessage = `Untuk memulai sesi privat dengan Asisten AI, silakan klik link di bawah ini. Anda akan diarahkan ke chat pribadi dengan saya.\n\n${linkWa}`;
                             message.reply(replyMessage);
-                        }else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
+                        } else if (selectedItem.perintahKhusus === 'tampilkan_petunjuk_user_sipd') {
                             const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "petunjuk_cari_user"][0]`);
                             if (result) {
                                 message.reply(result.jawaban + '\n\nBalas dengan *0* untuk kembali.');
@@ -1941,15 +1947,15 @@ if (userMessageLower.startsWith('ingatkan')) {
 // JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
 // ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
 if (!chat.isGroup) {
-    const responseText = await getGeminiResponse(userMessage, userHistory[message.from] || []);
+    const responseText = await getGeminiResponse(userMessage, userState[message.from]?.history || []);
     message.reply(responseText);
 }
 // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
-    } catch (error) {
-        console.error('Terjadi error fatal di event message:', error);
-        message.reply('Maaf, terjadi kesalahan tak terduga. Silakan coba lagi.');
-    }
+} catch (error) {
+    console.error('Terjadi error fatal di event message:', error);
+    message.reply('Maaf, terjadi kesalahan tak terduga. Silakan coba lagi.');
+}
 });
 // =================================================================
 // AKHIR BLOK HANDLER PESAN UTAMA
