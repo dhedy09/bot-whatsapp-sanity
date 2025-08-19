@@ -625,46 +625,51 @@ async function getCurrentWeather(location) {
 // ▼▼▼ FUNGSI BERITA ▼▼▼
 
 /**
- * Mengambil berita utama terkini dari NewsAPI.org.
- * Jika berhasil, mengembalikan string daftar berita.
- * Jika gagal, akan melempar (throw) sebuah error.
- * @param {string} query Topik berita yang ingin dicari.
- * @returns {Promise<string>} String berisi daftar judul berita.
+ * Mengambil berita terkini dari NewsAPI menggunakan endpoint yang fleksibel.
+ * @param {string} query Kata kunci pencarian berita.
+ * @returns {Promise<object>} Objek yang selalu berisi properti 'articles' (bisa berupa array kosong).
  */
 async function getLatestNews(query) {
+    console.log(`[Tool] Menjalankan getLatestNews dengan query: ${query}`);
     try {
-        console.log(`Mencari berita untuk query: ${query}`);
         const apiKey = process.env.NEWS_API_KEY;
         if (!apiKey) {
-            throw new Error("NEWS_API_KEY tidak ditemukan di environment variables.");
+            console.error("[Berita] NEWS_API_KEY tidak diatur.");
+            return { articles: [] }; // Kembalikan array kosong jika API key tidak ada
         }
 
-        const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&apiKey=${apiKey}&pageSize=5&sortBy=publishedAt&language=id`;
-        
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            throw new Error(`Gagal mengambil data dari NewsAPI (Status: ${response.status})`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.articles.length === 0) {
-            return `Maaf, tidak ada berita yang ditemukan untuk topik "${query}".`;
-        }
-
-        let newsDescription = `Berikut 5 berita teratas terkait "${query}":\n\n`;
-        data.articles.forEach((article, index) => {
-            newsDescription += `*${index + 1}. ${article.title}*\n`;
-            newsDescription += `  - _Sumber: ${article.source.name}_\n`;
+        const response = await axios.get('https://newsapi.org/v2/everything', {
+            params: {
+                q: query || 'indonesia', // Jika query kosong, cari berita populer di Indonesia
+                language: 'id',
+                apiKey: apiKey,
+                pageSize: 5,
+                sortBy: 'publishedAt' // Selalu ambil yang terbaru
+            }
         });
-        return newsDescription;
+
+        const articles = response.data.articles;
+        if (!articles || articles.length === 0) {
+            console.log(`[Berita] Tidak ada artikel yang ditemukan untuk query: "${query}"`);
+            return { articles: [] }; // Kembalikan array kosong jika tidak ada hasil
+        }
+
+        const formattedArticles = articles.map(article => ({
+            title: article.title,
+            description: article.description,
+            source: article.source.name,
+            url: article.url
+        }));
         
+        return { articles: formattedArticles };
+
     } catch (error) {
-        console.error("Error di dalam fungsi getLatestNews:", error.message);
-        throw error;
+        console.error("Error saat mengambil berita dari NewsAPI:", error.message);
+        // Jika terjadi error server apapun, kembalikan array kosong agar bot tidak macet
+        return { articles: [] };
     }
 }
+// ▲▲▲ AKHIR DARI FUNGSI BERITA ▲▲▲
 
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI admin ▼▼▼
 
