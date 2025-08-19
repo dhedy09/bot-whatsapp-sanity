@@ -164,6 +164,9 @@ const userState = {};
  * @param {string} url URL dari halaman web yang ingin dibaca.
  * @returns {Promise<object>} Objek berisi teks yang diekstrak.
  */
+// =================================================================
+// BLOK FUNGSI: BACA HALAMAN WEB
+// =================================================================
 async function readWebPage(url) {
     console.log(`[Tool] Membaca konten dari URL: ${url}`);
     try {
@@ -207,6 +210,9 @@ async function readWebPage(url) {
  * @param {string} fileId ID file di Google Drive.
  * @returns {Promise<boolean>} True jika berhasil, false jika gagal.
  */
+// =================================================================
+// BLOK FUNGSI: HAPUS FILE GOOGLE DRIVE
+// =================================================================
 async function hapusFileDiDrive(fileId) {
     try {
         // --- PERBAIKAN UTAMA ADA DI SINI ---
@@ -246,6 +252,9 @@ async function hapusFileDiDrive(fileId) {
  * @param {string} query Pertanyaan atau topik yang ingin dicari.
  * @returns {Promise<object>} Ringkasan hasil pencarian.
  */
+// =================================================================
+// BLOK FUNGSI: PENCARIAN GOOGLE
+// =================================================================
 async function googleSearch(query) {
     console.log(`[Tool] Menjalankan googleSearch untuk query: ${query}`);
     try {
@@ -282,6 +291,9 @@ async function googleSearch(query) {
  * Mengambil data gempa bumi terkini dari server BMKG gempa
  * @returns {Promise<object>} Data gempa dalam format JSON.
  */
+// =================================================================
+// BLOK FUNGSI: INFO GEMPA BMKG
+// =================================================================
 async function getGempa() {
     console.log(`[Tool] Menjalankan getGempa`);
     try {
@@ -310,12 +322,8 @@ async function getGempa() {
 // ▲▲▲ AKHIR DARI FUNGSI BARU gempa▲▲▲
 
 // Tambahkan ini bersama fungsi lainnya
-async function getCurrentWeather(location) {
-    return { error: "Fitur cuaca belum terhubung." };
-}
-function evaluateMathExpression(expression) {
-    return { error: "Fitur kalkulator belum terhubung." };
-}
+
+
 
 //AWAL FUNGSI GET BERITA
 /**
@@ -323,49 +331,13 @@ function evaluateMathExpression(expression) {
  * @param {string} query Kata kunci pencarian berita.
  * @returns {Promise<object>} Objek yang selalu berisi properti 'articles' (bisa berupa array kosong).
  */
-async function getLatestNews(query) {
-    console.log(`[Tool] Menjalankan getLatestNews dengan query: ${query}`);
-    try {
-        const apiKey = process.env.NEWS_API_KEY;
-        if (!apiKey) {
-            console.error("[Berita] NEWS_API_KEY tidak diatur.");
-            return { articles: [] }; // Kembalikan array kosong jika API key tidak ada
-        }
 
-        const response = await axios.get('https://newsapi.org/v2/everything', {
-            params: {
-                q: query || 'indonesia', // Jika query kosong, cari berita populer di Indonesia
-                language: 'id',
-                apiKey: apiKey,
-                pageSize: 5,
-                sortBy: 'publishedAt' // Selalu ambil yang terbaru
-            }
-        });
-
-        const articles = response.data.articles;
-        if (!articles || articles.length === 0) {
-            console.log(`[Berita] Tidak ada artikel yang ditemukan untuk query: "${query}"`);
-            return { articles: [] }; // Kembalikan array kosong jika tidak ada hasil
-        }
-
-        const formattedArticles = articles.map(article => ({
-            title: article.title,
-            description: article.description,
-            source: article.source.name,
-            url: article.url
-        }));
-        
-        return { articles: formattedArticles };
-
-    } catch (error) {
-        console.error("Error saat mengambil berita dari NewsAPI:", error.message);
-        // Jika terjadi error server apapun, kembalikan array kosong agar bot tidak macet
-        return { articles: [] };
-    }
-}
 // ▲▲▲ AKHIR DARI FUNGSI GET BERITA ▲▲▲
 
 // AWAL ▼▼▼ TAMBAHKAN FUNGSI PERSE INDONESIA ▼▼▼
+// =================================================================
+// BLOK FUNGSI: PARSER WAKTU INDONESIA
+// =================================================================
 function parseWaktuIndonesia(teks) {
     const sekarang = new Date(); // Cukup ambil waktu saat ini.
     teks = teks.toLowerCase();
@@ -506,6 +478,9 @@ function parseWaktuIndonesia(teks) {
  * @param {string} expression Ekspresi yang akan dihitung, contoh: "5 * (2 + 3)".
  * @returns {string} Hasil perhitungan atau pesan error.
  */
+// =================================================================
+// BLOK FUNGSI: KALKULASI MATEMATIKA
+// =================================================================
 function evaluateMathExpression(expression) {
     try {
         const result = evaluate(expression);
@@ -530,6 +505,9 @@ function evaluateMathExpression(expression) {
  * @param {string} namaFile Nama asli file.
  * @param {string} recipientId ID penerima (chat/grup) di WhatsApp.
  */
+// =================================================================
+// BLOK FUNGSI: KIRIM FILE DARI GOOGLE DRIVE
+// =================================================================
 async function kirimFileDariDrive(fileId, namaFile, recipientId) {
     try {
         // Mengunduh file dari Drive sebagai buffer
@@ -587,6 +565,9 @@ async function cariFileDiSanity(kataKunci, groupId) {
  * @param {string} location Nama kota untuk pencarian cuaca.
  * @returns {Promise<object>} Data cuaca dalam format JSON.
  */
+// =================================================================
+// BLOK FUNGSI: CUACA (OPENWEATHER)
+// =================================================================
 async function getCurrentWeather(location) {
     console.log(`[Tool] Menjalankan getCurrentWeather untuk lokasi: ${location}`);
     try {
@@ -629,6 +610,9 @@ async function getCurrentWeather(location) {
  * @param {string} query Kata kunci pencarian berita.
  * @returns {Promise<object>} Objek yang selalu berisi properti 'articles' (bisa berupa array kosong).
  */
+// =================================================================
+// BLOK FUNGSI: BERITA TERBARU
+// =================================================================
 async function getLatestNews(query) {
     console.log(`[Tool] Menjalankan getLatestNews dengan query: ${query}`);
     try {
@@ -678,6 +662,9 @@ async function getLatestNews(query) {
  * @param {string} userId ID WhatsApp pengguna (misal: "62812...@c.us").
  * @returns {Promise<boolean>} Mengembalikan true jika admin, false jika bukan.
  */
+// =================================================================
+// BLOK FUNGSI: CEK HAK ADMIN
+// =================================================================
 async function isAdmin(userId) {
     try {
         const sanitizedId = userId.replace(/[@.]/g, '-');
@@ -820,6 +807,9 @@ async function showPustakaMenu(message, categoryId) {
  * @param {Array} history Riwayat percakapan sebelumnya.
  * @returns {string} Jawaban dari AI.
  */
+// =================================================================
+// BLOK FUNGSI: RESPON GEMINI AI
+// =================================================================
 async function getGeminiResponse(prompt, history) {
     try {
         let finalPrompt = prompt;
@@ -913,6 +903,9 @@ async function getGeminiResponse(prompt, history) {
  * @param {string} namaFile Nama yang akan diberikan untuk file di Drive.
  * @returns {Promise<string|null>} ID file di Google Drive atau null jika gagal.
  */
+// =================================================================
+// BLOK FUNGSI: UPLOAD KE GOOGLE DRIVE
+// =================================================================
 async function uploadKeDrive(media, namaFile) {
     try {
         const fileMetadata = {
@@ -932,7 +925,7 @@ async function uploadKeDrive(media, namaFile) {
             media: mediaData,
             fields: 'id',
             supportsAllDrives: true,
-            convert: false // <-- WAJIB ADA: Mencegah konversi ke Google Sheets
+            // convert: false (removed, not supported in Drive v3) // <-- WAJIB ADA: Mencegah konversi ke Google Sheets
         });
 
         console.log(`[Drive] File berhasil diunggah dengan ID: ${response.data.id}`);
@@ -951,6 +944,9 @@ async function uploadKeDrive(media, namaFile) {
  * @param {object} dataFile Informasi file yang akan disimpan.
  * @returns {Promise<boolean>} True jika berhasil, false jika gagal.
  */
+// =================================================================
+// BLOK FUNGSI: SIMPAN METADATA FILE KE SANITY
+// =================================================================
 async function simpanDataFileKeSanity(dataFile) {
     try {
         const doc = {
@@ -1000,6 +996,9 @@ client.on('ready', () => {
 });
 
 // awal kode message
+// =================================================================
+// BLOK HANDLER PESAN UTAMA
+// =================================================================
 client.on('message', async (message) => {
     const chat = await message.getChat();
     try {
@@ -1851,6 +1850,9 @@ if (!chat.isGroup) {
         message.reply('Maaf, terjadi kesalahan tak terduga. Silakan coba lagi.');
     }
 });
+// =================================================================
+// AKHIR BLOK HANDLER PESAN UTAMA
+// =================================================================
 // akhir kode message
 
 
