@@ -325,12 +325,13 @@ function evaluateMathExpression(expression) {
  */
 async function getLatestNews(query) {
     try {
-        const response = await axios.get('https://newsapi.org/v2/top-headlines', {
+        const response = await axios.get('https://newsapi.org/v2/everything', {
             params: {
-                q: query || '',
-                country: 'id',
+                q: query || 'indonesia',
+                language: 'id',
                 apiKey: process.env.NEWS_API_KEY,
-                pageSize: 5
+                pageSize: 5,
+                sortBy: 'publishedAt'
             }
         });
 
@@ -349,8 +350,7 @@ async function getLatestNews(query) {
 
     } catch (error) {
         console.error("Error fetching news:", error.message);
-        // --- PERBAIKAN PENTING ADA DI SINI ---
-        return { error: "Gagal mengambil berita dari server NewsAPI." }; // <-- TAMBAHKAN RETURN INI
+        return { error: "Gagal mengambil berita dari server NewsAPI." };
     }
 }
 // ▲▲▲ AKHIR DARI FUNGSI GET BERITA ▲▲▲
