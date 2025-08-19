@@ -667,7 +667,7 @@ async function getLatestNews(query) {
 // =================================================================
 async function isAdmin(userId) {
     try {
-        const sanitizedId = userId.replace(/[@.]/g, '-');
+        const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
         const query = `*[_type == "pegawai" && _id == $id][0]`;
         const user = await clientSanity.fetch(query, { id: sanitizedId });
 
@@ -1038,20 +1038,18 @@ client.on('message', async (message) => {
 
                 try {
                     const userId = message.from;
-                    const sanitizedId = userId.replace(/[@.]/g, '-');
+                    const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
                     const contact = await message.getContact();
                     const userName = contact.pushname || userId;
 
-                    // LANGKAH 1: Pastikan dokumen untuk user ini sudah ada.
                     await clientSanity.createIfNotExists({
                         _id: sanitizedId,
                         _type: 'memoriPengguna',
                         userId: userId,
-                        namaPengguna: userName,
+                        namaPanggilan: userName,
                         daftarMemori: []
                     });
 
-                    // LANGKAH 2: Setelah dokumen dijamin ada, tambahkan memori baru.
                     await clientSanity
                         .patch(sanitizedId)
                         .append('daftarMemori', [memoryToSave])
@@ -1422,7 +1420,7 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
     let initialHistory = [];
     try {
         const userId = message.from;
-        const sanitizedId = userId.replace(/[@.]/g, '-');
+        const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
         const memoryQuery = `*[_type == "memoriPengguna" && _id == $id][0]`;
         const memoryDoc = await clientSanity.fetch(memoryQuery, { id: sanitizedId });
 
