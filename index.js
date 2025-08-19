@@ -1104,7 +1104,7 @@ client.on('message', async (message) => {
 
 
         return;
-    //     }
+        }
 
     //   try {
     //     await chat.sendStateTyping()
