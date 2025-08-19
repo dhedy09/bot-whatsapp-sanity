@@ -802,7 +802,7 @@ async function showPustakaMenu(message, categoryId) {
 
 // AWAL GEMINI RESPONSE
 /**
- * Mengirim prompt ke API Gemini, menangani function calling, dan mengembalikan respons.
+ * Mengirim prompt ke API Gemini, menangani function calling secara fleksibel, dan mengembalikan respons.
  * @param {string} prompt Pesan baru dari pengguna.
  * @param {Array} history Riwayat percakapan sebelumnya.
  * @returns {string} Jawaban dari AI.
@@ -814,20 +814,26 @@ async function getGeminiResponse(prompt, history) {
     try {
         let finalPrompt = prompt;
 
-        const researchKeywords = ['siapa', 'apa', 'kapan', 'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berita', 'berapa'];
-        const isResearchQuery = researchKeywords.some(keyword => prompt.toLowerCase().includes(keyword)) || prompt.length > 25;
+        // Kata kunci yang biasanya butuh data eksternal
+        const triggerKeywords = ['berita', 'gempa', 'cuaca', 'siapa', 'apa', 'kapan', 'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berapa'];
+        const isToolQuery = triggerKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
 
-        if (isResearchQuery) {
-            console.log("[Mode] AI masuk ke mode Peneliti.");
-            const instruction = `PERINTAH UTAMA: Tugasmu adalah menjadi asisten peneliti yang akurat.
-            ATURAN 1: Jika pertanyaan pengguna secara spesifik meminta 'berita', 'kabar terkini', atau 'headlines', kamu WAJIB langsung menggunakan alat 'getLatestNews'.
-            ATURAN 2: Untuk semua pertanyaan riset umum lainnya (seperti siapa, apa, di mana, mengapa, jelaskan), kamu WAJIB mengikuti proses dua langkah: 1. Gunakan 'googleSearch'. 2. Gunakan 'readWebPage'.
-            JANGAN PERNAH menjawab pertanyaan-pertanyaan ini dari ingatanmu sendiri.`;
+        if (isToolQuery) {
+            console.log("[Mode] AI: pertanyaan mungkin butuh tools eksternal.");
+            const instruction = `
+            Kamu adalah asisten AI.
+            - Jika pengguna tanya tentang *berita* → gunakan getLatestNews.
+            - Jika tanya tentang *gempa* → gunakan getGempa.
+            - Jika tanya tentang *cuaca* → gunakan getCurrentWeather.
+            - Jika pertanyaan umum/faktual detail → gunakan googleSearch lalu readWebPage.
+            - Jika pertanyaan ringan (fakta umum, definisi singkat) → jawab langsung tanpa tools.
+            - Jika ragu, boleh jawab langsung lalu tambahkan hasil tools untuk mendukung jawabanmu.
+            `;
             finalPrompt = `${instruction}\n\nPertanyaan Pengguna: "${prompt}"`;
         } else {
-            console.log("[Mode] AI masuk ke mode Ngobrol Santai.");
+            console.log("[Mode] AI: ngobrol santai (tanpa tools khusus).");
         }
-
+// 
         const chat = model.startChat({
             history: history,
             tools: tools,
@@ -840,7 +846,6 @@ async function getGeminiResponse(prompt, history) {
             console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
             let functionResponse;
 
-            // --- INI SWITCH STATEMENT YANG ANDA MINTA ---
             switch (call.name) {
                 case 'readWebPage':
                     functionResponse = await readWebPage(call.args.url);
@@ -866,11 +871,11 @@ async function getGeminiResponse(prompt, history) {
             }
 
             const result2 = await chat.sendMessage([
-                { functionResponse: { name: call.name, response: functionResponse } } // Ini format yang benar
+                { functionResponse: { name: call.name, response: functionResponse } }
             ]);
-            
+
             const finalResponse = result2.response;
-            if (finalResponse.candidates && finalResponse.candidates[0].content && finalResponse.candidates[0].content.parts) {
+            if (finalResponse.candidates?.[0]?.content?.parts) {
                 return finalResponse.candidates[0].content.parts.map(part => part.text).join('');
             } else {
                 return "Maaf, saya menerima respons yang tidak valid dari AI.";
@@ -878,7 +883,7 @@ async function getGeminiResponse(prompt, history) {
 
         } else {
             const finalResponse = result.response;
-            if (finalResponse.candidates && finalResponse.candidates[0].content && finalResponse.candidates[0].content.parts) {
+            if (finalResponse.candidates?.[0]?.content?.parts) {
                 return finalResponse.candidates[0].content.parts.map(part => part.text).join('');
             } else {
                 return "Maaf, saya menerima respons yang tidak valid dari AI.";
@@ -886,13 +891,15 @@ async function getGeminiResponse(prompt, history) {
         }
     } catch (error) {
         console.error(`Error saat memanggil API Gemini:`, error);
-        if (error.message && error.message.includes('response was blocked')) {
+        if (error.message?.includes('response was blocked')) {
             return "Maaf, respons saya diblokir karena kebijakan keamanan.";
         }
         return "Maaf, Asisten AI sedang mengalami gangguan. Coba lagi.";
     }
 }
-
+// =================================================================
+// AKHIR BLOK RESPON GEMINI AI
+// =================================================================
 // AKHIR GEMINI RESPONSE
 
 // ▼▼▼ FUNGSI UNTUK UPLOAD FILE KE DRIVE ▼▼▼
