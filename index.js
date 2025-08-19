@@ -52,6 +52,29 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 const tools = [{
     functionDeclarations: [
         {
+        name: "bacaMemori",
+        description: "Membaca atau memeriksa catatan personal yang sudah tersimpan tentang pengguna. Selalu gunakan alat ini di awal percakapan untuk mengetahui konteks tentang pengguna.",
+        parameters: {
+            type: "OBJECT",
+            properties: {
+            userId: { type: "STRING", description: "ID unik pengguna WhatsApp." }
+            },
+            required: ["userId"]
+        }
+        },
+        {
+        name: "simpanMemori",
+        description: "Menyimpan fakta, preferensi, atau informasi personal baru tentang pengguna ke dalam catatan jangka panjang. Gunakan saat pengguna secara eksplisit meminta untuk 'diingat' atau memberikan informasi personal yang penting.",
+        parameters: {
+            type: "OBJECT",
+            properties: {
+            userId: { type: "STRING", description: "ID unik pengguna WhatsApp." },
+            faktaTeks: { type: "STRING", description: "Potongan teks atau fakta yang akan disimpan." }
+            },
+            required: ["userId", "faktaTeks"]
+        }
+        }
+        {
             name: "googleSearch",
             description: "Langkah pertama untuk menjawab pertanyaan tentang topik umum, fakta, orang, tempat, atau peristiwa. Selalu gunakan alat ini terlebih dahulu untuk menemukan URL yang relevan.",
             parameters: { type: "OBJECT", properties: { query: { type: "STRING", description: "Pertanyaan atau kata kunci pencarian." } }, required: ["query"] },
@@ -829,10 +852,10 @@ async function getGeminiResponse(prompt, history) {
 
         if (isResearchQuery) {
             console.log("[Mode] AI masuk ke mode Peneliti.");
-            const instruction = `PERINTAH UTAMA: Tugasmu adalah menjadi asisten peneliti yang akurat.
-            ATURAN 1: Jika pertanyaan pengguna secara spesifik meminta 'berita', 'kabar terkini', atau 'headlines', kamu WAJIB langsung menggunakan alat 'getLatestNews'.
-            ATURAN 2: Untuk semua pertanyaan riset umum lainnya (seperti siapa, apa, di mana, mengapa, jelaskan), kamu WAJIB mengikuti proses dua langkah: 1. Gunakan 'googleSearch'. 2. Gunakan 'readWebPage'.
-            JANGAN PERNAH menjawab pertanyaan-pertanyaan ini dari ingatanmu sendiri.`;
+            const instruction = `PERINTAH UTAMA: Tugasmu adalah menjadi asisten pribadi yang cerdas dan personal.
+            ATURAN MEMORI: Di awal setiap percakapan, kamu WAJIB selalu menggunakan alat 'bacaMemori' untuk memeriksa apakah ada catatan tentang pengguna. Gunakan informasi dari memori untuk membuat jawabanmu lebih personal. Jika pengguna memintamu untuk 'mengingat sesuatu' atau memberimu fakta personal baru (misal: "saya kerja di Padang"), kamu WAJIB menggunakan alat 'simpanMemori'.
+            ATURAN PENELITIAN: Jika pertanyaan pengguna meminta 'berita', gunakan alat 'getLatestNews'. Untuk semua pertanyaan riset umum lainnya, gunakan proses dua langkah: 'googleSearch' lalu 'readWebPage'.
+            JANGAN PERNAH menjawab dari ingatanmu sendiri untuk pertanyaan yang butuh data eksternal.`;
             finalPrompt = `${instruction}\n\nPertanyaan Pengguna: "${prompt}"`;
         } else {
             console.log("[Mode] AI masuk ke mode Ngobrol Santai.");
@@ -852,6 +875,12 @@ async function getGeminiResponse(prompt, history) {
 
             // --- INI SWITCH STATEMENT YANG ANDA MINTA ---
             switch (call.name) {
+                case 'bacaMemori':
+                    functionResponse = await bacaMemori(message.from); // Kita ambil userId langsung dari 'message'
+                    break;
+                case 'simpanMemori':
+                    functionResponse = await simpanMemori(message.from, call.args.faktaTeks); // Ambil userId dan teks fakta
+                    break;
                 case 'readWebPage':
                     functionResponse = await readWebPage(call.args.url);
                     break;
@@ -904,6 +933,68 @@ async function getGeminiResponse(prompt, history) {
 }
 
 // AKHIR GEMINI RESPONSE
+
+// AWAL BACA DAN SIMPAN MEMORI
+/**
+ * Membaca catatan/memori yang tersimpan untuk pengguna tertentu.
+ * @param {string} userId ID unik pengguna WhatsApp.
+ * @returns {Promise<object>} Objek berisi memori yang tersimpan.
+ */
+async function bacaMemori(userId: string): Promise<{ memori: string }> {
+  console.log(`[Tool] Menjalankan bacaMemori untuk user: ${userId}`);
+  try {
+    const query = `*[_type == "pegawai" && userId == $userId][0]{memori}`;
+    const params = { userId: userId };
+    const result = await sanityClient.fetch(query, params);
+
+    if (result && result.memori) {
+      return { memori: result.memori };
+    } else {
+      return { memori: "Belum ada catatan memori yang tersimpan." };
+    }
+  } catch (error) {
+    console.error("Error saat membaca memori dari Sanity:", error);
+    return { memori: "Gagal membaca memori karena ada kesalahan teknis." };
+  }
+}
+
+/**
+ * Menyimpan atau menambahkan fakta baru ke catatan memori pengguna.
+ * @param {string} userId ID unik pengguna WhatsApp.
+ * @param {string} faktaTeks Fakta atau catatan baru yang akan disimpan.
+ * @returns {Promise<object>} Objek berisi status keberhasilan.
+ */
+async function simpanMemori(userId: string, faktaTeks: string): Promise<{ status: string }> {
+  console.log(`[Tool] Menjalankan simpanMemori untuk user: ${userId}`);
+  try {
+    // Cari dokumen pegawai berdasarkan userId
+    const query = `*[_type == "pegawai" && userId == $userId][0]{_id, memori}`;
+    const pegawai = await sanityClient.fetch(query, { userId });
+
+    if (!pegawai) {
+      return { status: "Gagal: Pengguna tidak ditemukan di database." };
+    }
+
+    // Ambil memori yang sudah ada, atau string kosong jika belum ada
+    const memoriLama = pegawai.memori || "";
+    // Gabungkan memori lama dengan fakta baru, beri tanggal untuk konteks
+    const tanggal = new Date().toLocaleDateString('id-ID');
+    const memoriBaru = `${memoriLama}\n- [${tanggal}] ${faktaTeks}`.trim();
+
+    // Lakukan patch untuk memperbarui field memori
+    await sanityClient
+      .patch(pegawai._id)
+      .set({ memori: memoriBaru })
+      .commit();
+
+    return { status: "Fakta berhasil disimpan ke dalam memori." };
+
+  } catch (error) {
+    console.error("Error saat menyimpan memori ke Sanity:", error);
+    return { status: "Gagal menyimpan memori karena ada kesalahan teknis." };
+  }
+}
+// AKHIR BACA DAN SIMPAN MEMORI
 
 // ▼▼▼ FUNGSI UNTUK UPLOAD FILE KE DRIVE ▼▼▼
 

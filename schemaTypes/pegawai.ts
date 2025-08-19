@@ -1,3 +1,5 @@
+// file: schemas/pegawai.ts
+
 import { defineType, defineField } from 'sanity';
 
 // 'defineType' adalah fungsi utama untuk mendefinisikan sebuah skema baru
@@ -101,6 +103,15 @@ export default defineType({
       title: 'Password SIPD Renstra',
       type: 'string',
       hidden: ({ parent }) => parent?.tipePegawai !== 'admin',
-    }), // <-- KOMA YANG HILANG SEBELUMNYA SUDAH DITAMBAHKAN DI SINI
+    }),
+    
+    // ▼▼▼ TAMBAHKAN FIELD BARU INI DI SINI ▼▼▼
+    defineField({
+      name: 'memori',
+      title: 'Memori AI (Catatan Personal)',
+      type: 'text', // Tipe 'text' untuk catatan yang bisa sangat panjang
+      description: 'Tempat AI menyimpan fakta-fakta spesifik tentang pegawai ini. Contoh: "lebih suka dipanggil mas", "lokasi kerja di Padang", dll.',
+    }),
+    // ▲▲▲ AKHIR DARI FIELD BARU ▲▲▲
   ],
 });
