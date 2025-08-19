@@ -21,6 +21,7 @@ const { evaluate } = require('mathjs');
 const axios = require('axios');
 const app = express();
 const path = require('path');
+const cheerio = require('cheerio');
 
 
 // --- INISIALISASI KLIEN GOOGLE (DRIVE, SEARCH, DLL) ---
@@ -50,6 +51,11 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 // --- DEFINISI ALAT-ALAT UNTUK AI ---
 const tools = [{
     functionDeclarations: [
+        {
+            name: "readWebPage", // <-- ALAT BARU
+            description: "Membaca konten teks utama dari sebuah halaman web berdasarkan URL. Gunakan ini setelah googleSearch untuk mendapatkan detail lebih dalam dari link yang relevan.",
+            parameters: { type: "OBJECT", properties: { url: { type: "STRING", description: "URL valid dari halaman web yang ingin dibaca." } }, required: ["url"] },
+        },
         {
             name: "googleSearch",
             description: "Mencari informasi umum di internet menggunakan Google. Gunakan ini untuk pertanyaan tentang fakta, orang, tempat, peristiwa terkini, atau topik apa pun yang tidak tercakup oleh alat lain.",
@@ -150,6 +156,50 @@ const userState = {};
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
+
+// AWAL BACA PAGES WEB
+
+/**
+ * Mengunjungi URL, membersihkan HTML, dan mengekstrak teks utama dari halaman web.
+ * @param {string} url URL dari halaman web yang ingin dibaca.
+ * @returns {Promise<object>} Objek berisi teks yang diekstrak.
+ */
+async function readWebPage(url) {
+    console.log(`[Tool] Membaca konten dari URL: ${url}`);
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+        });
+        
+        const html = response.data;
+        const $ = cheerio.load(html);
+
+        // Hapus elemen yang tidak relevan seperti script, style, menu, footer, dll.
+        $('script, style, nav, footer, header, aside, form, .ads').remove();
+
+        // Ambil teks dari body dan bersihkan spasi berlebih
+        let textContent = $('body').text().replace(/\s\s+/g, ' ').trim();
+        
+        // Batasi panjang teks agar tidak terlalu membebani AI
+        const maxLength = 10000;
+        if (textContent.length > maxLength) {
+            textContent = textContent.substring(0, maxLength) + "... (konten dipotong)";
+        }
+
+        if (!textContent) {
+            return { error: `Tidak ada konten teks yang bisa dibaca dari URL: ${url}` };
+        }
+        
+        return { content: textContent };
+
+    } catch (error) {
+        console.error(`Error saat membaca URL ${url}:`, error.message);
+        return { error: `Gagal mengakses atau membaca konten dari URL: ${url}` };
+    }
+}
+// AKHIR BACA PAGES WEB
 
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI HAPUS FILE▼▼▼
 
@@ -746,8 +796,6 @@ async function showPustakaMenu(message, categoryId) {
 // AWAL GEMINI RESPONSE
 /**
  * Mengirim prompt ke API Gemini, menangani function calling, dan mengembalikan respons.
-/**
- * Mengirim prompt ke API Gemini, menangani function calling, dan mengembalikan respons.
  * @param {string} prompt Pesan baru dari pengguna.
  * @param {Array} history Riwayat percakapan sebelumnya.
  * @returns {string} Jawaban dari AI.
@@ -764,39 +812,43 @@ async function getGeminiResponse(prompt, history) {
 
             if (call) {
                 console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
-                
                 let functionResponse;
-                // --- Kumpulan Alat AI ---
-                if (call.name === 'googleSearch') { // <-- LOGIKA BARU UNTUK GOOGLE SEARCH
-                    functionResponse = await googleSearch(call.args.query);
-                } else if (call.name === 'getCurrentWeather') {
-                    functionResponse = await getCurrentWeather(call.args.location);
-                } else if (call.name === 'getLatestNews') {
-                    functionResponse = await getLatestNews(call.args.query);
-                } else if (call.name === 'getGempa') {
-                    functionResponse = await getGempa();
-                } else if (call.name === 'calculate') {
-                    functionResponse = evaluateMathExpression(call.args.expression);
-                } else {
-                    console.error(`❌ Nama fungsi tidak dikenali: ${call.name}`);
-                    functionResponse = { error: `Fungsi ${call.name} tidak ada.` };
+
+                // --- Menggunakan 'switch' agar lebih rapi ---
+                switch (call.name) {
+                    case 'readWebPage':
+                        functionResponse = await readWebPage(call.args.url);
+                        break;
+                    case 'googleSearch':
+                        functionResponse = await googleSearch(call.args.query);
+                        break;
+                    case 'getCurrentWeather':
+                        functionResponse = await getCurrentWeather(call.args.location);
+                        break;
+                    case 'getLatestNews':
+                        functionResponse = await getLatestNews(call.args.query);
+                        break;
+                    case 'getGempa':
+                        functionResponse = await getGempa();
+                        break;
+                    case 'calculate':
+                        functionResponse = { result: evaluateMathExpression(call.args.expression) };
+                        break;
+                    default:
+                        console.error(`❌ Nama fungsi tidak dikenali: ${call.name}`);
+                        functionResponse = { error: `Fungsi ${call.name} tidak ada.` };
+                        break;
                 }
 
-                // --- Perbaikan kecil pada format balasan ke AI ---
                 const result2 = await chat.sendMessage([
                     { functionResponse: { name: call.name, response: functionResponse } }
                 ]);
                 return result2.response.text();
-            
             } else {
-                 // Jika tidak ada panggilan fungsi, langsung kembalikan respons teks
                 return result.response.text();
             }
-
         } catch (error) {
-            // --- Perbaikan pada penanganan error agar lebih kuat ---
             console.error(`Error pada percobaan ${attempt} saat memanggil API Gemini:`, error);
-
             if (attempt === maxRetries) {
                 console.error("Gagal setelah percobaan maksimal.");
                 if (error.message && error.message.includes('response was blocked')) {
@@ -804,12 +856,10 @@ async function getGeminiResponse(prompt, history) {
                 }
                 return "Maaf, Asisten AI sedang mengalami gangguan. Silakan coba lagi beberapa saat lagi.";
             }
-            
             await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
 }
-
 // AKHIR GEMINI RESPONSE
 
 // ▼▼▼ FUNGSI UNTUK UPLOAD FILE KE DRIVE ▼▼▼
