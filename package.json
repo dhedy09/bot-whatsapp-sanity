@@ -20,7 +20,7 @@
     "@sanity/client": "^7.8.2",
     "@sanity/vision": "^4.4.1",
     "axios": "^1.11.0",
-    "cheerio": "^1.1.2",
+    "cheerio": "^1.0.0-rc.12",
     "dotenv": "^17.2.1",
     "express": "^4.19.2",
     "googleapis": "^156.0.0",
