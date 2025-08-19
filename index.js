@@ -1022,80 +1022,89 @@ client.on('message', async (message) => {
         return
       }
 
-      const memoryTriggers = ['ingat ini:', 'ingat saya:']
-      const lowerMsg = message.body.trim().toLowerCase()
-      const trigger = memoryTriggers.find((t) => lowerMsg.startsWith(t))
+        const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
+        const lowerMsg = message.body.trim().toLowerCase();
+        const match = message.body.match(memoryRegex);
 
-      if (userState[message.from]?.type === 'ai_mode') {
+
+        if (userState[message.from]?.type === 'ai_mode') {
         // === 1. Keluar dari sesi AI jika ketik "selesai" atau "stop" ===
-        const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
+        const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
         if (exitCommands.includes(lowerMsg)) {
-          delete userState[message.from]
-          message.reply('Sesi AI telah berakhir. Anda kembali ke menu utama.')
-          await showMainMenu(message)
-          return
+        delete userState[message.from];
+        message.reply('Sesi AI telah berakhir. Anda kembali ke menu utama.');
+        await showMainMenu(message);
+        return;
         }
 
-        // === 2. Menyimpan memori jika diawali "ingat ini:" atau "ingat saya:" ===
-        if (trigger) {
-          const memoryToSave = message.body.substring(trigger.length).trim()
-          if (!memoryToSave) {
-            message.reply(
-              'Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`',
-            )
-            return
-          }
 
-          try {
-            const userId = message.from
-            const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`
-            const contact = await message.getContact()
-            const userName = contact.pushname || userId
-
-            // Pastikan dokumen memori ada
-            await clientSanity.createIfNotExists({
-              _id: sanitizedId,
-              _type: 'memoriPengguna',
-              userId: userId,
-              namaPanggilan: userName,
-              daftarMemori: [],
-            })
-
-            // Tambah memori
-            await clientSanity
-              .patch(sanitizedId)
-              .append('daftarMemori', [memoryToSave])
-              .commit({autoGenerateArrayKeys: true})
-
-            message.reply('Baik, saya akan mengingatnya.')
-            console.log(`Memori baru disimpan untuk ${userId}: ${memoryToSave}`)
-          } catch (err) {
-            console.error('Gagal menyimpan memori:', err)
-            message.reply('Maaf, terjadi kesalahan saat menyimpan informasi ini.')
-          }
-
-          return // Stop agar tidak dilempar ke AI
+        // === 2. Menyimpan memori jika cocok pola fleksibel ===
+        if (match) {
+        const memoryToSave = message.body.replace(memoryRegex, '').trim();
+        if (!memoryToSave) {
+        message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
+        return;
         }
+
+
+        try {
+        const userId = message.from;
+        const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
+        const contact = await message.getContact();
+        const userName = contact.pushname || userId;
+
+
+        // Pastikan dokumen memori ada
+        await clientSanity.createIfNotExists({
+        _id: sanitizedId,
+        _type: 'memoriPengguna',
+        userId: userId,
+        namaPanggilan: userName,
+        daftarMemori: []
+        });
+
+
+        // Tambah memori
+        await clientSanity
+        .patch(sanitizedId)
+        .append('daftarMemori', [memoryToSave])
+        .commit({ autoGenerateArrayKeys: true });
+
+
+        message.reply("Baik, saya akan mengingatnya.");
+        console.log(`Memori baru disimpan untuk ${userId}: ${memoryToSave}`);
+        } catch (err) {
+        console.error("Gagal menyimpan memori:", err);
+        message.reply("Maaf, terjadi kesalahan saat menyimpan informasi ini.");
+        }
+
+
+        return; // Stop agar tidak dilempar ke AI
+        }
+
 
         // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
         try {
-          await chat.sendStateTyping()
-          const aiResponse = await getGeminiResponse(message.body, userState[message.from].history)
+        await chat.sendStateTyping();
+        const aiResponse = await getGeminiResponse(message.body, userState[message.from].history);
 
-          message.reply(aiResponse)
-          userState[message.from].history.push({role: 'user', parts: [{text: message.body}]})
-          userState[message.from].history.push({role: 'model', parts: [{text: aiResponse}]})
 
-          if (userState[message.from].history.length > 10) {
-            userState[message.from].history = userState[message.from].history.slice(-10)
-          }
+        message.reply(aiResponse);
+        userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
+        userState[message.from].history.push({ role: 'model', parts: [{ text: aiResponse }] });
+
+
+        if (userState[message.from].history.length > 10) {
+        userState[message.from].history = userState[message.from].history.slice(-10);
+        }
         } catch (e) {
-          console.error('[AI] Gagal merespons:', e)
-          message.reply('Maaf, terjadi kesalahan dari AI.')
+        console.error("[AI] Gagal merespons:", e);
+        message.reply("Maaf, terjadi kesalahan dari AI.");
         }
 
-        return
-      }
+
+        return;
+        }
 
       try {
         await chat.sendStateTyping()
