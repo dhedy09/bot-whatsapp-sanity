@@ -807,7 +807,7 @@ async function showPustakaMenu(message, categoryId) {
  */
 async function getGeminiResponse(prompt, history) {
     try {
-        const instruction = "PERATURAN WAJIB: Untuk pertanyaan riset (siapa, apa, kapan, di mana, mengapa, bagaimana), kamu WAJIB mengikuti proses dua langkah: LANGKAH 1: Gunakan alat googleSearch. LANGKAH 2: Gunakan alat readWebPage pada URL berita atau URL paling relevan dari hasil pencarian. JANGAN PERNAH menjawab pertanyaan riset dari ingatanmu sendiri. Untuk permintaan info real-time (cuaca/gempa/berita), langsung gunakan alat yang sesuai.";
+        const instruction = "PERINTAH MUTLAK: Tugas utamamu adalah menjadi asisten peneliti. Jangan pernah menjawab dari ingatan. Kamu WAJIB mengikuti proses ini: LANGKAH 1: Gunakan 'googleSearch' untuk menemukan URL yang relevan. LANGKAH 2: SEGERA setelah itu, WAJIB gunakan 'readWebPage' untuk membaca isi dari URL tersebut. LANGKAH 3: Jawab pertanyaan pengguna HANYA berdasarkan informasi yang kamu dapat dari 'readWebPage'. JANGAN PERNAH mengatakan kamu tidak bisa mengakses internet atau memeriksa URL.";
         
         const finalPrompt = `${instruction}\n\nPertanyaan Pengguna: "${prompt}"`;
 
@@ -823,9 +823,7 @@ async function getGeminiResponse(prompt, history) {
             console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
             let functionResponse;
 
-            // ... (switch statement lengkap Anda)
             switch (call.name) {
-                // ... case-case Anda ada di sini ...
                 case 'readWebPage':
                     functionResponse = await readWebPage(call.args.url);
                     break;
@@ -853,21 +851,17 @@ async function getGeminiResponse(prompt, history) {
                 { functionResponse: { name: call.name, response: functionResponse } }
             ]);
             
-            // --- PERBAIKAN PENTING ADA DI SINI ---
             const finalResponse = result2.response;
             if (finalResponse.candidates && finalResponse.candidates[0].content && finalResponse.candidates[0].content.parts) {
-                const finalAnswerText = finalResponse.candidates[0].content.parts.map(part => part.text).join('');
-                return finalAnswerText;
+                return finalResponse.candidates[0].content.parts.map(part => part.text).join('');
             } else {
                 return "Maaf, saya menerima respons yang tidak valid dari AI.";
             }
 
         } else {
-            // --- PERBAIKAN PENTING JUGA DI SINI ---
             const finalResponse = result.response;
             if (finalResponse.candidates && finalResponse.candidates[0].content && finalResponse.candidates[0].content.parts) {
-                const finalAnswerText = finalResponse.candidates[0].content.parts.map(part => part.text).join('');
-                return finalAnswerText;
+                return finalResponse.candidates[0].content.parts.map(part => part.text).join('');
             } else {
                 return "Maaf, saya menerima respons yang tidak valid dari AI.";
             }
