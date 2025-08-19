@@ -802,76 +802,65 @@ async function showPustakaMenu(message, categoryId) {
 /**
  * Mengirim prompt ke API Gemini, menangani function calling, dan mengembalikan respons.
  * @param {string} prompt Pesan baru dari pengguna.
- * @param {Array} originalHistory Riwayat percakapan sebelumnya.
+ * @param {Array} history Riwayat percakapan sebelumnya.
  * @returns {string} Jawaban dari AI.
  */
 async function getGeminiResponse(prompt, history) {
-    const maxRetries = 3;
-    const delay = 2000;
+    try {
+        // --- PERUBAHAN UTAMA: Instruksi disisipkan langsung ke prompt ---
+        const instruction = "PERATURAN WAJIB: Untuk pertanyaan riset (seperti siapa, apa, kapan, di mana, mengapa, bagaimana), kamu WAJIB mengikuti proses dua langkah: LANGKAH 1: Gunakan alat googleSearch. LANGKAH 2: Gunakan alat readWebPage pada URL paling relevan dari hasil pencarian. JANGAN PERNAH menjawab pertanyaan riset dari ingatanmu sendiri. Untuk permintaan info real-time (cuaca/gempa/berita), langsung gunakan alat yang sesuai.";
+        
+        const finalPrompt = `${instruction}\n\nPertanyaan Pengguna: "${prompt}"`;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            const systemInstruction = {
-                role: "model",
-                parts: [{ text: "Kamu adalah Panda Bot, asisten AI peneliti yang cerdas dan teliti. Saat diberi pertanyaan yang membutuhkan pengetahuan eksternal, kamu harus selalu mengikuti proses dua langkah: Pertama, gunakan alat googleSearch untuk menemukan sumber informasi yang relevan. Kedua, gunakan alat readWebPage untuk membaca konten dari URL yang paling menjanjikan. Jangan pernah menjawab hanya berdasarkan ringkasan dari hasil pencarian. Selalu baca sumbernya terlebih dahulu untuk memberikan jawaban yang akurat dan mendalam. Sebelum menjawab, selalu periksa apakah ada alat yang bisa digunakan untuk menjawab pertanyaan pengguna secara langsung." }]
-            };
+        const chat = model.startChat({
+            history: history, // <-- Kembali menggunakan history lengkap, tanpa cleanHistory
+            tools: tools,
+        });
 
-            const chat = model.startChat({
-                history: history, // <-- Kuncinya ada di sini, menggunakan seluruh history
-                tools: tools,
-                systemInstruction: systemInstruction,
-            });
-            const result = await chat.sendMessage(prompt);
-            const call = result.response.functionCalls()?.[0];
+        const result = await chat.sendMessage(finalPrompt); // <-- Mengirim prompt yang sudah diperkuat
+        const call = result.response.functionCalls()?.[0];
 
-            if (call) {
-                console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
-                let functionResponse;
+        if (call) {
+            console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
+            let functionResponse;
 
-                // Switch statement lengkap Anda
-                switch (call.name) {
-                    case 'readWebPage':
-                        functionResponse = await readWebPage(call.args.url);
-                        break;
-                    case 'googleSearch':
-                        functionResponse = await googleSearch(call.args.query);
-                        break;
-                    case 'getCurrentWeather':
-                        functionResponse = await getCurrentWeather(call.args.location);
-                        break;
-                    case 'getLatestNews':
-                        functionResponse = await getLatestNews(call.args.query);
-                        break;
-                    case 'getGempa':
-                        functionResponse = await getGempa();
-                        break;
-                    case 'calculate':
-                        functionResponse = { result: evaluateMathExpression(call.args.expression) };
-                        break;
-                    default:
-                        console.error(`❌ Nama fungsi tidak dikenali: ${call.name}`);
-                        functionResponse = { error: `Fungsi ${call.name} tidak ada.` };
-                        break;
-                }
-
-                const result2 = await chat.sendMessage([
-                    { functionResponse: { name: call.name, response: functionResponse } }
-                ]);
-                return result2.response.text();
-            } else {
-                return result.response.text();
+            switch (call.name) {
+                case 'readWebPage':
+                    functionResponse = await readWebPage(call.args.url);
+                    break;
+                case 'googleSearch':
+                    functionResponse = await googleSearch(call.args.query);
+                    break;
+                case 'getCurrentWeather':
+                    functionResponse = await getCurrentWeather(call.args.location);
+                    break;
+                case 'getLatestNews':
+                    functionResponse = await getLatestNews(call.args.query);
+                    break;
+                case 'getGempa':
+                    functionResponse = await getGempa();
+                    break;
+                case 'calculate':
+                    functionResponse = { result: evaluateMathExpression(call.args.expression) };
+                    break;
+                default:
+                    functionResponse = { error: `Fungsi ${call.name} tidak ada.` };
+                    break;
             }
-        } catch (error) {
-            console.error(`Error pada percobaan ${attempt} saat memanggil API Gemini:`, error);
-            if (attempt === maxRetries) {
-                console.error("Gagal setelah percobaan maksimal.");
-                if (error.message && error.message.includes('response was blocked')) {
-                    return "Maaf, respons saya diblokir karena kebijakan keamanan. Mungkin pertanyaan Anda sensitif.";
-                }
-                return "Maaf, Asisten AI sedang mengalami gangguan. Silakan coba lagi beberapa saat lagi.";
-            }
-            await new Promise(resolve => setTimeout(resolve, delay));
+
+            const result2 = await chat.sendMessage([
+                { functionResponse: { name: call.name, response: functionResponse } }
+            ]);
+            return result2.response.text();
+        } else {
+            return result.response.text();
         }
+    } catch (error) {
+        console.error(`Error saat memanggil API Gemini:`, error);
+        if (error.message && error.message.includes('response was blocked')) {
+            return "Maaf, respons saya diblokir karena kebijakan keamanan.";
+        }
+        return "Maaf, Asisten AI sedang mengalami gangguan. Coba lagi.";
     }
 }
 // AKHIR GEMINI RESPONSE
