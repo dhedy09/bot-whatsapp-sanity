@@ -1452,63 +1452,85 @@ client.on('message', async (message) => {
       return message.reply(pilihanMessage)
     }
 
-    const aiTriggerCommands = [
-      'tanya ai',
-      'mode ai',
-      'sesi ai',
-      'panda ai',
-      'halo panda ai',
-      'mulai sesi ai',
-      'halo, saya ingin memulai sesi ai', // Pastikan ini diketik bersih
-    ]
-    // GANTI BLOK aiTriggerCommands ANDA DENGAN YANG INI SECARA KESELURUHAN
-if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
-  await chat.sendStateTyping()
+  // === BLOK PEMICU UNTUK MASUK MODE AI ===
+const aiTriggerCommands = [
+  'tanya ai',
+  'mode ai',
+  'sesi ai',
+  'panda ai',
+  'halo panda ai',
+  'mulai sesi ai',
+  'halo, saya ingin memulai sesi ai',
+];
 
-  const userId = message.from
-  const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`
-  let initialHistory = []
+if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
+  await chat.sendStateTyping();
+
+  const userId = message.from;
+  const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
+  let initialHistory = [];
 
   try {
-    const memoryDoc = await clientSanity.fetch(`*[_type == "memoriPengguna" && _id == $id][0]`, {
-      id: sanitizedId,
-    })
+    const memoryDoc = await clientSanity.fetch(
+      `*[_type == "memoriPengguna" && _id == $id][0]`,
+      { id: sanitizedId }
+    );
 
-    if (memoryDoc && memoryDoc.daftarMemori && memoryDoc.daftarMemori.length > 0) {
-      const longTermMemories = memoryDoc.daftarMemori
+    if (
+      memoryDoc &&
+      memoryDoc.daftarMemori &&
+      memoryDoc.daftarMemori.length > 0
+    ) {
+      const longTermMemories = memoryDoc.daftarMemori;
 
       let memoryContext =
-        'Ini adalah beberapa fakta penting tentang saya (pengguna) yang harus kamu ingat di sepanjang percakapan ini:\n'
+        'Ini adalah beberapa fakta penting tentang saya (pengguna) yang harus kamu ingat di sepanjang percakapan ini:\n';
       longTermMemories.forEach((fact) => {
-        memoryContext += `- ${fact}\n`
-      })
+        memoryContext += `- ${fact}\n`;
+      });
 
       // Tambahkan ke history AI sebagai pesan awal
-      initialHistory.push({role: 'user', parts: [{text: memoryContext}]})
+      initialHistory.push({
+        role: 'user',
+        parts: [{ text: memoryContext }],
+      });
       initialHistory.push({
         role: 'model',
-        parts: [{text: 'Baik, saya telah menerima dan mengingat semua fakta tersebut.'}],
-      })
+        parts: [
+          {
+            text: 'Baik, saya telah menerima dan mengingat semua fakta tersebut.',
+          },
+        ],
+      });
 
-      console.log(`Memuat ${longTermMemories.length} memori untuk ${userId}`)
+      console.log(
+        `Memuat ${longTermMemories.length} memori untuk ${userId}`
+      );
     }
   } catch (e) {
-    console.error('Gagal memuat memori:', e)
+    console.error('Gagal memuat memori:', e);
   }
 
-  // Simpan state AI
-  userState[message.from] = {type: 'ai_mode', history: initialHistory}
+  // Simpan state pengguna sebagai sesi AI aktif
+  userState[userId] = {
+    type: 'ai_mode',
+    history: initialHistory,
+  };
 
-  const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`)
+  // Ambil balasan pembuka dari Sanity (jika tersedia)
+  const result = await clientSanity.fetch(
+    `*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`
+  );
   const welcomeMessage = result
     ? result.jawaban
-    : "Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti."
-  message.reply(welcomeMessage)
-  return
+    : "Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti.";
+
+  message.reply(welcomeMessage);
+  return;
 }
 
+// === BLOK 3: MENANGANI PILIHAN MENU NUMERIK ===
 
-    // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
     // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
     // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
@@ -1932,16 +1954,37 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
     // JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
     // ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
+    // JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
+    // ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
     if (!chat.isGroup) {
-      const responseText = await getGeminiResponse(userMessage, userHistory[message.from] || [])
-      message.reply(responseText)
+      try {
+        const history = userHistory[message.from] || [];
+        const responseText = await getGeminiResponse(userMessage, history);
+
+        message.reply(responseText);
+
+        // Simpan riwayat tanya-jawab
+        history.push({ role: 'user', parts: [{ text: userMessage }] });
+        history.push({ role: 'model', parts: [{ text: responseText }] });
+
+        // Batasi panjang riwayat agar tidak membengkak
+        if (history.length > 10) {
+          userHistory[message.from] = history.slice(-10);
+        } else {
+          userHistory[message.from] = history;
+        }
+      } catch (err) {
+        console.error('Gagal menjalankan pusat kendali AI:', err);
+        message.reply('Maaf, AI tidak bisa menjawab saat ini.');
+      }
     }
     // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
   } catch (error) {
-    console.error('Terjadi error fatal di event message:', error)
-    message.reply('Maaf, terjadi kesalahan tak terduga. Silakan coba lagi.')
+    console.error('Terjadi error fatal di event message:', error);
+    message.reply('Maaf, terjadi kesalahan tak terduga. Silakan coba lagi.');
   }
-})
+});
+
 // =================================================================
 // AKHIR BLOK HANDLER PESAN UTAMA
 // =================================================================
