@@ -1104,24 +1104,24 @@ client.on('message', async (message) => {
 
 
         return;
-        }
+    //     }
 
-      try {
-        await chat.sendStateTyping()
-        const aiResponse = await getGeminiResponse(userMessage, userLastState.history)
+    //   try {
+    //     await chat.sendStateTyping()
+    //     const aiResponse = await getGeminiResponse(userMessage, userLastState.history)
 
-        message.reply(aiResponse)
-        userLastState.history.push({role: 'user', parts: [{text: userMessage}]})
-        userLastState.history.push({role: 'model', parts: [{text: aiResponse}]})
-        const MAX_HISTORY = 10
-        if (userLastState.history.length > MAX_HISTORY) {
-          userLastState.history = userLastState.history.slice(-MAX_HISTORY)
-        }
-      } catch (error) {
-        console.error('Error di dalam blok AI Mode:', error)
-        message.reply('Maaf, terjadi gangguan. Coba ulangi pertanyaan Anda.')
-      }
-      return
+    //     message.reply(aiResponse)
+    //     userLastState.history.push({role: 'user', parts: [{text: userMessage}]})
+    //     userLastState.history.push({role: 'model', parts: [{text: aiResponse}]})
+    //     const MAX_HISTORY = 10
+    //     if (userLastState.history.length > MAX_HISTORY) {
+    //       userLastState.history = userLastState.history.slice(-MAX_HISTORY)
+    //     }
+    //   } catch (error) {
+    //     console.error('Error di dalam blok AI Mode:', error)
+    //     message.reply('Maaf, terjadi gangguan. Coba ulangi pertanyaan Anda.')
+    //   }
+    //   return
     } // BLOK 2: MENANGANI PERINTAH TEKS
 
     if (userMessageLower === 'halo panda') {
