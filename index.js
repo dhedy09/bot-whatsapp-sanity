@@ -1404,6 +1404,61 @@ else if (userMessageLower.startsWith('hapus file ')) {
             pegawaiDitemukan.forEach((p, i) => { pilihanMessage += `${i + 1}. ${p.nama} - *(${p.jabatan})*\n`; });
             return message.reply(pilihanMessage);
         }
+
+
+// =================================================================
+// BLOK FITUR MEMORI PENGGUNA
+// =================================================================
+
+// Perintah: "ingat ini <fakta>" atau "ingat saya <fakta>"
+if (userMessageLower.startsWith('ingat ini') || userMessageLower.startsWith('ingat saya')) {
+    const contact = await message.getContact();
+    const userId = contact.id._serialized;
+    const sanitizedId = userId.replace(/[@.]/g, '-');
+    const memoriDocId = `memori-${sanitizedId}`; // prefix supaya aman
+
+    // Ambil teks setelah "ingat ini" atau "ingat saya"
+    let faktaBaru = userMessage.replace(/^ingat (ini|saya)/i, '').trim();
+    if (!faktaBaru) {
+        return message.reply('❌ Format salah. Contoh: `ingat ini saya bekerja di Dinas Pendidikan`');
+    }
+
+    try {
+        // Ambil dokumen memori lama (kalau ada)
+        const memoryDoc = await clientSanity.fetch(
+            `*[_type == "memoriPengguna" && _id == $id][0]`,
+            { id: memoriDocId }
+        );
+
+        let daftarMemori = memoryDoc?.daftarMemori || [];
+        daftarMemori.push(faktaBaru);
+
+        if (memoryDoc) {
+            // Update dokumen lama
+            await clientSanity.patch(memoriDocId).set({ daftarMemori }).commit();
+        } else {
+            // Buat dokumen baru
+            await clientSanity.create({
+                _id: memoriDocId,
+                _type: "memoriPengguna",
+                userId: sanitizedId,
+                daftarMemori
+            });
+        }
+
+        message.reply(`✅ Baik, saya akan mengingat ini:\n- ${faktaBaru}`);
+
+    } catch (err) {
+        console.error("Gagal menyimpan memori:", err);
+        message.reply("❌ Maaf, terjadi kesalahan saat menyimpan memori.");
+    }
+    return;
+}
+// =================================================================
+// AKHIR BLOK FITUR MEMORI PENGGUNA
+// =================================================================
+
+
         
         const aiTriggerCommands = [
             'tanya ai', 
@@ -1418,32 +1473,34 @@ else if (userMessageLower.startsWith('hapus file ')) {
 if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
     await chat.sendStateTyping();
 
-    // ▼▼▼ BAGIAN BARU: MENGAMBIL MEMORI JANGKA PANJANG ▼▼▼
-    let initialHistory = [];
-    try {
-        const userId = message.from;
-        const sanitizedId = userId.replace(/[@.]/g, '-');
-        const memoryQuery = `*[_type == "memoriPengguna" && _id == $id][0]`;
-        const memoryDoc = await clientSanity.fetch(memoryQuery, { id: sanitizedId });
+// ▼▼▼ BAGIAN BARU: MENGAMBIL MEMORI JANGKA PANJANG ▼▼▼
+let initialHistory = [];
+try {
+    const userId = message.from;
+    const sanitizedId = userId.replace(/[@.]/g, '-');
+    const memoriDocId = `memori-${sanitizedId}`;
 
-        if (memoryDoc && memoryDoc.daftarMemori && memoryDoc.daftarMemori.length > 0) {
-            const longTermMemories = memoryDoc.daftarMemori;
-            
-            let memoryContext = "Ini adalah beberapa fakta penting tentang saya (pengguna) yang harus selalu kamu ingat di sepanjang percakapan ini:\n";
-            longTermMemories.forEach(fact => {
-                memoryContext += `- ${fact}\n`;
-            });
+    const memoryQuery = `*[_type == "memoriPengguna" && _id == $id][0]`;
+    const memoryDoc = await clientSanity.fetch(memoryQuery, { id: memoriDocId });
 
-            // Masukkan konteks ini sebagai "instruksi sistem" di awal sejarah percakapan
-            initialHistory.push({ role: "user", parts: [{ text: memoryContext }] });
-            initialHistory.push({ role: "model", parts: [{ text: "Baik, saya telah menerima dan mengingat semua fakta tersebut. Saya siap untuk memulai percakapan." }] });
-            
-            console.log(`INFO: Memuat ${longTermMemories.length} memori untuk user ${userId}`);
-        }
-    } catch (error) {
-        console.error("Gagal mengambil memori jangka panjang:", error);
+    if (memoryDoc && memoryDoc.daftarMemori && memoryDoc.daftarMemori.length > 0) {
+        const longTermMemories = memoryDoc.daftarMemori;
+        
+        let memoryContext = "Ini adalah beberapa fakta penting tentang saya (pengguna) yang harus selalu kamu ingat:\n";
+        longTermMemories.forEach(fact => {
+            memoryContext += `- ${fact}\n`;
+        });
+
+        initialHistory.push({ role: "user", parts: [{ text: memoryContext }] });
+        initialHistory.push({ role: "model", parts: [{ text: "Baik, saya sudah mencatat fakta-fakta ini." }] });
+        
+        console.log(`INFO: Memuat ${longTermMemories.length} memori untuk user ${userId}`);
     }
-    // ▲▲▲ AKHIR BAGIAN BARU ▲▲▲
+} catch (error) {
+    console.error("Gagal mengambil memori jangka panjang:", error);
+}
+// ▲▲▲ AKHIR BAGIAN MEMORI JANGKA PANJANG ▲▲▲
+
 
     // Inisialisasi state dengan history yang mungkin sudah berisi memori
     userState[message.from] = { type: 'ai_mode', history: initialHistory };

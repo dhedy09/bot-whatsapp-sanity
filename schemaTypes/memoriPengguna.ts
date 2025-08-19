@@ -1,4 +1,3 @@
-// file: schemas/memoriPengguna.js
 export default {
   name: 'memoriPengguna',
   title: 'Memori Pengguna Bot',
@@ -16,9 +15,11 @@ export default {
       type: 'string',
     },
     {
-      name: 'memori',
-      title: 'Memori AI (Catatan Personal)',
-      type: 'text',
+      name: 'daftarMemori',
+      title: 'Daftar Memori',
+      type: 'array',
+      of: [{ type: 'string' }],
+      description: 'List memori AI yang diingat untuk user ini',
     },
   ],
 }
