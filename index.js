@@ -202,7 +202,6 @@ async function readWebPage(url) {
 // AKHIR BACA PAGES WEB
 
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI HAPUS FILE▼▼▼
-
 /**
  * Menghapus file dari Google Drive berdasarkan ID-nya.
  * @param {string} fileId ID file di Google Drive.
@@ -239,7 +238,6 @@ async function hapusFileDiDrive(fileId) {
         return false;
     }
 }
-
 // ▲▲▲ AKHIR DARI FUNGSI BARU HAPUS FILE ▲▲▲
 
 // AWAL FUNGSI GOOGLE SEARCH
@@ -321,31 +319,38 @@ function evaluateMathExpression(expression) {
 
 //AWAL FUNGSI GET BERITA
 /**
- * Fungsi ini mengambil topik berita sebagai input,
- * mencari berita menggunakan News API, dan mengembalikan hasilnya dalam format JSON.
- * @param {string} topik - Topik berita yang ingin dicari.
- * @returns {Promise<object>} - Hasil pencarian berita dalam format JSON.
+ * Mengambil berita terkini dari NewsAPI.
+ * @param {string} query Kata kunci pencarian berita.
+ * @returns {Promise<object>} Objek berisi artikel atau pesan error.
  */
-async function getLatestNews(query) { // <-- Nama fungsi & parameter diubah
-    console.log(`[Tool] Menjalankan getLatestNews dengan query: ${query}`);
+async function getLatestNews(query) {
     try {
-        // ... (seluruh isi logikanya tetap sama persis)
-        const apiKey = process.env.NEWS_API_KEY;
-        if (!apiKey) { return { error: "NEWS_API_KEY tidak diatur." }; }
-        const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=id&sortBy=publishedAt&pageSize=5&apiKey=${apiKey}`;
-        const response = await axios.get(apiUrl);
-        if (response.data.articles && response.data.articles.length > 0) {
-            const articles = response.data.articles.map(article => ({
-                title: article.title, description: article.description,
-                url: article.url, source: article.source.name
-            }));
-            return { articles: articles };
-        } else {
-            return { error: `Tidak ada berita yang ditemukan untuk topik "${query}".` };
+        const response = await axios.get('https://newsapi.org/v2/top-headlines', {
+            params: {
+                q: query || '',
+                country: 'id',
+                apiKey: process.env.NEWS_API_KEY,
+                pageSize: 5
+            }
+        });
+
+        const articles = response.data.articles;
+        if (!articles || articles.length === 0) {
+            return { error: `Tidak ada berita yang ditemukan untuk "${query || 'berita utama'}".` };
         }
+
+        const formattedArticles = articles.map(article => ({
+            title: article.title,
+            source: article.source.name,
+            url: article.url
+        }));
+        
+        return { articles: formattedArticles };
+
     } catch (error) {
-        console.error("Error saat mengambil berita:", error.message);
-        return { error: "Gagal mengambil data berita dari News API." };
+        console.error("Error fetching news:", error.message);
+        // --- PERBAIKAN PENTING ADA DI SINI ---
+        return { error: "Gagal mengambil berita dari server NewsAPI." }; // <-- TAMBAHKAN RETURN INI
     }
 }
 // ▲▲▲ AKHIR DARI FUNGSI GET BERITA ▲▲▲
@@ -800,71 +805,73 @@ async function showPustakaMenu(message, categoryId) {
  * @param {Array} originalHistory Riwayat percakapan sebelumnya.
  * @returns {string} Jawaban dari AI.
  */
-async function getGeminiResponse(prompt, originalHistory) {
-    try {
-        const systemInstruction = {
-            role: "model",
-            parts: [{ text: "Kamu adalah Panda Bot, asisten AI peneliti yang cerdas dan teliti. PERATURAN UTAMA: Untuk pertanyaan yang membutuhkan pengetahuan di luar dirimu, kamu WAJIB mengikuti proses dua langkah. LANGKAH 1: Selalu mulai dengan alat googleSearch untuk menemukan sumber URL. LANGKAH 2: Setelah mendapatkan URL, WAJIB gunakan alat readWebPage untuk membaca isi URL tersebut sebelum menjawab. Jangan pernah menjawab hanya dari ringkasan googleSearch. Untuk permintaan informasi real-time (cuaca, gempa, berita), langsung gunakan alat yang sesuai." }]
-        };
+async function getGeminiResponse(prompt, history) {
+    const maxRetries = 3;
+    const delay = 2000;
 
-        const recentHistory = originalHistory.slice(-10);
-        
-        const chat = model.startChat({
-            history: recentHistory,
-            tools: tools,
-            systemInstruction: systemInstruction
-        });
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const systemInstruction = {
+                role: "model",
+                parts: [{ text: "Kamu adalah Panda Bot, asisten AI peneliti yang cerdas dan teliti. Saat diberi pertanyaan yang membutuhkan pengetahuan eksternal, kamu harus selalu mengikuti proses dua langkah: Pertama, gunakan alat googleSearch untuk menemukan sumber informasi yang relevan. Kedua, gunakan alat readWebPage untuk membaca konten dari URL yang paling menjanjikan. Jangan pernah menjawab hanya berdasarkan ringkasan dari hasil pencarian. Selalu baca sumbernya terlebih dahulu untuk memberikan jawaban yang akurat dan mendalam. Sebelum menjawab, selalu periksa apakah ada alat yang bisa digunakan untuk menjawab pertanyaan pengguna secara langsung." }]
+            };
 
-        const result = await chat.sendMessage(prompt);
-        const call = result.response.functionCalls()?.[0];
+            const chat = model.startChat({
+                history: history, // <-- Kuncinya ada di sini, menggunakan seluruh history
+                tools: tools,
+                systemInstruction: systemInstruction,
+            });
+            const result = await chat.sendMessage(prompt);
+            const call = result.response.functionCalls()?.[0];
 
-        if (call) {
-            console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
-            let functionResponse;
+            if (call) {
+                console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
+                let functionResponse;
 
-            // --- SWITCH STATEMENT LENGKAP TANPA PLACEHOLDER ---
-            switch (call.name) {
-                case 'readWebPage':
-                    functionResponse = await readWebPage(call.args.url);
-                    break;
-                case 'googleSearch':
-                    functionResponse = await googleSearch(call.args.query);
-                    break;
-                case 'getCurrentWeather':
-                    functionResponse = await getCurrentWeather(call.args.location);
-                    break;
-                case 'getLatestNews':
-                    functionResponse = await getLatestNews(call.args.query);
-                    break;
-                case 'getGempa':
-                    functionResponse = await getGempa();
-                    break;
-                case 'calculate':
-                    // Asumsi Anda punya fungsi terpisah untuk evaluasi mathjs
-                    functionResponse = { result: evaluateMathExpression(call.args.expression) };
-                    break;
-                default:
-                    console.error(`❌ Nama fungsi tidak dikenali: ${call.name}`);
-                    functionResponse = { error: `Fungsi ${call.name} tidak ada.` };
-                    break;
+                // Switch statement lengkap Anda
+                switch (call.name) {
+                    case 'readWebPage':
+                        functionResponse = await readWebPage(call.args.url);
+                        break;
+                    case 'googleSearch':
+                        functionResponse = await googleSearch(call.args.query);
+                        break;
+                    case 'getCurrentWeather':
+                        functionResponse = await getCurrentWeather(call.args.location);
+                        break;
+                    case 'getLatestNews':
+                        functionResponse = await getLatestNews(call.args.query);
+                        break;
+                    case 'getGempa':
+                        functionResponse = await getGempa();
+                        break;
+                    case 'calculate':
+                        functionResponse = { result: evaluateMathExpression(call.args.expression) };
+                        break;
+                    default:
+                        console.error(`❌ Nama fungsi tidak dikenali: ${call.name}`);
+                        functionResponse = { error: `Fungsi ${call.name} tidak ada.` };
+                        break;
+                }
+
+                const result2 = await chat.sendMessage([
+                    { functionResponse: { name: call.name, response: functionResponse } }
+                ]);
+                return result2.response.text();
+            } else {
+                return result.response.text();
             }
-
-            const result2 = await chat.sendMessage([
-                { functionResponse: { name: call.name, response: functionResponse } }
-            ]);
-            return result2.response.text();
-        } else {
-            return result.response.text();
+        } catch (error) {
+            console.error(`Error pada percobaan ${attempt} saat memanggil API Gemini:`, error);
+            if (attempt === maxRetries) {
+                console.error("Gagal setelah percobaan maksimal.");
+                if (error.message && error.message.includes('response was blocked')) {
+                    return "Maaf, respons saya diblokir karena kebijakan keamanan. Mungkin pertanyaan Anda sensitif.";
+                }
+                return "Maaf, Asisten AI sedang mengalami gangguan. Silakan coba lagi beberapa saat lagi.";
+            }
+            await new Promise(resolve => setTimeout(resolve, delay));
         }
-    } catch (error) {
-        console.error(`Error saat memanggil API Gemini:`, error);
-        if (error.message && error.message.includes('400 Bad Request')) {
-             return "Maaf, terjadi sedikit masalah dengan format permintaan. Tim developer sedang menanganinya.";
-        }
-        if (error.message && error.message.includes('response was blocked')) {
-            return "Maaf, respons saya diblokir karena kebijakan keamanan. Mungkin pertanyaan Anda sensitif.";
-        }
-        return "Maaf, Asisten AI sedang mengalami gangguan. Silakan coba lagi beberapa saat lagi.";
     }
 }
 // AKHIR GEMINI RESPONSE
