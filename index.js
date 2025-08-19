@@ -795,19 +795,16 @@ async function showPustakaMenu(message, categoryId) {
 /**
  * Mengirim prompt ke API Gemini, menangani function calling, dan mengembalikan respons.
  * @param {string} prompt Pesan baru dari pengguna.
- * @param {Array} history Riwayat percapan sebelumnya.
+ * @param {Array} history Riwayat percakapan sebelumnya.
  * @returns {string} Jawaban dari AI.
  */
 async function getGeminiResponse(prompt, history) {
     try {
-        let finalPrompt = prompt; // Secara default, promptnya adalah pesan pengguna biasa
+        let finalPrompt = prompt;
 
-        // --- INI PERUBAHAN UTAMA ---
-        // Cek apakah prompt adalah pertanyaan yang butuh riset atau hanya sapaan/obrolan singkat
         const researchKeywords = ['siapa', 'apa', 'kapan', 'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berita', 'berapa'];
         const isResearchQuery = researchKeywords.some(keyword => prompt.toLowerCase().includes(keyword)) || prompt.length > 25;
 
-        // Jika ini adalah pertanyaan riset, tambahkan instruksi tegas
         if (isResearchQuery) {
             console.log("[Mode] AI masuk ke mode Peneliti.");
             const instruction = "PERINTAH MUTLAK: Tugas utamamu adalah menjadi asisten peneliti. Jangan pernah menjawab dari ingatan. Kamu WAJIB mengikuti proses ini: LANGKAH 1: Gunakan 'googleSearch' untuk menemukan URL yang relevan. LANGKAH 2: SEGERA setelah itu, WAJIB gunakan 'readWebPage' untuk membaca isi dari URL tersebut. LANGKAH 3: Jawab pertanyaan pengguna HANYA berdasarkan informasi yang kamu dapat dari 'readWebPage'. JANGAN PERNAH mengatakan kamu tidak bisa mengakses internet atau memeriksa URL.";
@@ -815,7 +812,6 @@ async function getGeminiResponse(prompt, history) {
         } else {
             console.log("[Mode] AI masuk ke mode Ngobrol Santai.");
         }
-        // --- AKHIR DARI PERUBAHAN UTAMA ---
 
         const chat = model.startChat({
             history: history,
@@ -829,31 +825,49 @@ async function getGeminiResponse(prompt, history) {
             console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
             let functionResponse;
 
+            // --- INI SWITCH STATEMENT YANG ANDA MINTA ---
             switch (call.name) {
-                // ... (seluruh switch statement Anda tetap sama)
-                case 'readWebPage': functionResponse = await readWebPage(call.args.url); break;
-                case 'googleSearch': functionResponse = await googleSearch(call.args.query); break;
-                case 'getCurrentWeather': functionResponse = await getCurrentWeather(call.args.location); break;
-                case 'getLatestNews': functionResponse = await getLatestNews(call.args.query); break;
-                case 'getGempa': functionResponse = await getGempa(); break;
-                case 'calculate': functionResponse = { result: evaluateMathExpression(call.args.expression) }; break;
-                default: functionResponse = { error: `Fungsi ${call.name} tidak ada.` }; break;
+                case 'readWebPage':
+                    functionResponse = await readWebPage(call.args.url);
+                    break;
+                case 'googleSearch':
+                    functionResponse = await googleSearch(call.args.query);
+                    break;
+                case 'getCurrentWeather':
+                    functionResponse = await getCurrentWeather(call.args.location);
+                    break;
+                case 'getLatestNews':
+                    functionResponse = await getLatestNews(call.args.query);
+                    break;
+                case 'getGempa':
+                    functionResponse = await getGempa();
+                    break;
+                case 'calculate':
+                    functionResponse = { result: evaluateMathExpression(call.args.expression) };
+                    break;
+                default:
+                    functionResponse = { error: `Fungsi ${call.name} tidak ada.` };
+                    break;
             }
 
             const result2 = await chat.sendMessage([
-                { functionResponse: { name: call.name, response: functionResponse } }
+                { functionResponse: { name: call.name, response: functionResponse } } // Ini format yang benar
             ]);
             
             const finalResponse = result2.response;
             if (finalResponse.candidates && finalResponse.candidates[0].content && finalResponse.candidates[0].content.parts) {
                 return finalResponse.candidates[0].content.parts.map(part => part.text).join('');
-            } else { return "Maaf, saya menerima respons yang tidak valid dari AI."; }
+            } else {
+                return "Maaf, saya menerima respons yang tidak valid dari AI.";
+            }
 
         } else {
             const finalResponse = result.response;
             if (finalResponse.candidates && finalResponse.candidates[0].content && finalResponse.candidates[0].content.parts) {
                 return finalResponse.candidates[0].content.parts.map(part => part.text).join('');
-            } else { return "Maaf, saya menerima respons yang tidak valid dari AI."; }
+            } else {
+                return "Maaf, saya menerima respons yang tidak valid dari AI.";
+            }
         }
     } catch (error) {
         console.error(`Error saat memanggil API Gemini:`, error);
