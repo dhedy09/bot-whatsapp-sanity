@@ -157,8 +157,6 @@ const userState = {};
 // =================================================================
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
 async function getGeminiVisionResponse(imageBuffer, promptText) {
   const model = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
 
