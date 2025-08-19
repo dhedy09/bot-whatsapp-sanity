@@ -319,31 +319,48 @@ function evaluateMathExpression(expression) {
 
 //AWAL FUNGSI GET BERITA
 /**
- * Fungsi ini mengambil topik berita sebagai input,
- * mencari berita menggunakan News API, dan mengembalikan hasilnya dalam format JSON.
- * @param {string} topik - Topik berita yang ingin dicari.
- * @returns {Promise<object>} - Hasil pencarian berita dalam format JSON.
+ * Mengambil berita terkini dari NewsAPI menggunakan endpoint yang fleksibel.
+ * @param {string} query Kata kunci pencarian berita.
+ * @returns {Promise<object>} Objek yang selalu berisi properti 'articles' (bisa berupa array kosong).
  */
-async function getLatestNews(query) { // <-- Nama fungsi & parameter diubah
+async function getLatestNews(query) {
     console.log(`[Tool] Menjalankan getLatestNews dengan query: ${query}`);
     try {
-        // ... (seluruh isi logikanya tetap sama persis)
         const apiKey = process.env.NEWS_API_KEY;
-        if (!apiKey) { return { error: "NEWS_API_KEY tidak diatur." }; }
-        const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=id&sortBy=publishedAt&pageSize=5&apiKey=${apiKey}`;
-        const response = await axios.get(apiUrl);
-        if (response.data.articles && response.data.articles.length > 0) {
-            const articles = response.data.articles.map(article => ({
-                title: article.title, description: article.description,
-                url: article.url, source: article.source.name
-            }));
-            return { articles: articles };
-        } else {
-            return { error: `Tidak ada berita yang ditemukan untuk topik "${query}".` };
+        if (!apiKey) {
+            console.error("[Berita] NEWS_API_KEY tidak diatur.");
+            return { articles: [] }; // Kembalikan array kosong jika API key tidak ada
         }
+
+        const response = await axios.get('https://newsapi.org/v2/everything', {
+            params: {
+                q: query || 'indonesia', // Jika query kosong, cari berita populer di Indonesia
+                language: 'id',
+                apiKey: apiKey,
+                pageSize: 5,
+                sortBy: 'publishedAt' // Selalu ambil yang terbaru
+            }
+        });
+
+        const articles = response.data.articles;
+        if (!articles || articles.length === 0) {
+            console.log(`[Berita] Tidak ada artikel yang ditemukan untuk query: "${query}"`);
+            return { articles: [] }; // Kembalikan array kosong jika tidak ada hasil
+        }
+
+        const formattedArticles = articles.map(article => ({
+            title: article.title,
+            description: article.description,
+            source: article.source.name,
+            url: article.url
+        }));
+        
+        return { articles: formattedArticles };
+
     } catch (error) {
-        console.error("Error saat mengambil berita:", error.message);
-        return { error: "Gagal mengambil data berita dari News API." };
+        console.error("Error saat mengambil berita dari NewsAPI:", error.message);
+        // Jika terjadi error server apapun, kembalikan array kosong agar bot tidak macet
+        return { articles: [] };
     }
 }
 // ▲▲▲ AKHIR DARI FUNGSI GET BERITA ▲▲▲
