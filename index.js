@@ -807,9 +807,6 @@ async function getGeminiResponse(prompt, originalHistory) {
             parts: [{ text: "Kamu adalah Panda Bot, asisten AI peneliti yang cerdas dan teliti. PERATURAN UTAMA: Untuk pertanyaan yang membutuhkan pengetahuan di luar dirimu, kamu WAJIB mengikuti proses dua langkah. LANGKAH 1: Selalu mulai dengan alat googleSearch untuk menemukan sumber URL. LANGKAH 2: Setelah mendapatkan URL, WAJIB gunakan alat readWebPage untuk membaca isi URL tersebut sebelum menjawab. Jangan pernah menjawab hanya dari ringkasan googleSearch. Untuk permintaan informasi real-time (cuaca, gempa, berita), langsung gunakan alat yang sesuai." }]
         };
 
-        // --- INI PERUBAHAN UTAMA ---
-        // Kita membuat 'konteks' baru yang bersih untuk setiap panggilan
-        // Ambil 10 pesan terakhir dari riwayat untuk menjaga alur percakapan
         const recentHistory = originalHistory.slice(-10);
         
         const chat = model.startChat({
@@ -825,7 +822,7 @@ async function getGeminiResponse(prompt, originalHistory) {
             console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
             let functionResponse;
 
-            // ... (switch statement Anda tetap di sini)
+            // --- SWITCH STATEMENT LENGKAP TANPA PLACEHOLDER ---
             switch (call.name) {
                 case 'readWebPage':
                     functionResponse = await readWebPage(call.args.url);
@@ -833,11 +830,21 @@ async function getGeminiResponse(prompt, originalHistory) {
                 case 'googleSearch':
                     functionResponse = await googleSearch(call.args.query);
                     break;
-                // ... case lainnya ...
+                case 'getCurrentWeather':
+                    functionResponse = await getCurrentWeather(call.args.location);
+                    break;
+                case 'getLatestNews':
+                    functionResponse = await getLatestNews(call.args.query);
+                    break;
                 case 'getGempa':
                     functionResponse = await getGempa();
                     break;
+                case 'calculate':
+                    // Asumsi Anda punya fungsi terpisah untuk evaluasi mathjs
+                    functionResponse = { result: evaluateMathExpression(call.args.expression) };
+                    break;
                 default:
+                    console.error(`❌ Nama fungsi tidak dikenali: ${call.name}`);
                     functionResponse = { error: `Fungsi ${call.name} tidak ada.` };
                     break;
             }
