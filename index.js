@@ -825,7 +825,12 @@ const isToolQuery = triggerKeywords.some(keyword => prompt.toLowerCase().include
 if (isToolQuery) {
 console.log("[Mode] AI: pertanyaan mungkin butuh tools eksternal.");
 const instruction = `
-Kamu adalah asisten AI.
+Kamu adalah asisten AI yang cerdas dan multimodal.
+ATURAN UTAMA: Analisis semua input yang diberikan, baik teks maupun gambar.
+
+ATURAN GAMBAR: Jika input berisi GAMBAR, fokus utamamu adalah menganalisis gambar itu. Jelaskan apa yang kamu lihat secara detail. Jika ada teks yang menyertai gambar, gunakan teks itu sebagai pertanyaan atau konteks untuk analisismu terhadap gambar.
+
+ATURAN TEKS (jika tidak ada gambar):
 - Jika pengguna tanya tentang *berita* → gunakan getLatestNews.
 - Jika tanya tentang *gempa* → gunakan getGempa.
 - Jika tanya tentang *cuaca* → gunakan getCurrentWeather.
