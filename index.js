@@ -158,51 +158,6 @@ const userState = {};
 // =================================================================
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
 
-// AWAL FUNGSU GEMINI BACA GAMBAR
-async function getGeminiVisionResponse(imageBuffer, promptText) {
-  const API_KEY = process.env.GEMINI_API_KEY;
-  const base64Image = imageBuffer.toString('base64');
-
-  const payload = {
-    contents: [
-      {
-        parts: [
-          { text: promptText },
-          {
-            inline_data: {
-              mime_type: 'image/jpeg',
-              data: base64Image,
-            },
-          },
-        ],
-      },
-    ],
-  };
-
-  try {
-    const response = await axios.post(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-vision-preview:generateContent',
-      payload,
-      {
-        params: { key: API_KEY },
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-
-    const candidates = response.data.candidates;
-    if (candidates && candidates.length > 0) {
-      return candidates[0].content.parts[0].text;
-    } else {
-      return '❌ Tidak ada respons dari AI.';
-    }
-  } catch (err) {
-    console.error('Gagal memanggil Gemini Vision:', err.response?.data || err.message);
-    return '❌ Terjadi kesalahan saat memproses gambar.';
-  }
-}
-
-// AKHIR FUNGSI BACA GAMBAR
-
 // AWAL BACA PAGES WEB
 
 /**
@@ -856,7 +811,7 @@ async function showPustakaMenu(message, categoryId) {
 // =================================================================
 // BLOK FUNGSI: RESPON GEMINI AI
 // =================================================================
-async function getGeminiResponse(prompt, history) {
+async function getGeminiResponse(prompt, history, userId, media = null) {
 try {
 let finalPrompt = prompt;
 
@@ -890,7 +845,18 @@ tools: tools,
 });
 
 
-const result = await chat.sendMessage(finalPrompt);
+/* const result = await chat.sendMessage(finalPrompt);*/
+const messageParts = [finalPrompt];
+if (media && media.data) {
+    console.log(`[Media] Mengirim gambar dengan tipe: ${media.mimetype}`);
+    messageParts.push({
+        inlineData: {
+            data: media.data,
+            mimeType: media.mimetype
+        }
+    });
+}
+const result = await chat.sendMessage(messageParts);
 const call = result.response.functionCalls()?.[0];
 
 
@@ -1098,25 +1064,6 @@ client.on('message', async (message) => {
         return;
       }
 
-
-      if (message.hasMedia) {
-        const media = await message.downloadMedia();
-        if (media.mimetype && media.mimetype.startsWith('image/')) {
-          try {
-            const imageBuffer = Buffer.from(media.data, 'base64');
-            const caption = message.caption || message.body || 'Tolong jelaskan isi gambar ini.';
-
-            const response = await getGeminiVisionResponse(imageBuffer, caption);
-            message.reply(response);
-          } catch (err) {
-            console.error("Gagal memproses gambar:", err);
-            message.reply("❌ Maaf, saya gagal membaca gambar tersebut.");
-          }
-
-          return;
-        }
-      }
-
         const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
         const lowerMsg = message.body.trim().toLowerCase();
         const match = message.body.match(memoryRegex);
@@ -1181,42 +1128,42 @@ client.on('message', async (message) => {
         // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
         try {
         await chat.sendStateTyping();
-        const aiResponse = await getGeminiResponse(message.body, userState[message.from].history);
+        let geminiResponse;
 
+        // Cek apakah pesan berisi media (gambar, video, dll)
+        if (message.hasMedia) {
+            const media = await message.downloadMedia();
+            // Pastikan media adalah gambar dan datanya ada
+            if (media && media.mimetype.startsWith('image/')) {
+                console.log("[Pesan] Pesan berisi gambar, memproses secara multimodal...");
+                // Kirim teks (caption dari 'message.body') dan gambar ke Gemini
+                geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, media);
+            } else {
+                // Jika media bukan gambar (misal: stiker, video), proses teksnya saja
+                console.log("[Pesan] Media bukan gambar, hanya memproses teks.");
+                geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
+            }
+        } else {
+            // Jika tidak ada media, proses teks seperti biasa
+            geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
+        }
 
-        message.reply(aiResponse);
+        message.reply(geminiResponse);
+        
+        // Manajemen history (logika Anda yang sudah ada kita pertahankan)
         userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
-        userState[message.from].history.push({ role: 'model', parts: [{ text: aiResponse }] });
-
+        userState[message.from].history.push({ role: 'model', parts: [{ text: geminiResponse }] });
 
         if (userState[message.from].history.length > 10) {
-        userState[message.from].history = userState[message.from].history.slice(-10);
+            userState[message.from].history = userState[message.from].history.slice(-10);
         }
-        } catch (e) {
+    } catch (e) {
         console.error("[AI] Gagal merespons:", e);
         message.reply("Maaf, terjadi kesalahan dari AI.");
+    }
+    return;
         }
 
-
-        return;
-        }
-
-    //   try {
-    //     await chat.sendStateTyping()
-    //     const aiResponse = await getGeminiResponse(userMessage, userLastState.history)
-
-    //     message.reply(aiResponse)
-    //     userLastState.history.push({role: 'user', parts: [{text: userMessage}]})
-    //     userLastState.history.push({role: 'model', parts: [{text: aiResponse}]})
-    //     const MAX_HISTORY = 10
-    //     if (userLastState.history.length > MAX_HISTORY) {
-    //       userLastState.history = userLastState.history.slice(-MAX_HISTORY)
-    //     }
-    //   } catch (error) {
-    //     console.error('Error di dalam blok AI Mode:', error)
-    //     message.reply('Maaf, terjadi gangguan. Coba ulangi pertanyaan Anda.')
-    //   }
-    //   return
     } // BLOK 2: MENANGANI PERINTAH TEKS
 
     if (userMessageLower === 'halo panda') {
