@@ -157,6 +157,25 @@ const userState = {};
 // =================================================================
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
 
+// AWAL FUNGSI BACA GAMBAR
+
+async function getGeminiVisionResponse(imageBuffer, promptText) {
+  const model = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
+
+  const imagePart = {
+    inlineData: {
+      data: imageBuffer.toString("base64"),
+      mimeType: "image/jpeg", // Atur ke image/png jika perlu
+    }
+  };
+
+  const result = await model.generateContent([promptText, imagePart]);
+  const response = await result.response;
+  return response.text();
+}
+
+// AKHIR FUNGSI BACA GAMBAR
+
 // AWAL BACA PAGES WEB
 
 /**
@@ -1020,6 +1039,22 @@ client.on('message', async (message) => {
         message.reply('Sesi AI telah berakhir. Anda kembali ke mode normal.')
         await showMainMenu(message)
         return
+      }
+
+      if (message.hasMedia && message.type === 'image') {
+        try {
+          const media = await message.downloadMedia();
+          const imageBuffer = Buffer.from(media.data, 'base64');
+          const caption = message.caption || 'Tolong jelaskan isi gambar ini.';
+
+          const response = await getGeminiVisionResponse(imageBuffer, caption);
+          message.reply(response);
+        } catch (err) {
+          console.error("Gagal memproses gambar:", err);
+          message.reply("Maaf, saya gagal membaca gambar tersebut.");
+        }
+
+        return;
       }
 
         const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
