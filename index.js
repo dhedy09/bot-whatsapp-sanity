@@ -22,6 +22,7 @@ const axios = require('axios');
 const app = express();
 const path = require('path');
 const cheerio = require('cheerio');
+const apiKey = process.env.GEMINI_API_KEY;
 
 
 // --- INISIALISASI KLIEN GOOGLE (DRIVE, SEARCH, DLL) ---
@@ -156,6 +157,54 @@ const userState = {};
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
+
+// AWAL FUNGSU GEMINI BACA GAMBAR
+async function getGeminiVisionResponse(imageBuffer, promptText) {
+  const API_KEY = process.env.GEMINI_API_KEY
+
+  const base64Image = imageBuffer.toString('base64')
+
+  const payload = {
+    contents: [
+      {
+        parts: [
+          { text: promptText },
+          {
+            inline_data: {
+              mime_type: 'image/jpeg',
+              data: base64Image,
+            },
+          },
+        ],
+      },
+    ],
+  }
+
+  try {
+    const response = await axios.post(
+      'https://generativelanguage.googleapis.com/v1/models/gemini-pro-vision:generateContent',
+      payload,
+      {
+        params: { key: API_KEY },
+        headers: { 'Content-Type': 'application/json' },
+      }
+    )
+
+    const candidates = response.data.candidates
+    if (candidates && candidates.length > 0) {
+      return candidates[0].content.parts[0].text
+    } else {
+      return 'Maaf, tidak ada respons dari AI.'
+    }
+  } catch (err) {
+    console.error('Gagal memanggil Gemini Vision:', err.response?.data || err.message)
+    return 'Maaf, terjadi kesalahan saat memproses gambar.'
+  }
+}
+
+module.exports = { getGeminiVisionResponse }
+
+// AKHIR FUNGSI GEMINI BACA GAMBAR
 
 // AWAL FUNGSI BACA GAMBAR
 
