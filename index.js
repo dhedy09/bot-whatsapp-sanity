@@ -1124,6 +1124,17 @@ if (sesiAiAktif) {
     }
     return;
 }
+
+if (userMessageLower === 'mode ai' || userMessageLower === 'mulai ai') {
+    // Aktifkan mode AI di Sanity dan reset history
+    await clientSanity.patch(userData._id).set({ 
+        sesiAiAktif: true, 
+        riwayatPercakapan: JSON.stringify([]) 
+    }).commit();
+    
+    message.reply('Mode AI diaktifkan. Anda sekarang bisa berbicara dengan asisten AI. Ketik "selesai" untuk keluar.');
+    return;
+}
 // BLOK 2: MENANGANI PERINTAH TEKS
 
     if (userMessageLower === 'halo panda') {
