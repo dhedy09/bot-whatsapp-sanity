@@ -52,29 +52,6 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 // --- DEFINISI ALAT-ALAT UNTUK AI ---
 const tools = [{
     functionDeclarations: [
-         {
-            name: "bacaMemori",
-            description: "Membaca atau memeriksa catatan personal yang sudah tersimpan tentang pengguna. Selalu gunakan alat ini di awal percakapan untuk mengetahui konteks tentang pengguna.",
-            parameters: {
-                type: "OBJECT",
-                properties: {
-                    userId: { type: "STRING", description: "ID unik pengguna WhatsApp." }
-                },
-                required: ["userId"]
-            }
-        },
-        {
-            name: "simpanMemori",
-            description: "Menyimpan fakta, preferensi, atau informasi personal baru tentang pengguna ke dalam catatan jangka panjang. Gunakan saat pengguna secara eksplisit meminta untuk 'diingat' atau memberikan informasi personal yang penting.",
-            parameters: {
-                type: "OBJECT",
-                properties: {
-                    userId: { type: "STRING", description: "ID unik pengguna WhatsApp." },
-                    faktaTeks: { type: "STRING", description: "Potongan teks atau fakta yang akan disimpan." }
-                },
-                required: ["userId", "faktaTeks"]
-            }
-        }
         {
             name: "googleSearch",
             description: "Langkah pertama untuk menjawab pertanyaan tentang topik umum, fakta, orang, tempat, atau peristiwa. Selalu gunakan alat ini terlebih dahulu untuk menemukan URL yang relevan.",
@@ -172,6 +149,7 @@ const client = new Client({
 });
 
 const userHistory = {};
+const userState = {};
 
 // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
@@ -179,73 +157,6 @@ const userHistory = {};
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
-
-// AWAL SIMPAN DAN BACA MEMORI
-
-/**
- * Membaca daftar memori yang tersimpan untuk pengguna.
- * @param {string} userId ID unik pengguna WhatsApp.
- * @returns {Promise<object>} Objek berisi memori yang telah diformat.
- */
-async function bacaMemori(userId) {
-  console.log(`[Tool] Menjalankan bacaMemori untuk user: ${userId}`);
-  try {
-    const query = `*[_type == "memoriPengguna" && userId == $userId][0]{daftarMemori}`;
-    const result = await clientSanity.fetch(query, { userId });
-
-    if (result && result.daftarMemori && result.daftarMemori.length > 0) {
-      const memoriFormatted = result.daftarMemori.map(item => `- ${item}`).join('\n');
-      return { memori: memoriFormatted };
-    } else {
-      return { memori: "Belum ada catatan memori yang tersimpan untuk pengguna ini." };
-    }
-  } catch (error) {
-    console.error("Error saat membaca memori dari Sanity:", error);
-    return { memori: "Gagal membaca memori karena ada kesalahan teknis." };
-  }
-}
-
-/**
- * Menyimpan fakta baru untuk semua jenis pengguna.
- * (Fungsi ini akan kita panggil nanti dari dalam getGeminiResponse)
- * @param {string} userId ID unik pengguna WhatsApp.
- * @param {string} faktaTeks Fakta atau catatan baru yang akan disimpan.
- * @returns {Promise<object>} Objek berisi status keberhasilan.
- */
-async function simpanMemori(userId, faktaTeks) {
-  console.log(`[Tool] Menjalankan simpanMemori untuk user: ${userId}`);
-  try {
-    const query = `*[_type == "memoriPengguna" && userId == $userId][0]{_id}`;
-    const dataMemori = await clientSanity.fetch(query, { userId });
-
-    if (dataMemori) {
-      await clientSanity
-        .patch(dataMemori._id)
-        .append('daftarMemori', [faktaTeks])
-        .commit({ autoGenerateArrayKeys: true });
-      return { status: "Fakta berhasil disimpan ke dalam memori." };
-    } else {
-      // Jika pengguna baru, kita buatkan profilnya dulu
-      const contact = await client.getContactById(userId);
-      const userName = contact.pushname || userId;
-      const docId = `memori-${userId.replace(/[@.]/g, '-')}`;
-      const docBaru = {
-        _id: docId,
-        _type: 'memoriPengguna',
-        userId: userId,
-        namaPanggilan: userName,
-        daftarMemori: [faktaTeks]
-      };
-      await clientSanity.create(docBaru);
-      return { status: "Profil baru dibuat dan fakta berhasil disimpan." };
-    }
-  } catch (error) {
-    console.error("Error saat menyimpan memori ke Sanity:", error);
-    return { status: "Gagal menyimpan memori karena ada kesalahan teknis." };
-  }
-}
-
-// AKHIR SIMPAN DAN BACA MEMORI
 
 // AWAL BACA PAGES WEB
 
@@ -757,11 +668,10 @@ async function getLatestNews(query) {
 // =================================================================
 async function isAdmin(userId) {
     try {
-        // Query ke schema 'pegawai' menggunakan field 'userId' yang benar
-        const query = `*[_type == "pegawai" && userId == $userId][0]`;
-        const user = await clientSanity.fetch(query, { userId: userId });
+        const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
+        const query = `*[_type == "pegawai" && _id == $id][0]`;
+        const user = await clientSanity.fetch(query, { id: sanitizedId });
 
-        // Cek jika pengguna ditemukan dan tipenya adalah 'admin'
         if (user && user.tipePegawai === 'admin') {
             return true;
         }
@@ -769,7 +679,7 @@ async function isAdmin(userId) {
 
     } catch (error) {
         console.error("Error saat memeriksa status admin:", error);
-        return false; // Default ke false jika terjadi error demi keamanan
+        return false;
     }
 }
 
@@ -821,40 +731,35 @@ async function getInfoGempa() {
 // ▲▲▲ AKHIR DARI KODE PENGGANTI ▲▲▲
 
 async function showMainMenu(message) {
+    // ... (Fungsi ini sudah benar, tidak ada perubahan)
     const contact = await message.getContact();
     const userName = contact.pushname || contact.name || 'Pengguna';
     const salamQuery = `*[_type == "botReply" && keyword == "salam_menu_utama"][0]`;
     const menuQuery = `*[_type == "menuUtamaItem"] | order(urutanTampilan asc)`;
-    
     const [salamData, menuItems] = await Promise.all([
         clientSanity.fetch(salamQuery),
         clientSanity.fetch(menuQuery)
     ]);
-    
     const salamText = salamData ? salamData.jawaban.replace(/\n\n/g, '\n') : 'Berikut adalah menu yang tersedia:';
-    
     if (!menuItems || menuItems.length === 0) {
         return message.reply('Maaf, menu utama belum diatur. Silakan hubungi admin.');
     }
-    
-    // BARIS YANG MENYEBABKAN ERROR SUDAH DIHAPUS DARI SINI
-    
+    userState[message.from] = { type: 'menu_utama', list: menuItems };
     let menuMessage = `👋 Selamat datang *${userName}* di bot perencanaan.\n${salamText}\n\n`;
     menuItems.forEach((item) => {
         menuMessage += `${item.urutanTampilan}. ${item.namaMenu}\n`;
     });
-    
     return message.reply(menuMessage);
 }
 
 
 async function showPustakaMenu(message, categoryId) {
+    // ... (Fungsi ini sudah benar, tidak ada perubahan)
     try {
         const breadcrumbPath = [];
         let currentCatId = categoryId;
         let depth = 0;
         const maxDepth = 10;
-        
         while (currentCatId && depth < maxDepth) {
             const parentQuery = `*[_type == "kategoriPustaka" && _id == "${currentCatId}"][0]{namaKategori, "parentId": indukKategori._ref}`;
             const parent = await clientSanity.fetch(parentQuery);
@@ -866,36 +771,29 @@ async function showPustakaMenu(message, categoryId) {
             }
             depth++;
         }
-        
         const breadcrumb = breadcrumbPath.length > 0 ? `Pustaka Data > ${breadcrumbPath.join(' > ')}` : 'Pustaka Data';
         const queryFilter = categoryId ? `indukKategori._ref == "${categoryId}"` : '!defined(indukKategori)';
         const subKategoriQuery = `*[_type == "kategoriPustaka" && ${queryFilter}] | order(namaKategori asc)`;
         const dokumenQuery = `*[_type == "dokumenPustaka" && kategoriInduk._ref == "${categoryId}"] | order(namaDokumen asc)`;
-        
         const [subKategoriList, dokumenList] = await Promise.all([
             clientSanity.fetch(subKategoriQuery),
             categoryId ? clientSanity.fetch(dokumenQuery) : Promise.resolve([])
         ]);
-        
         const combinedList = [...subKategoriList, ...dokumenList];
-        
         if (combinedList.length === 0) {
             message.reply(`Maaf, belum ada data di dalam kategori ini.\n\nBalas dengan *0* untuk kembali.`);
-            // BARIS ERROR PERTAMA SUDAH DIHAPUS DARI SINI
+            userState[message.from] = { type: 'pustaka_data', currentCategoryId: categoryId, list: [] };
             return;
         }
-        
         let menuMessage = `*${breadcrumb}*\n\nSilakan pilih salah satu:\n\n`;
         combinedList.forEach((item, index) => {
             const icon = item._type === 'dokumenPustaka' ? '📄' : '📁';
             const title = item.namaKategori || item.namaDokumen;
             menuMessage += `${index + 1}. ${icon} ${title}\n`;
         });
-        
         menuMessage += `\nBalas dengan *0* untuk kembali.`;
-        // BARIS ERROR KEDUA SUDAH DIHAPUS DARI SINI
+        userState[message.from] = { type: 'pustaka_data', currentCategoryId: categoryId, list: combinedList };
         message.reply(menuMessage);
-        
     } catch (error) {
         console.error("Error di showPustakaMenu:", error);
         message.reply("Maaf, terjadi kesalahan saat memuat Pustaka Data.");
@@ -929,8 +827,6 @@ console.log("[Mode] AI: pertanyaan mungkin butuh tools eksternal.");
 const instruction = `
 Kamu adalah asisten AI yang cerdas dan multimodal.
 ATURAN UTAMA: Analisis semua input yang diberikan, baik teks maupun gambar.
-
-ATURAN MEMORI: Di awal setiap percakapan, kamu WAJIB selalu menggunakan alat 'bacaMemori' untuk memeriksa apakah ada catatan tentang pengguna. Gunakan informasi dari memori untuk membuat jawabanmu lebih personal. Jika pengguna memintamu untuk 'mengingat sesuatu' atau memberimu fakta personal baru (misal: "saya kerja di Padang"), kamu WAJIB menggunakan alat 'simpanMemori'.
 
 ATURAN GAMBAR: Jika input berisi GAMBAR:
 1.  Pertama, identifikasi objek atau subjek utama di dalam gambar.
@@ -979,12 +875,6 @@ let functionResponse;
 
 
 switch (call.name) {
-case 'bacaMemori':
-functionResponse = await bacaMemori(userId);
-break;
-case 'simpanMemori':
-functionResponse = await simpanMemori(userId, call.args.faktaTeks);
-break; 
 case 'readWebPage':
 functionResponse = await readWebPage(call.args.url);
 break;
@@ -1152,129 +1042,138 @@ client.on('message', async (message) => {
   try {
     const userMessage = message.body.trim()
     const userMessageLower = userMessage.toLowerCase()
-    const userId = message.from;
-const query = `*[_type == "memoriPengguna" && userId == $userId][0]`;
-let userData = await clientSanity.fetch(query, { userId });
+    const userLastState = userState[message.from] || userState[message.author] // BLOK 1: MENANGANI "MODE AI"
 
-// Jika pengguna belum ada di DB, buatkan profil memorinya.
-if (!userData) {
-    const contact = await message.getContact();
-    const userName = contact.pushname || userId;
-    const docId = `memori-${userId.replace(/[@.]/g, '-')}`;
-    const docBaru = {
-        _id: docId,
+  const doaRegex = /doa (.*)/i;
+  const doaMatch = userMessageLower.match(doaRegex);
+
+    if (userLastState && userLastState.type === 'ai_mode') {
+      const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
+      if (exitCommands.includes(userMessageLower)) {
+        delete userState[message.from]
+        message.reply('Sesi AI telah berakhir. Anda kembali ke mode normal.')
+        await showMainMenu(message)
+        return
+      }
+
+      if (doaMatch) {
+        await chat.sendStateTyping();
+
+        const permintaanDoa = doaMatch[1];
+        const promptDoa = `Buatkan teks doa dalam bahasa Arab dan terjemahannya ke bahasa Indonesia untuk permintaan ini: "${permintaanDoa}". Tambahkan tanda baca dan harakat.`;
+
+        try {
+          const doaResponse = await getGeminiResponse(promptDoa, []);
+          message.reply(doaResponse);
+        } catch (err) {
+          console.error("Gagal membuat doa:", err);
+          message.reply("Maaf, terjadi kesalahan saat membuat doa.");
+        }
+
+        return;
+      }
+
+        const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
+        const lowerMsg = message.body.trim().toLowerCase();
+        const match = message.body.match(memoryRegex);
+
+
+        if (userState[message.from]?.type === 'ai_mode') {
+        // === 1. Keluar dari sesi AI jika ketik "selesai" atau "stop" ===
+        const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
+        if (exitCommands.includes(lowerMsg)) {
+        delete userState[message.from];
+        message.reply('Sesi AI telah berakhir. Anda kembali ke menu utama.');
+        await showMainMenu(message);
+        return;
+        }
+
+
+        // === 2. Menyimpan memori jika cocok pola fleksibel ===
+        if (match) {
+        const memoryToSave = message.body.replace(memoryRegex, '').trim();
+        if (!memoryToSave) {
+        message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
+        return;
+        }
+
+
+        try {
+        const userId = message.from;
+        const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
+        const contact = await message.getContact();
+        const userName = contact.pushname || userId;
+
+
+        // Pastikan dokumen memori ada
+        await clientSanity.createIfNotExists({
+        _id: sanitizedId,
         _type: 'memoriPengguna',
         userId: userId,
         namaPanggilan: userName,
-        sesiAiAktif: false, // Default tidak aktif
-        riwayatPercakapan: JSON.stringify([])
-    };
-    await clientSanity.create(docBaru);
-    userData = docBaru; // Gunakan data baru untuk sisa eksekusi
-}
+        daftarMemori: []
+        });
 
-const sesiAiAktif = userData.sesiAiAktif;
 
-// Jika Sesi AI sedang Aktif untuk pengguna ini...
-if (sesiAiAktif) {
-    // --- Logika untuk keluar dari Mode AI ---
-    const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
-    if (exitCommands.includes(userMessageLower)) {
-        await clientSanity.patch(userData._id).set({ sesiAiAktif: false }).commit();
-        message.reply('Sesi AI telah berakhir. Anda kembali ke mode normal.');
-        await showMainMenu(message);
-        return;
-    }
-
-    // --- Logika Anda untuk perintah 'doa' (tetap sama) ---
-    const doaRegex = /doa (.*)/i;
-    const doaMatch = userMessageLower.match(doaRegex);
-    if (doaMatch) {
-        // ... (seluruh blok 'if (doaMatch)' Anda bisa ditempel kembali di sini tanpa perubahan)
-        return;
-    }
-
-    // --- Logika Anda untuk 'ingat ini' (disesuaikan untuk Sanity) ---
-const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
-if (userMessage.match(memoryRegex)) {
-    
-    // Pastikan kita mendapatkan teks yang akan disimpan
-    const memoryToSave = userMessage.replace(memoryRegex, '').trim();
-    if (!memoryToSave) {
-        message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
-        return;
-    }
-
-    // Blok try...catch yang sudah benar untuk menyimpan ke 'daftarMemori'
-    try {
-        if (!userData) {
-            throw new Error("Data pengguna tidak ditemukan saat akan menyimpan memori.");
-        }
-
-        // Gunakan metode .patch().append() yang benar untuk tipe data 'array'
+        // Tambah memori
         await clientSanity
-          .patch(userData._id)
-          .append('daftarMemori', [memoryToSave]) // Menambah item baru ke 'daftarMemori'
-          .commit({ autoGenerateArrayKeys: true }); // Opsi ini penting untuk array
+        .patch(sanitizedId)
+        .append('daftarMemori', [memoryToSave])
+        .commit({ autoGenerateArrayKeys: true });
+
 
         message.reply("Baik, saya akan mengingatnya.");
         console.log(`Memori baru disimpan untuk ${userId}: ${memoryToSave}`);
-
-    } catch (err) {
+        } catch (err) {
         console.error("Gagal menyimpan memori:", err);
         message.reply("Maaf, terjadi kesalahan saat menyimpan informasi ini.");
-    }
-    
-    return; // Penting: Hentikan eksekusi agar tidak lanjut ke AI
-}
-    
-    // --- Logika utama untuk merespons AI (menggunakan riwayat dari Sanity) ---
-    try {
+        }
+
+
+        return; // Stop agar tidak dilempar ke AI
+        }
+
+
+        // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
+        try {
         await chat.sendStateTyping();
-        
-        // Ambil riwayat percakapan dari Sanity
-        const history = JSON.parse(userData.riwayatPercakapan || '[]');
         let geminiResponse;
 
+        // Cek apakah pesan berisi media (gambar, video, dll)
         if (message.hasMedia) {
             const media = await message.downloadMedia();
+            // Pastikan media adalah gambar dan datanya ada
             if (media && media.mimetype.startsWith('image/')) {
-                geminiResponse = await getGeminiResponse(userMessage, history, userId, media);
+                console.log("[Pesan] Pesan berisi gambar, memproses secara multimodal...");
+                // Kirim teks (caption dari 'message.body') dan gambar ke Gemini
+                geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, media);
             } else {
-                geminiResponse = await getGeminiResponse(userMessage, history, userId, null);
+                // Jika media bukan gambar (misal: stiker, video), proses teksnya saja
+                console.log("[Pesan] Media bukan gambar, hanya memproses teks.");
+                geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
             }
         } else {
-            geminiResponse = await getGeminiResponse(userMessage, history, userId, null);
+            // Jika tidak ada media, proses teks seperti biasa
+            geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
         }
 
         message.reply(geminiResponse);
         
-        // Simpan riwayat percakapan baru ke Sanity
-        history.push({ role: 'user', parts: [{ text: userMessage }] });
-        history.push({ role: 'model', parts: [{ text: geminiResponse }] });
-        const historyTerbaru = history.slice(-10); // Ambil 10 percakapan terakhir
+        // Manajemen history (logika Anda yang sudah ada kita pertahankan)
+        userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
+        userState[message.from].history.push({ role: 'model', parts: [{ text: geminiResponse }] });
 
-        await clientSanity.patch(userData._id).set({ riwayatPercakapan: JSON.stringify(historyTerbaru) }).commit();
-
+        if (userState[message.from].history.length > 10) {
+            userState[message.from].history = userState[message.from].history.slice(-10);
+        }
     } catch (e) {
         console.error("[AI] Gagal merespons:", e);
         message.reply("Maaf, terjadi kesalahan dari AI.");
     }
     return;
-}
+        }
 
-if (userMessageLower === 'mode ai' || userMessageLower === 'mulai ai') {
-    // Aktifkan mode AI di Sanity dan reset history
-    await clientSanity.patch(userData._id).set({ 
-        sesiAiAktif: true, 
-        riwayatPercakapan: JSON.stringify([]) 
-    }).commit();
-    
-    message.reply('Mode AI diaktifkan. Anda sekarang bisa berbicara dengan asisten AI. Ketik "selesai" untuk keluar.');
-    return;
-}
-
-// BLOK 2: MENANGANI PERINTAH TEKS
+    } // BLOK 2: MENANGANI PERINTAH TEKS
 
     if (userMessageLower === 'halo panda') {
       await showMainMenu(message)
