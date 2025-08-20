@@ -1069,6 +1069,9 @@ client.on('message', async (message) => {
     const userMessageLower = userMessage.toLowerCase()
     const userLastState = userState[message.from] || userState[message.author] // BLOK 1: MENANGANI "MODE AI"
 
+  const doaRegex = /doa (.*)/i;
+  const doaMatch = userMessageLower.match(doaRegex);
+
     if (userLastState && userLastState.type === 'ai_mode') {
       const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
       if (exitCommands.includes(userMessageLower)) {
@@ -1078,23 +1081,41 @@ client.on('message', async (message) => {
         return
       }
 
-if (message.hasMedia) {
-  const media = await message.downloadMedia();
-  if (media.mimetype && media.mimetype.startsWith('image/')) {
-    try {
-      const imageBuffer = Buffer.from(media.data, 'base64');
-      const caption = message.caption || message.body || 'Tolong jelaskan isi gambar ini.';
+      if (doaMatch) {
+        await chat.sendStateTyping();
 
-      const response = await getGeminiVisionResponse(imageBuffer, caption);
-      message.reply(response);
-    } catch (err) {
-      console.error("Gagal memproses gambar:", err);
-      message.reply("❌ Maaf, saya gagal membaca gambar tersebut.");
-    }
+        const permintaanDoa = doaMatch[1];
+        const promptDoa = `Buatkan teks doa dalam bahasa Arab dan terjemahannya ke bahasa Indonesia untuk permintaan ini: "${permintaanDoa}". Tambahkan tanda baca dan harakat.`;
 
-    return;
-  }
-}
+        try {
+          const doaResponse = await getGeminiResponse(promptDoa, []);
+          message.reply(doaResponse);
+        } catch (err) {
+          console.error("Gagal membuat doa:", err);
+          message.reply("Maaf, terjadi kesalahan saat membuat doa.");
+        }
+
+        return;
+      }
+
+
+      if (message.hasMedia) {
+        const media = await message.downloadMedia();
+        if (media.mimetype && media.mimetype.startsWith('image/')) {
+          try {
+            const imageBuffer = Buffer.from(media.data, 'base64');
+            const caption = message.caption || message.body || 'Tolong jelaskan isi gambar ini.';
+
+            const response = await getGeminiVisionResponse(imageBuffer, caption);
+            message.reply(response);
+          } catch (err) {
+            console.error("Gagal memproses gambar:", err);
+            message.reply("❌ Maaf, saya gagal membaca gambar tersebut.");
+          }
+
+          return;
+        }
+      }
 
         const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
         const lowerMsg = message.body.trim().toLowerCase();
