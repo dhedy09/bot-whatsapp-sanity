@@ -181,7 +181,7 @@ async function getGeminiVisionResponse(imageBuffer, promptText) {
 
   try {
     const response = await axios.post(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-vision-preview:generateContent',
       payload,
       {
         params: { key: API_KEY },
