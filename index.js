@@ -52,6 +52,29 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 // --- DEFINISI ALAT-ALAT UNTUK AI ---
 const tools = [{
     functionDeclarations: [
+         {
+            name: "bacaMemori",
+            description: "Membaca atau memeriksa catatan personal yang sudah tersimpan tentang pengguna. Selalu gunakan alat ini di awal percakapan untuk mengetahui konteks tentang pengguna.",
+            parameters: {
+                type: "OBJECT",
+                properties: {
+                    userId: { type: "STRING", description: "ID unik pengguna WhatsApp." }
+                },
+                required: ["userId"]
+            }
+        },
+        {
+            name: "simpanMemori",
+            description: "Menyimpan fakta, preferensi, atau informasi personal baru tentang pengguna ke dalam catatan jangka panjang. Gunakan saat pengguna secara eksplisit meminta untuk 'diingat' atau memberikan informasi personal yang penting.",
+            parameters: {
+                type: "OBJECT",
+                properties: {
+                    userId: { type: "STRING", description: "ID unik pengguna WhatsApp." },
+                    faktaTeks: { type: "STRING", description: "Potongan teks atau fakta yang akan disimpan." }
+                },
+                required: ["userId", "faktaTeks"]
+            }
+        }
         {
             name: "googleSearch",
             description: "Langkah pertama untuk menjawab pertanyaan tentang topik umum, fakta, orang, tempat, atau peristiwa. Selalu gunakan alat ini terlebih dahulu untuk menemukan URL yang relevan.",
@@ -156,6 +179,73 @@ const userHistory = {};
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
+
+// AWAL SIMPAN DAN BACA MEMORI
+
+/**
+ * Membaca daftar memori yang tersimpan untuk pengguna.
+ * @param {string} userId ID unik pengguna WhatsApp.
+ * @returns {Promise<object>} Objek berisi memori yang telah diformat.
+ */
+async function bacaMemori(userId) {
+  console.log(`[Tool] Menjalankan bacaMemori untuk user: ${userId}`);
+  try {
+    const query = `*[_type == "memoriPengguna" && userId == $userId][0]{daftarMemori}`;
+    const result = await clientSanity.fetch(query, { userId });
+
+    if (result && result.daftarMemori && result.daftarMemori.length > 0) {
+      const memoriFormatted = result.daftarMemori.map(item => `- ${item}`).join('\n');
+      return { memori: memoriFormatted };
+    } else {
+      return { memori: "Belum ada catatan memori yang tersimpan untuk pengguna ini." };
+    }
+  } catch (error) {
+    console.error("Error saat membaca memori dari Sanity:", error);
+    return { memori: "Gagal membaca memori karena ada kesalahan teknis." };
+  }
+}
+
+/**
+ * Menyimpan fakta baru untuk semua jenis pengguna.
+ * (Fungsi ini akan kita panggil nanti dari dalam getGeminiResponse)
+ * @param {string} userId ID unik pengguna WhatsApp.
+ * @param {string} faktaTeks Fakta atau catatan baru yang akan disimpan.
+ * @returns {Promise<object>} Objek berisi status keberhasilan.
+ */
+async function simpanMemori(userId, faktaTeks) {
+  console.log(`[Tool] Menjalankan simpanMemori untuk user: ${userId}`);
+  try {
+    const query = `*[_type == "memoriPengguna" && userId == $userId][0]{_id}`;
+    const dataMemori = await clientSanity.fetch(query, { userId });
+
+    if (dataMemori) {
+      await clientSanity
+        .patch(dataMemori._id)
+        .append('daftarMemori', [faktaTeks])
+        .commit({ autoGenerateArrayKeys: true });
+      return { status: "Fakta berhasil disimpan ke dalam memori." };
+    } else {
+      // Jika pengguna baru, kita buatkan profilnya dulu
+      const contact = await client.getContactById(userId);
+      const userName = contact.pushname || userId;
+      const docId = `memori-${userId.replace(/[@.]/g, '-')}`;
+      const docBaru = {
+        _id: docId,
+        _type: 'memoriPengguna',
+        userId: userId,
+        namaPanggilan: userName,
+        daftarMemori: [faktaTeks]
+      };
+      await clientSanity.create(docBaru);
+      return { status: "Profil baru dibuat dan fakta berhasil disimpan." };
+    }
+  } catch (error) {
+    console.error("Error saat menyimpan memori ke Sanity:", error);
+    return { status: "Gagal menyimpan memori karena ada kesalahan teknis." };
+  }
+}
+
+// AKHIR SIMPAN DAN BACA MEMORI
 
 // AWAL BACA PAGES WEB
 
@@ -667,10 +757,11 @@ async function getLatestNews(query) {
 // =================================================================
 async function isAdmin(userId) {
     try {
-        const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
-        const query = `*[_type == "pegawai" && _id == $id][0]`;
-        const user = await clientSanity.fetch(query, { id: sanitizedId });
+        // Query ke schema 'pegawai' menggunakan field 'userId' yang benar
+        const query = `*[_type == "pegawai" && userId == $userId][0]`;
+        const user = await clientSanity.fetch(query, { userId: userId });
 
+        // Cek jika pengguna ditemukan dan tipenya adalah 'admin'
         if (user && user.tipePegawai === 'admin') {
             return true;
         }
@@ -678,7 +769,7 @@ async function isAdmin(userId) {
 
     } catch (error) {
         console.error("Error saat memeriksa status admin:", error);
-        return false;
+        return false; // Default ke false jika terjadi error demi keamanan
     }
 }
 
@@ -839,6 +930,8 @@ const instruction = `
 Kamu adalah asisten AI yang cerdas dan multimodal.
 ATURAN UTAMA: Analisis semua input yang diberikan, baik teks maupun gambar.
 
+ATURAN MEMORI: Di awal setiap percakapan, kamu WAJIB selalu menggunakan alat 'bacaMemori' untuk memeriksa apakah ada catatan tentang pengguna. Gunakan informasi dari memori untuk membuat jawabanmu lebih personal. Jika pengguna memintamu untuk 'mengingat sesuatu' atau memberimu fakta personal baru (misal: "saya kerja di Padang"), kamu WAJIB menggunakan alat 'simpanMemori'.
+
 ATURAN GAMBAR: Jika input berisi GAMBAR:
 1.  Pertama, identifikasi objek atau subjek utama di dalam gambar.
 2.  Gunakan teks dari pengguna sebagai PERINTAH UTAMA tentang apa yang harus dilakukan dengan gambar tersebut.
@@ -886,6 +979,12 @@ let functionResponse;
 
 
 switch (call.name) {
+case 'bacaMemori':
+functionResponse = await bacaMemori(userId);
+break;
+case 'simpanMemori':
+functionResponse = await simpanMemori(userId, call.args.faktaTeks);
+break; 
 case 'readWebPage':
 functionResponse = await readWebPage(call.args.url);
 break;
@@ -1096,11 +1195,38 @@ if (sesiAiAktif) {
     }
 
     // --- Logika Anda untuk 'ingat ini' (disesuaikan untuk Sanity) ---
-    const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
-    if (userMessage.match(memoryRegex)) {
-        // ... (seluruh blok 'if (match)' Anda yang berisi 'try...catch' untuk menyimpan memori bisa ditempel di sini)
+const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
+if (userMessage.match(memoryRegex)) {
+    
+    // Pastikan kita mendapatkan teks yang akan disimpan
+    const memoryToSave = userMessage.replace(memoryRegex, '').trim();
+    if (!memoryToSave) {
+        message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
         return;
     }
+
+    // Blok try...catch yang sudah benar untuk menyimpan ke 'daftarMemori'
+    try {
+        if (!userData) {
+            throw new Error("Data pengguna tidak ditemukan saat akan menyimpan memori.");
+        }
+
+        // Gunakan metode .patch().append() yang benar untuk tipe data 'array'
+        await clientSanity
+          .patch(userData._id)
+          .append('daftarMemori', [memoryToSave]) // Menambah item baru ke 'daftarMemori'
+          .commit({ autoGenerateArrayKeys: true }); // Opsi ini penting untuk array
+
+        message.reply("Baik, saya akan mengingatnya.");
+        console.log(`Memori baru disimpan untuk ${userId}: ${memoryToSave}`);
+
+    } catch (err) {
+        console.error("Gagal menyimpan memori:", err);
+        message.reply("Maaf, terjadi kesalahan saat menyimpan informasi ini.");
+    }
+    
+    return; // Penting: Hentikan eksekusi agar tidak lanjut ke AI
+}
     
     // --- Logika utama untuk merespons AI (menggunakan riwayat dari Sanity) ---
     try {
