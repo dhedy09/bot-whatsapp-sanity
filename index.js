@@ -1078,21 +1078,23 @@ client.on('message', async (message) => {
         return
       }
 
-    if (message.hasMedia && message.type === 'image') {
-      try {
-        const media = await message.downloadMedia();
-        const imageBuffer = Buffer.from(media.data, 'base64');
-        const caption = message.caption || 'Tolong jelaskan isi gambar ini.';
+if (message.hasMedia) {
+  const media = await message.downloadMedia();
+  if (media.mimetype && media.mimetype.startsWith('image/')) {
+    try {
+      const imageBuffer = Buffer.from(media.data, 'base64');
+      const caption = message.caption || message.body || 'Tolong jelaskan isi gambar ini.';
 
-        const response = await getGeminiVisionResponse(imageBuffer, caption);
-        message.reply(response);
-      } catch (err) {
-        console.error("Gagal memproses gambar:", err);
-        message.reply("❌ Maaf, saya gagal membaca gambar tersebut.");
-      }
-
-      return;
+      const response = await getGeminiVisionResponse(imageBuffer, caption);
+      message.reply(response);
+    } catch (err) {
+      console.error("Gagal memproses gambar:", err);
+      message.reply("❌ Maaf, saya gagal membaca gambar tersebut.");
     }
+
+    return;
+  }
+}
 
         const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
         const lowerMsg = message.body.trim().toLowerCase();
