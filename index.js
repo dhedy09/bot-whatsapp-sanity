@@ -161,7 +161,6 @@ const userState = {};
 // AWAL FUNGSU GEMINI BACA GAMBAR
 async function getGeminiVisionResponse(imageBuffer, promptText) {
   const API_KEY = process.env.GEMINI_API_KEY;
-
   const base64Image = imageBuffer.toString('base64');
 
   const payload = {
@@ -198,29 +197,8 @@ async function getGeminiVisionResponse(imageBuffer, promptText) {
     }
   } catch (err) {
     console.error('Gagal memanggil Gemini Vision:', err.response?.data || err.message);
-    return '❌ Terjadi kesalahan saat memproses gambar dengan AI.';
+    return '❌ Terjadi kesalahan saat memproses gambar.';
   }
-}
-
-module.exports = { getGeminiVisionResponse }
-
-// AKHIR FUNGSI GEMINI BACA GAMBAR
-
-// AWAL FUNGSI BACA GAMBAR
-
-async function getGeminiVisionResponse(imageBuffer, promptText) {
-  const model = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
-
-  const imagePart = {
-    inlineData: {
-      data: imageBuffer.toString("base64"),
-      mimeType: "image/jpeg", // Atur ke image/png jika perlu
-    }
-  };
-
-  const result = await model.generateContent([promptText, imagePart]);
-  const response = await result.response;
-  return response.text();
 }
 
 // AKHIR FUNGSI BACA GAMBAR
