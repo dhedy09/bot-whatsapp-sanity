@@ -1063,37 +1063,6 @@ client.on('message', async (message) => {
   const doaRegex = /doa (.*)/i;
   const doaMatch = userMessageLower.match(doaRegex);
 
-    if (userLastState && userLastState.type === 'ai_mode') {
-      const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
-      if (exitCommands.includes(userMessageLower)) {
-        delete userState[message.from]
-        message.reply('Sesi AI telah berakhir. Anda kembali ke mode normal.')
-        await showMainMenu(message)
-        return
-      }
-
-      if (doaMatch) {
-        await chat.sendStateTyping();
-
-        const permintaanDoa = doaMatch[1];
-        const promptDoa = `Buatkan teks doa dalam bahasa Arab dan terjemahannya ke bahasa Indonesia untuk permintaan ini: "${permintaanDoa}". Tambahkan tanda baca dan harakat.`;
-
-        try {
-          const doaResponse = await getGeminiResponse(promptDoa, []);
-          message.reply(doaResponse);
-        } catch (err) {
-          console.error("Gagal membuat doa:", err);
-          message.reply("Maaf, terjadi kesalahan saat membuat doa.");
-        }
-
-        return;
-      }
-
-        const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
-        const lowerMsg = message.body.trim().toLowerCase();
-        const match = message.body.match(memoryRegex);
-
-
       // === AWAL CEK MODE AI ===
       if (userState[message.from]?.type === 'ai_mode') {
         const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
@@ -1126,6 +1095,26 @@ client.on('message', async (message) => {
       }
       // AKHIR CEK MODE AI
 
+      if (doaMatch) {
+        await chat.sendStateTyping();
+
+        const permintaanDoa = doaMatch[1];
+        const promptDoa = `Buatkan teks doa dalam bahasa Arab dan terjemahannya ke bahasa Indonesia untuk permintaan ini: "${permintaanDoa}". Tambahkan tanda baca dan harakat.`;
+
+        try {
+          const doaResponse = await getGeminiResponse(promptDoa, []);
+          message.reply(doaResponse);
+        } catch (err) {
+          console.error("Gagal membuat doa:", err);
+          message.reply("Maaf, terjadi kesalahan saat membuat doa.");
+        }
+
+        return;
+      }
+
+        const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
+        const lowerMsg = message.body.trim().toLowerCase();
+        const match = message.body.match(memoryRegex);
 
         // === 2. Menyimpan memori jika cocok pola fleksibel ===
 if (match) {
