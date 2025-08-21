@@ -1125,7 +1125,7 @@ client.on('message', async (message) => {
         return message.reply(response)
       }
       // AKHIR CEK MODE AI
-      
+
 
         // === 2. Menyimpan memori jika cocok pola fleksibel ===
 if (match) {
@@ -1228,9 +1228,9 @@ if (match) {
         message.reply("Maaf, terjadi kesalahan dari AI.");
     }
     return;
-        }
-
-    } // BLOK 2: MENANGANI PERINTAH TEKS
+    }
+        
+    // BLOK 2: MENANGANI PERINTAH TEKS
 
     if (userMessageLower === 'halo panda') {
       await showMainMenu(message)
