@@ -818,11 +818,21 @@ async function getGeminiResponse(prompt, history, userId, media = null) {
         // === Tambahan: sisipkan memori dari Sanity ===
         let memoryText = "";
         try {
-            const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
+            // const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;===
+            // const memoryDoc = await clientSanity.fetch(
+            //     `*[_type == "memoriPengguna" && _id == $id][0]`,
+            //     { id: sanitizedId }
+            // );=====
+            const sanitizedId = userId
+            ? `memori-${userId.replace(/[@.]/g, '-')}`
+            : null;
+            if (sanitizedId) {
             const memoryDoc = await clientSanity.fetch(
-                `*[_type == "memoriPengguna" && _id == $id][0]`,
-                { id: sanitizedId }
+              `*[_type == "memoriPengguna" && _id == $id][0]`,
+              { id: sanitizedId }
             );
+            ...
+          }
 
             if (memoryDoc?.daftarMemori?.length > 0) {
                 memoryText = `
@@ -1090,7 +1100,8 @@ client.on('message', async (message) => {
           'hapus file',
           'langganan gempa',
           'berhenti gempa',
-          'cari user'
+          'cari user',
+          'help'
         ]
         if (perintahBot.some(cmd => userMessageLower.startsWith(cmd))) {
           return message.reply(
