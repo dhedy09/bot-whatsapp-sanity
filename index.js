@@ -1266,7 +1266,7 @@ if (match) {
         let namaKustom = userMessage.substring(simpanPrefix.length).trim()
         let namaFileFinal
 
-        const {default: mime} = await import('mime-types')
+        const { default: mime } = await import('mime-types')
 
         if (originalFilename) {
           // ALUR CERDAS (JIKA NAMA FILE ASLI TERDETEKSI)
@@ -1282,7 +1282,6 @@ if (match) {
 
           const extension = mime.extension(mimetype)
           if (!extension) {
-            // Pesan error sekarang lebih informatif
             return message.reply(`❌ Gagal mendeteksi ekstensi untuk tipe file: ${mimetype}.`)
           }
           namaFileFinal = `${namaKustom}.${extension}`
@@ -1290,19 +1289,21 @@ if (match) {
 
         message.reply(`⏳ Mengarsipkan *"${namaFileFinal}"*, mohon tunggu...`)
 
-        const driveId = await uploadKeDrive(media, namaFileFinal) // Gunakan media yang sudah diunduh
+        const driveId = await uploadKeDrive(media, namaFileFinal)
         if (!driveId) {
-          return message.reply(' Gagal mengunggah file ke Google Drive.')
+          return message.reply('❌ Gagal mengunggah file ke Google Drive.')
         }
 
         const contact = await message.getContact()
         const pengunggah = contact.pushname || contact.name || message.author
+        const userId = contact.id._serialized // 🟢 Tambahan: ID user unik
 
         const dataFile = {
           namaFile: namaFileFinal,
           googleDriveId: driveId,
           diunggahOleh: pengunggah,
-          groupId: chat.isGroup ? chat.id._serialized : 'pribadi',
+          // 🟢 Perubahan di sini: group pakai ID grup, pribadi pakai ID user
+          groupId: chat.isGroup ? chat.id._serialized : `user-${userId}`,
           tipeFile: media.mimetype,
         }
         await simpanDataFileKeSanity(dataFile)
@@ -1310,9 +1311,11 @@ if (match) {
         return message.reply(`✅ Berhasil! File telah diarsipkan dengan nama *"${namaFileFinal}"*.`)
       } catch (error) {
         console.error('Error di blok simpan file:', error)
-        return message.reply(' Gagal memproses file. Terjadi kesalahan tak terduga.')
+        return message.reply('❌ Gagal memproses file. Terjadi kesalahan tak terduga.')
       }
-    } // ▲▲▲ BATAS AKHIR BLOK BARU SIMPAN FILE▲▲▲
+    } 
+    // ▲▲▲ BATAS AKHIR BLOK BARU SIMPAN FILE▲▲▲
+
     // Tambahkan setelah blok "BLOK 2: MENANGANI PERINTAH TEKS"
 
     // BLOK LANGGANAN INFO GEMPA
@@ -1363,9 +1366,7 @@ if (match) {
     }
     // AKHIR BLOK LANGGANAN INFO GEMPA
 
-    // ▼▼▼ BLOK BARU UNTUK MENCARI & MENGIRIM FILE ▼▼▼
-    // ▼▼▼ GANTI BLOK 'cari file' LAMA ANDA DENGAN VERSI BARU INI ▼▼▼
-
+    // AWAL BLOK MENCARI & MENGIRIM FILE ▼▼▼
     const cariPrefix = 'cari file '
     if (userMessageLower.startsWith(cariPrefix)) {
       const kataKunci = userMessage.substring(cariPrefix.length).trim()
@@ -1375,9 +1376,13 @@ if (match) {
 
       try {
         message.reply(`⏳ Mencari file dengan kata kunci *"${kataKunci}"*...`)
-        const groupId = chat.isGroup ? chat.id._serialized : 'pribadi'
 
-        // Logika pencarian sekarang ada di sini, tidak di fungsi terpisah
+        const contact = await message.getContact()
+        const userId = contact.id._serialized
+        // 🟢 Perubahan: samakan logika groupId dengan blok simpan
+        const groupId = chat.isGroup ? chat.id._serialized : `user-${userId}`
+
+        // Query ke Sanity
         const query = `*[_type == "fileArsip" && groupId == $groupId && namaFile match $kataKunci] | order(_createdAt desc)`
         const hasilPencarian = await clientSanity.fetch(query, {
           groupId: groupId,
@@ -1449,8 +1454,9 @@ if (match) {
         return message.reply('Maaf, terjadi kesalahan saat mencoba mengirim file.')
       }
     }
+    // ▲▲▲ AKHIR BLOK KIRIM
 
-    // ▼▼▼ AWAL BLOK HAPUS ▼▼▼
+    // ▼▼▼ AWAL BLOK HAPUS FILE ▼▼▼
     else if (userMessageLower.startsWith('hapus file ')) {
       const userLastState = userState[message.from]
 
@@ -1478,7 +1484,6 @@ if (match) {
         // Langkah 1: Hapus dari Google Drive
         const driveSuccess = await hapusFileDiDrive(fileData.googleDriveId)
         if (!driveSuccess) {
-          // Kita tetap lanjutkan meski gagal di drive, mungkin file sudah dihapus manual
           message.reply(
             '⚠️ Gagal menghapus file dari Google Drive (mungkin sudah dihapus sebelumnya). Melanjutkan penghapusan dari katalog...',
           )
@@ -1495,9 +1500,8 @@ if (match) {
         console.error('Error di blok hapus file:', error)
         return message.reply('Maaf, terjadi kesalahan saat mencoba menghapus file.')
       }
-    } // ▲▲▲ BATAS AKHIR BLOK BARU  PEMANGGIL FILE▲▲▲
-
-    // ▲▲▲ AKHIR DARI BLOK PERINTAH HAPUS ▲▲▲
+    } 
+    // ▲▲▲ BATAS AKHIR BLOK HAPUS FILE ▲▲▲
 
     if (userMessageLower.startsWith('cari user ')) {
       const kataKunci = userMessage.substring('cari user '.length).trim()
