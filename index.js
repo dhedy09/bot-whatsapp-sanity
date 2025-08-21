@@ -956,7 +956,13 @@ ATURAN TEKS (jika tidak ada gambar):
             tools: tools,
         });
 
-        const messageParts = [finalPrompt];
+        // Selalu sertakan instruksi multimodal
+        const multimodalInstruction = `
+        Kamu adalah asisten AI multimodal.
+        Jika ada gambar makanan/minuman + user meminta resep → buat resep lengkap (bahan + langkah).
+        Gunakan teks user sebagai perintah utama, gambar hanya sebagai konteks.
+        `;
+        const messageParts = [multimodalInstruction + "\n\n" + finalPrompt];
         if (media && media.data) {
             console.log(`[Media] Mengirim gambar dengan tipe: ${media.mimetype}`);
             messageParts.push({
@@ -1701,7 +1707,7 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
     // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
 // ▼▼▼ AWAL BLOK: PENGINGAT UNIVERSAL (VERSI AI) ▼▼▼
-if (userMessageLower.startsWith('ingatkan')) {
+if (userMessageLower.startsWith('ingatkan') || userMessageLower.startsWith('tolong ingatkan')) {
   const chat = await message.getChat();
   const contact = await message.getContact();
   const authorId = contact.id._serialized;
