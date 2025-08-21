@@ -1090,73 +1090,67 @@ client.on('message', async (message) => {
 
 
         // === 2. Menyimpan memori jika cocok pola fleksibel ===
-      if (match) {
-          const memoryToSave = message.body.replace(memoryRegex, '').trim();
-          if (!memoryToSave) {
-              message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
-              return;
-          }
+if (match) {
+    const memoryToSave = message.body.replace(memoryRegex, '').trim();
+    if (!memoryToSave) {
+        message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
+        return;
+    }
 
-          try {
-              const userId = message.from;
-              const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
-              const contact = await message.getContact();
-              const userName = contact.pushname || userId;
+    try {
+        const userId = message.from;
+        const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
+        const contact = await message.getContact();
+        const userName = contact.pushname || userId;
 
-              // 1. Pastikan dokumen memori ada
-              await clientSanity.createIfNotExists({
-                  _id: sanitizedId,
-                  _type: 'memoriPengguna',
-                  userId: userId,
-                  namaPanggilan: userName,
-                  daftarMemori: []
-              });
+        // 1. Pastikan dokumen memori ada
+        await clientSanity.createIfNotExists({
+            _id: sanitizedId,
+            _type: 'memoriPengguna',
+            userId: userId,
+            namaPanggilan: userName,
+            daftarMemori: []
+        });
 
-              // 2. Tambah memori baru ke Sanity
-              await clientSanity
-                  .patch(sanitizedId)
-                  .append('daftarMemori', [memoryToSave])
-                  .commit({ autoGenerateArrayKeys: true });
+        // 2. Tambah memori baru ke Sanity
+        await clientSanity
+            .patch(sanitizedId)
+            .append('daftarMemori', [memoryToSave])
+            .commit({ autoGenerateArrayKeys: true });
 
-              // 3. Fetch ulang semua memori dari Sanity
-              const updatedDoc = await clientSanity.fetch(
-                  `*[_type == "memoriPengguna" && _id == $id][0]`,
-                  { id: sanitizedId }
-              );
+        // 3. Fetch ulang semua memori dari Sanity
+        const updatedDoc = await clientSanity.fetch(
+            `*[_type == "memoriPengguna" && _id == $id][0]`,
+            { id: sanitizedId }
+        );
 
-              if (updatedDoc && updatedDoc.daftarMemori.length > 0) {
-                  let memoryContext = 'Ini adalah fakta terbaru yang harus kamu ingat:\n';
-                  updatedDoc.daftarMemori.forEach((fact) => {
-                      memoryContext += `- ${fact}\n`;
-                  });
+        if (updatedDoc && updatedDoc.daftarMemori.length > 0) {
+            // Ambil memori terbaru
+            const latestFact = memoryToSave;
 
-                  // 4. Update history AI di sesi aktif
-                  if (userState[message.from]) {
-                      userState[message.from].history.push({
-                          role: 'user',
-                          parts: [{ text: memoryContext }]
-                      });
-                      userState[message.from].history.push({
-                          role: 'model',
-                          parts: [{ text: 'Baik, saya telah mengingat informasi baru ini.' }]
-                      });
+            // 4. Update history AI di sesi aktif sebagai "system"
+            if (userState[message.from]) {
+                userState[message.from].history.push({
+                    role: 'system',
+                    parts: [{ text: `Fakta baru tentang user: ${latestFact}` }]
+                });
 
-                      // Batasi panjang history agar tidak membengkak
-                      if (userState[message.from].history.length > 12) {
-                          userState[message.from].history = userState[message.from].history.slice(-12);
-                      }
-                  }
-              }
+                // Batasi panjang history agar tidak membengkak
+                if (userState[message.from].history.length > 12) {
+                    userState[message.from].history = userState[message.from].history.slice(-12);
+                }
+            }
+        }
 
-              message.reply("Baik, saya sudah menyimpannya ke memori dan akan mengingatnya.");
-              console.log(`Memori baru disimpan & diperbarui untuk ${userId}: ${memoryToSave}`);
-          } catch (err) {
-              console.error("Gagal menyimpan memori:", err);
-              message.reply("Maaf, terjadi kesalahan saat menyimpan informasi ini.");
-          }
+        message.reply("Baik, saya sudah menyimpannya ke memori dan akan mengingatnya.");
+        console.log(`Memori baru disimpan & diperbarui untuk ${userId}: ${memoryToSave}`);
+    } catch (err) {
+        console.error("Gagal menyimpan memori:", err);
+        message.reply("Maaf, terjadi kesalahan saat menyimpan informasi ini.");
+    }
 
-          return; // Stop agar tidak dilempar ke AI
-      }
+    return; // Stop agar tidak dilempar ke AI
+}
 
 
         // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
