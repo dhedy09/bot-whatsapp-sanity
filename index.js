@@ -151,6 +151,24 @@ const client = new Client({
 const userHistory = {};
 const userState = {};
 
+// AWAL PERINTAH BOT
+const daftarPerintah = [
+  { prefix: 'panda simpan', deskripsi: 'Simpan file arsip' },
+  { prefix: 'cari file', deskripsi: 'Cari file di arsip' },
+  { prefix: 'kirim file', deskripsi: 'Kirim file dari arsip' },
+  { prefix: 'hapus file', deskripsi: 'Hapus file dari arsip' },
+  { prefix: 'langganan gempa', deskripsi: 'Langganan notifikasi gempa' },
+  { prefix: 'berhenti gempa', deskripsi: 'Stop langganan notifikasi gempa' },
+  { prefix: 'cari user', deskripsi: 'Cari data pegawai' }
+]
+
+// Fungsi helper untuk cek apakah pesan adalah perintah bot
+function isPerintahBot(msg) {
+  const lower = msg.toLowerCase()
+  return daftarPerintah.some(p => lower.startsWith(p.prefix))
+}
+// AKHIR PERINTAH BOT
+
 // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
 // =================================================================
@@ -1082,17 +1100,8 @@ client.on('message', async (message) => {
           return
         }
 
-        // 🔑 Semua perintah bot dimasukkan di sini
-        const perintahBot = [
-          'panda simpan',
-          'cari file',
-          'kirim file',
-          'hapus file',
-          'langganan gempa',
-          'berhenti gempa',
-          'cari user'
-        ]
-        if (perintahBot.some(cmd => userMessageLower.startsWith(cmd))) {
+        // perintah kode pindah ke atas
+        if (isPerintahBot(userMessageLower)) {
           return message.reply(
             '⚠️ Anda masih dalam sesi AI.\n\nKetik *selesai* dulu untuk keluar dari AI Mode agar bisa memakai perintah bot.'
           )
