@@ -1642,56 +1642,45 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
     // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
-// ▼▼▼ AWAL BLOK: PENGINGAT UNIVERSAL ▼▼▼
+// ▼▼▼ AWAL BLOK: PENGINGAT SUPER FLEKSIBEL ▼▼▼
 if (userMessageLower.startsWith('ingatkan')) {
   const contact = await message.getContact();
   const authorId = contact.id._serialized;
 
   const argsString = userMessage.substring('ingatkan'.length).trim();
-  const reminderRegex = /^(.+?)\s(.+?)\s(?:tentang|harus\s+)?(.+)$/i;
-  const match = argsString.match(reminderRegex);
+
+  // Regex fleksibel: waktu + (opsional: tentang|harus) + pesan
+  const regex = /saya\s+(dalam .*?|besok .*?|hari ini .*?|\d+ (menit|jam|hari).*?)\s+(?:tentang|harus\s+)?(.+)/i;
+  const match = argsString.match(regex);
 
   if (!match) {
     message.reply(
-      '❌ Format salah.\n' +
-      'Gunakan:\n`ingatkan <Nama> <Waktu> tentang <Pesan>`\n\n' +
-      '*Contoh:*\n`ingatkan saya besok jam 9 tentang rapat`'
+      '❌ Format kurang jelas.\n' +
+      'Contoh:\n' +
+      '`ingatkan saya dalam 1 menit harus mandi`\n' +
+      '`ingatkan saya besok jam 9 tentang rapat evaluasi`\n' +
+      '`ingatkan saya hari ini jam 7 makan malam`\n' +
+      '`ingatkan saya 2 jam lagi belajar`'
     );
     return;
   }
 
-  const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
-  let targetNomorHp = authorId;
-  let targetNama = contact.pushname || "Pengguna";
+  const [, waktuString, , pesan] = match.map(s => s.trim());
+
+  // Selalu untuk pembuat
+  const targetNomorHp = authorId;
+  const targetNama = contact.pushname || "Pengguna";
+
+  const waktuKirim = parseWaktuIndonesia(waktuString);
+  if (!waktuKirim) {
+    message.reply(
+      `❌ Maaf, saya tidak mengerti format waktu "${waktuString}".\n` +
+      `Gunakan format seperti "dalam 5 menit", "hari ini jam 7", atau "besok jam 10".`
+    );
+    return;
+  }
 
   try {
-    if (namaTarget.toLowerCase() === 'saya') {
-      targetNomorHp = authorId;
-      targetNama = contact.pushname || "Saya";
-    } else {
-      // coba cari di Sanity
-      const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`;
-      const pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
-
-      if (pegawaiDitemukan.length === 1) {
-        targetNomorHp = pegawaiDitemukan[0]._id.replace('-c-us', '@c.us');
-        targetNama = pegawaiDitemukan[0].nama;
-      } else {
-        // fallback → tetap buat untuk pengirim
-        targetNomorHp = authorId;
-        targetNama = namaTarget; // simpan sesuai teks
-      }
-    }
-
-    const waktuKirim = parseWaktuIndonesia(waktuString);
-    if (!waktuKirim) {
-      message.reply(
-        `❌ Maaf, saya tidak mengerti format waktu "${waktuString}".\n` +
-        `Gunakan format seperti "dalam 5 menit", "hari ini jam 7", atau "besok jam 10".`
-      );
-      return;
-    }
-
     const newPengingat = {
       _type: 'pengingat',
       pesan,
@@ -1713,7 +1702,7 @@ if (userMessageLower.startsWith('ingatkan')) {
     });
 
     message.reply(
-      `✅ Pengingat berhasil dibuat!\n\n*Untuk:* ${targetNama}\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`
+      `✅ Pengingat berhasil dibuat!\n\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`
     );
   } catch (error) {
     console.error('Gagal membuat pengingat:', error);
@@ -1721,8 +1710,7 @@ if (userMessageLower.startsWith('ingatkan')) {
   }
   return;
 }
-// ▲▲▲ AKHIR BLOK: PENGINGAT UNIVERSAL ▲▲▲
-
+// ▲▲▲ AKHIR BLOK: PENGINGAT SUPER FLEKSIBEL ▲▲▲
 
 
     // AWAL BLOK  MENU BANTUAN (HELP)
