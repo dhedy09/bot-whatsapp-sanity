@@ -390,59 +390,8 @@ function parseWaktuIndonesia(teks) {
     // Jika tidak ada pola yang cocok
     return null;
 }
-// ▲▲▲ AKHIR DARI FUNGSI PERSEINDONESIA ▲▲▲
 
-// ▼▼▼ AWAL FUNGSI: PARSE REMINDER DENGAN AI ▼▼▼
-/**
- * Mem-parsing perintah ingatkan dengan Gemini agar fleksibel.
- * Keluaran yang diharapkan:
- * {
- *   "namaTarget": "saya" | "<nama>",
- *   "pesan": "<teks pengingat>",
- *   "waktuString": "<teks natural>",
- *   "waktuISO": "<ISO 8601 zona Asia/Makassar, jika bisa>"
- * }
- */
-async function parseReminderWithAI(rawText) {
-  try {
-    const nowUtcIso = new Date().toISOString();
-    const instruction = `
-Tugasmu: ekstrak detail pengingat dari teks bebas (bahasa Indonesia).
-Asumsi zona waktu: "Asia/Makassar" (UTC+08:00). Tanggal referensi (UTC now): ${nowUtcIso}.
-Balas HANYA JSON valid dengan field PERSIS berikut:
-{
-  "namaTarget": string,         // "saya" boleh
-  "pesan": string,              // ringkas, inti pengingat
-  "waktuString": string,        // versi natural yang kamu pahami
-  "waktuISO": string | null     // ISO 8601 di zona Asia/Makassar; null jika tidak yakin
-}
-Aturan:
-- Jika ada nama di awal/di dalam kalimat (mis. "Andi", "Pak Budi"), pakai sebagai namaTarget.
-- Jika tidak jelas, set namaTarget = "saya".
-- Konversi frasa waktu relatif (besok, lusa, minggu depan, 3 hari lagi, jam 9) ke waktuISO Asia/Makassar.
-- Jika hanya ada jam tanpa tanggal → gunakan hari ini atau besok (pilih yang paling masuk akal sesuai konteks "ingatkan ... jam X" → jika jam X sudah lewat hari ini, gunakan besok).
-- Jangan menyertakan teks di luar JSON.
-Contoh input: "ingatkan saya besok jam 9 tentang rapat anggaran"
-Contoh output:
-{"namaTarget":"saya","pesan":"rapat anggaran","waktuString":"besok jam 09:00","waktuISO":"2025-08-23T09:00:00+08:00"}
-`;
-    const generationConfig = { responseMimeType: "application/json" };
-    const res = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: instruction + "\n\nInput:\n" + rawText }]}],
-      generationConfig
-    });
-    const txt = res.response.text();
-    const parsed = JSON.parse(txt);
-    // Validasi minimal
-    if (!parsed || typeof parsed !== 'object') throw new Error('Invalid JSON');
-    if (!parsed.pesan || (!parsed.waktuISO && !parsed.waktuString)) throw new Error('Missing fields');
-    return parsed;
-  } catch (e) {
-    console.error("[AI-Parse] Gagal parsing reminder:", e?.message || e);
-    return null;
-  }
-}
-// ▲▲▲ AKHIR FUNGSI: PARSE REMINDER DENGAN AI ▲▲▲
+// ▲▲▲ AKHIR DARI FUNGSI PERSEINDONESIA ▲▲▲
 
     // ▼▼▼ TAMBAHKAN FUNGSI ALARM ▼▼▼
     /**
@@ -910,24 +859,14 @@ ${memoryDoc.daftarMemori.map(f => `- ${f}`).join("\n")}
         // === Cek apakah pertanyaan butuh tools eksternal ===
         const triggerKeywords = [
             'berita', 'gempa', 'cuaca', 'siapa', 'apa', 'kapan',
-            'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berapa',
-            'resep', 'gambar', 'foto'  // tambahan
+            'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berapa'
         ];
-
-        // isToolQuery true jika ada kata kunci ATAU jika ada media gambar
-        const isToolQuery = (media && media.data) || triggerKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
+        const isToolQuery = triggerKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
 
         if (isToolQuery) {
             console.log("[Mode] AI: pertanyaan mungkin butuh tools eksternal.");
             const instruction = `
 Kamu adalah asisten AI yang cerdas dan multimodal.
-Kamu ahli dalam semua model ai, seperti chatGPT, Gemini, DeepSeek dan lainnya.
-Kamu dapat mengakses berbagai tools untuk membantu menjawab pertanyaan pengguna.
-Kamu juga dapat mengakses internet untuk mencari informasi terkini.
-Kamu dapat mengakses Google Drive untuk mengambil atau mengunggah file.
-Kamu dapat mengakses Sanity untuk mengambil atau menyimpan data pengguna.
-Kamu dapat mengakses memori pengguna yang disimpan di Sanity untuk memberikan jawaban yang lebih personal.
-Kamu harus selalu mengikuti aturan berikut:
 ATURAN UTAMA: Analisis semua input yang diberikan, baik teks maupun gambar.
 
 ATURAN GAMBAR: Jika input berisi GAMBAR:
@@ -959,25 +898,16 @@ ATURAN TEKS (jika tidak ada gambar):
             tools: tools,
         });
 
-        // Selalu sertakan instruksi multimodal
-        const multimodalInstruction = `
-        Kamu adalah asisten AI multimodal.
-        Jika ada gambar makanan/minuman + user meminta resep → buat resep lengkap (bahan + langkah).
-        Gunakan teks user sebagai perintah utama, gambar hanya sebagai konteks.
-        `;
-const messageParts = [
-  { text: multimodalInstruction + "\n\n" + finalPrompt }
-];
-
-if (media && media.data) {
-  console.log(`[Media] Mengirim gambar dengan tipe: ${media.mimetype}`);
-messageParts.push({
-  inlineData: {
-    data: media.data, // langsung pakai base64 string asli
-    mimeType: media.mimetype
-  }
-});
-}
+        const messageParts = [finalPrompt];
+        if (media && media.data) {
+            console.log(`[Media] Mengirim gambar dengan tipe: ${media.mimetype}`);
+            messageParts.push({
+                inlineData: {
+                    data: media.data,
+                    mimeType: media.mimetype
+                }
+            });
+        }
 
         const result = await chat.sendMessage(messageParts);
         const call = result.response.functionCalls()?.[0];
@@ -1712,87 +1642,56 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
     // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
-// ▼▼▼ AWAL BLOK: PENGINGAT UNIVERSAL (VERSI AI) ▼▼▼
-if (userMessageLower.startsWith('ingatkan') || userMessageLower.startsWith('tolong ingatkan')) {
-  const chat = await message.getChat();
+// ▼▼▼ AWAL BLOK: PENGINGAT UNIVERSAL ▼▼▼
+if (userMessageLower.startsWith('ingatkan')) {
   const contact = await message.getContact();
   const authorId = contact.id._serialized;
 
-  // Ambil teks setelah kata "ingatkan"
-  const rawArgs = userMessage.replace(/^ingatkan\s*/i, '').trim();
-  if (!rawArgs) {
+  const argsString = userMessage.substring('ingatkan'.length).trim();
+  const reminderRegex = /^(.+?)\s(.+?)\s(?:tentang|harus\s+)?(.+)$/i;
+  const match = argsString.match(reminderRegex);
+
+  if (!match) {
     message.reply(
-      '❌ Format kurang jelas.\n' +
-      'Contoh:\n' +
-      '• `ingatkan saya besok jam 9 tentang rapat`\n' +
-      '• `ingatkan Andi minggu depan tentang laporan`\n' +
-      '• `ingatkan aku 3 hari lagi bayar listrik`'
+      '❌ Format salah.\n' +
+      'Gunakan:\n`ingatkan <Nama> <Waktu> tentang <Pesan>`\n\n' +
+      '*Contoh:*\n`ingatkan saya besok jam 9 tentang rapat`'
     );
     return;
   }
 
+  const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
+  let targetNomorHp = authorId;
+  let targetNama = contact.pushname || "Pengguna";
+
   try {
-    // 1) Parsing fleksibel via AI
-    const parsed = await parseReminderWithAI(rawArgs);
-    if (!parsed) {
-      message.reply(
-        '❌ Maaf, saya tidak dapat memahami format pengingat ini.\n' +
-        'Coba lagi dengan contoh: `ingatkan saya besok jam 9 tentang rapat`'
-      );
-      return;
-    }
-
-    // Hasil AI
-    const namaTargetAI = (parsed.namaTarget || '').toString().trim() || 'saya';
-    const pesan = parsed.pesan.toString().trim();
-    const waktuNatural = (parsed.waktuString || '').toString().trim();
-    const waktuIsoFromAI = parsed.waktuISO ? parsed.waktuISO.toString().trim() : null;
-
-    // 2) Tentukan target (nomor WA)
-    let targetNomorHp = authorId;
-    let targetNama = contact.pushname || "Pengguna";
-    if (namaTargetAI.toLowerCase() === 'saya' || namaTargetAI.toLowerCase() === 'aku') {
+    if (namaTarget.toLowerCase() === 'saya') {
       targetNomorHp = authorId;
       targetNama = contact.pushname || "Saya";
     } else {
-      // Cari di Sanity (opsional, sama seperti versi sebelumnya)
-      try {
-        const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`;
-        const pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget: namaTargetAI });
-        if (pegawaiDitemukan?.length === 1) {
-          targetNomorHp = pegawaiDitemukan[0]._id.replace('-c-us', '@c.us');
-          targetNama = pegawaiDitemukan[0].nama || namaTargetAI;
-        } else {
-          // fallback → tetap buat untuk pengirim, simpan nama sesuai teks
-          targetNomorHp = authorId;
-          targetNama = namaTargetAI;
-        }
-      } catch (e) {
-        // fallback aman
+      // coba cari di Sanity
+      const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`;
+      const pegawaiDitemukan = await clientSanity.fetch(query, { namaTarget });
+
+      if (pegawaiDitemukan.length === 1) {
+        targetNomorHp = pegawaiDitemukan[0]._id.replace('-c-us', '@c.us');
+        targetNama = pegawaiDitemukan[0].nama;
+      } else {
+        // fallback → tetap buat untuk pengirim
         targetNomorHp = authorId;
-        targetNama = namaTargetAI;
+        targetNama = namaTarget; // simpan sesuai teks
       }
     }
 
-    // 3) Hitung waktu kirim
-    let waktuKirim = null;
-    if (waktuIsoFromAI) {
-      const t = new Date(waktuIsoFromAI);
-      if (!isNaN(t)) waktuKirim = t;
-    }
-    if (!waktuKirim && waktuNatural) {
-      // fallback ke parser lokal bawaan
-      waktuKirim = parseWaktuIndonesia(waktuNatural);
-    }
-    if (!waktuKirim || isNaN(waktuKirim)) {
+    const waktuKirim = parseWaktuIndonesia(waktuString);
+    if (!waktuKirim) {
       message.reply(
-        `❌ Maaf, saya tidak mengerti format waktu.\n` +
-        `Gunakan contoh seperti "dalam 5 menit", "hari ini jam 7", "besok jam 10".`
+        `❌ Maaf, saya tidak mengerti format waktu "${waktuString}".\n` +
+        `Gunakan format seperti "dalam 5 menit", "hari ini jam 7", atau "besok jam 10".`
       );
       return;
     }
 
-    // 4) Simpan ke Sanity
     const newPengingat = {
       _type: 'pengingat',
       pesan,
@@ -1803,7 +1702,6 @@ if (userMessageLower.startsWith('ingatkan') || userMessageLower.startsWith('tolo
     };
     await clientSanity.create(newPengingat);
 
-    // 5) Tampilkan waktu lokal Asia/Makassar
     const waktuLokal = waktuKirim.toLocaleString('id-ID', {
       timeZone: 'Asia/Makassar',
       weekday: 'long',
@@ -1815,18 +1713,17 @@ if (userMessageLower.startsWith('ingatkan') || userMessageLower.startsWith('tolo
     });
 
     message.reply(
-      `✅ Pengingat berhasil dibuat!\n\n` +
-      `*Untuk:* ${targetNama}\n` +
-      `*Pesan:* ${pesan}\n` +
-      `*Waktu:* ${waktuLokal}`
+      `✅ Pengingat berhasil dibuat!\n\n*Untuk:* ${targetNama}\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`
     );
   } catch (error) {
-    console.error('Gagal membuat pengingat (AI):', error);
+    console.error('Gagal membuat pengingat:', error);
     message.reply('❌ Maaf, terjadi kesalahan di server saat membuat pengingat.');
   }
   return;
 }
-// ▲▲▲ AKHIR BLOK: PENGINGAT UNIVERSAL (VERSI AI) ▲▲▲
+// ▲▲▲ AKHIR BLOK: PENGINGAT UNIVERSAL ▲▲▲
+
+
 
     // AWAL BLOK  MENU BANTUAN (HELP)
     if (userMessageLower === 'help' || userMessageLower === 'bantuan') {
