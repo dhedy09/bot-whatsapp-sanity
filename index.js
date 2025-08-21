@@ -362,7 +362,7 @@ function parseWaktuIndonesia(teks) {
   const lower = teks.toLowerCase().trim();
 
   // Pola: "dalam X menit/jam/hari"
-  let match = lower.match(/dalam\s+(\d+)\s+(menit|jam|hari)/);
+  let match = lower.match(/["']?dalam\s+(\d+)\s+(menit|jam|hari)["']?/);
   if (match) {
     const jumlah = parseInt(match[1]);
     const unit = match[2];
