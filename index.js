@@ -1648,11 +1648,11 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
       const contact = await message.getContact()
       const authorId = contact.id._serialized
 
-      const isUserAdmin = await isAdmin(authorId)
-      if (!isUserAdmin) {
-        message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.')
-        return
-      }
+      // const isUserAdmin = await isAdmin(authorId)
+      // if (!isUserAdmin) {
+      //   message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.')
+      //   return
+      // }
 
       const argsString = userMessage.substring('ingatkan'.length).trim()
       // const reminderRegex = /^(.*?)\s(.*?)\stentang\s"(.*?)"$/i;
