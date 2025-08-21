@@ -971,12 +971,12 @@ const messageParts = [
 
 if (media && media.data) {
   console.log(`[Media] Mengirim gambar dengan tipe: ${media.mimetype}`);
-  messageParts.push({
-    inlineData: {
-      data: Buffer.from(media.data).toString("base64"), // konversi buffer ke base64 string
-      mimeType: media.mimetype
-    }
-  });
+messageParts.push({
+  inlineData: {
+    data: media.data, // langsung pakai base64 string asli
+    mimeType: media.mimetype
+  }
+});
 }
 
         const result = await chat.sendMessage(messageParts);
