@@ -1094,16 +1094,38 @@ client.on('message', async (message) => {
         const match = message.body.match(memoryRegex);
 
 
-        if (userState[message.from]?.type === 'ai_mode') {
-        // === 1. Keluar dari sesi AI jika ketik "selesai" atau "stop" ===
-        const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
-        if (exitCommands.includes(lowerMsg)) {
-        delete userState[message.from];
-        message.reply('Sesi AI telah berakhir. Anda kembali ke menu utama.');
-        await showMainMenu(message);
-        return;
+      // === AWAL CEK MODE AI ===
+      if (userState[message.from]?.type === 'ai_mode') {
+        const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
+        if (exitCommands.includes(userMessageLower)) {
+          delete userState[message.from]
+          await message.reply('✅ Sesi AI dihentikan. Anda kembali ke menu utama.')
+          await showMainMenu(message) // 🔑 kembali tampilkan menu utama
+          return
         }
 
+        // 🔑 Semua perintah bot dimasukkan di sini
+        const perintahBot = [
+          'panda simpan',
+          'cari file',
+          'kirim file',
+          'hapus file',
+          'langganan gempa',
+          'berhenti gempa',
+          'cari user'
+        ]
+        if (perintahBot.some(cmd => userMessageLower.startsWith(cmd))) {
+          return message.reply(
+            '⚠️ Anda masih dalam sesi AI.\n\nKetik *selesai* dulu untuk keluar dari AI Mode agar bisa memakai perintah bot.'
+          )
+        }
+
+        // Kalau bukan perintah bot → lempar ke AI
+        const response = await getGeminiResponse(userMessage, [], message.from, null)
+        return message.reply(response)
+      }
+      // AKHIR CEK MODE AI
+      
 
         // === 2. Menyimpan memori jika cocok pola fleksibel ===
 if (match) {
