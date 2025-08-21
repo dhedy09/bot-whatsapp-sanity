@@ -910,9 +910,12 @@ ${memoryDoc.daftarMemori.map(f => `- ${f}`).join("\n")}
         // === Cek apakah pertanyaan butuh tools eksternal ===
         const triggerKeywords = [
             'berita', 'gempa', 'cuaca', 'siapa', 'apa', 'kapan',
-            'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berapa'
+            'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berapa',
+            'resep', 'gambar', 'foto'  // tambahan
         ];
-        const isToolQuery = triggerKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
+
+        // isToolQuery true jika ada kata kunci ATAU jika ada media gambar
+        const isToolQuery = (media && media.data) || triggerKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
 
         if (isToolQuery) {
             console.log("[Mode] AI: pertanyaan mungkin butuh tools eksternal.");
