@@ -816,6 +816,7 @@ async function getGeminiResponse(prompt, history, userId, media = null) {
         let finalPrompt = prompt;
 
         // === Tambahan: sisipkan memori dari Sanity ===
+        let memoryText = "";
         try {
             const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
             const memoryDoc = await clientSanity.fetch(
@@ -824,9 +825,13 @@ async function getGeminiResponse(prompt, history, userId, media = null) {
             );
 
             if (memoryDoc?.daftarMemori?.length > 0) {
-                const memoryText = "Fakta penting tentang user:\n" +
-                    memoryDoc.daftarMemori.map(f => `- ${f}`).join("\n");
+                memoryText = `
+📌 CATATAN PENTING:
+Informasi berikut adalah memori resmi tentang pengguna.
+Gunakan ini SETIAP KALI menjawab pertanyaan, terutama jika berkaitan dengan identitas atau preferensi pengguna.
 
+${memoryDoc.daftarMemori.map(f => `- ${f}`).join("\n")}
+`;
                 finalPrompt = `${memoryText}\n\n${finalPrompt}`;
             }
         } catch (err) {
@@ -860,7 +865,8 @@ ATURAN TEKS (jika tidak ada gambar):
 - Jika pertanyaan ringan (fakta umum, definisi singkat) → jawab langsung tanpa tools.
 - Jika ragu, boleh jawab langsung lalu tambahkan hasil tools untuk mendukung jawabanmu.
 `;
-            finalPrompt = `${instruction}\n\nPertanyaan Pengguna: "${prompt}"`;
+            // 🔑 Memori tetap disuntikkan bersama instruction
+            finalPrompt = `${memoryText}\n\n${instruction}\n\nPertanyaan Pengguna: "${prompt}"`;
         } else {
             console.log("[Mode] AI: ngobrol santai (tanpa tools khusus).");
         }
