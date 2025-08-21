@@ -1063,7 +1063,16 @@ client.on('message', async (message) => {
   const doaRegex = /doa (.*)/i;
   const doaMatch = userMessageLower.match(doaRegex);
 
-      // === AWAL CEK MODE AI ===
+    if (userLastState && userLastState.type === 'ai_mode') {
+      const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
+      if (exitCommands.includes(userMessageLower)) {
+        delete userState[message.from]
+        message.reply('Sesi AI telah berakhir. Anda kembali ke mode normal.')
+        await showMainMenu(message)
+        return
+      }
+
+            // === AWAL CEK MODE AI ===
       if (userState[message.from]?.type === 'ai_mode') {
         const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
         if (exitCommands.includes(userMessageLower)) {
