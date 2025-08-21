@@ -885,11 +885,6 @@ ATURAN TEKS (jika tidak ada gambar):
 - Jika pertanyaan umum/faktual detail → gunakan googleSearch lalu readWebPage.
 - Jika pertanyaan ringan (fakta umum, definisi singkat) → jawab langsung tanpa tools.
 - Jika ragu, boleh jawab langsung lalu tambahkan hasil tools untuk mendukung jawabanmu.
-
-ATURAN MEMORI:
-- Jika user menyebutkan fakta pribadi (nama, lokasi, hobi, pekerjaan, keluarga, preferensi, hal penting lainnya), catat sebagai "memori".
-- Setiap jawaban AI, kamu juga harus mengembalikan field tambahan "memoriBaru" yang berisi ringkasan singkat informasi baru yang perlu disimpan. 
-- Jika tidak ada info baru, kembalikan "memoriBaru": null.
 `;
             // 🔑 Memori tetap disuntikkan bersama instruction
             finalPrompt = `${memoryText}\n\n${instruction}\n\nPertanyaan Pengguna: "${prompt}"`;
