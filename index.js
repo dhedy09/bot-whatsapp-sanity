@@ -355,8 +355,8 @@ async function getGempa() {
 
 // ▲▲▲ AKHIR DARI FUNGSI GET BERITA ▲▲▲
 
-// BLOK FUNGSI: PARSER WAKTU INDONESIA (VERSI UPGRADE)
-// ====================================================
+// BLOK FUNGSI: PARSER WAKTU INDONESIA
+// =================================================================
 function parseWaktuIndonesia(teks) {
   const sekarang = new Date();
   const lower = teks.toLowerCase().trim();
@@ -366,59 +366,59 @@ function parseWaktuIndonesia(teks) {
   if (match) {
     const jumlah = parseInt(match[1]);
     const unit = match[2];
-    if (unit === 'menit') sekarang.setMinutes(sekarang.getMinutes() + jumlah);
-    if (unit === 'jam') sekarang.setHours(sekarang.getHours() + jumlah);
-    if (unit === 'hari') sekarang.setDate(sekarang.getDate() + jumlah);
+    if (unit.startsWith('menit')) sekarang.setMinutes(sekarang.getMinutes() + jumlah);
+    else if (unit.startsWith('jam')) sekarang.setHours(sekarang.getHours() + jumlah);
+    else if (unit.startsWith('hari')) sekarang.setDate(sekarang.getDate() + jumlah);
     return sekarang;
   }
 
-  // Pola: "hari ini jam/pukul X"
-  match = lower.match(/hari ini (?:jam|pukul)\s+(\d{1,2})(?:[:.](\d{2}))?/);
+  // Pola: "hari ini jam X"
+  match = lower.match(/hari ini (?:jam|pukul)\s+(\d{1,2})(?:[:.](\d{1,2}))?/);
   if (match) {
     const jam = parseInt(match[1]);
     const menit = match[2] ? parseInt(match[2]) : 0;
-    const today = new Date();
-    today.setHours(jam, menit, 0, 0);
-    return today;
+    const target = new Date();
+    target.setHours(jam, menit, 0, 0);
+    if (target < sekarang) target.setDate(target.getDate() + 1);
+    return target;
   }
 
-  // Pola: "besok jam/pukul X"
-  match = lower.match(/besok (?:jam|pukul)\s+(\d{1,2})(?:[:.](\d{2}))?/);
+  // Pola: "besok jam X"
+  match = lower.match(/besok (?:jam|pukul)\s+(\d{1,2})(?:[:.](\d{1,2}))?/);
   if (match) {
     const jam = parseInt(match[1]);
     const menit = match[2] ? parseInt(match[2]) : 0;
-    const besok = new Date();
-    besok.setDate(besok.getDate() + 1);
-    besok.setHours(jam, menit, 0, 0);
-    return besok;
+    const target = new Date();
+    target.setDate(target.getDate() + 1);
+    target.setHours(jam, menit, 0, 0);
+    return target;
   }
 
-  // Pola: "lusa jam/pukul X"
-  match = lower.match(/lusa (?:jam|pukul)\s+(\d{1,2})(?:[:.](\d{2}))?/);
+  // Pola: "lusa jam X"
+  match = lower.match(/lusa (?:jam|pukul)\s+(\d{1,2})(?:[:.](\d{1,2}))?/);
   if (match) {
     const jam = parseInt(match[1]);
     const menit = match[2] ? parseInt(match[2]) : 0;
-    const lusa = new Date();
-    lusa.setDate(lusa.getDate() + 2);
-    lusa.setHours(jam, menit, 0, 0);
-    return lusa;
+    const target = new Date();
+    target.setDate(target.getDate() + 2);
+    target.setHours(jam, menit, 0, 0);
+    return target;
   }
 
-  // Pola: "minggu depan jam/pukul X"
-  match = lower.match(/minggu depan (?:jam|pukul)\s+(\d{1,2})(?:[:.](\d{2}))?/);
+  // Pola: "minggu depan jam X"
+  match = lower.match(/minggu depan (?:jam|pukul)\s+(\d{1,2})(?:[:.](\d{1,2}))?/);
   if (match) {
     const jam = parseInt(match[1]);
     const menit = match[2] ? parseInt(match[2]) : 0;
-    const nextWeek = new Date();
-    nextWeek.setDate(nextWeek.getDate() + 7);
-    nextWeek.setHours(jam, menit, 0, 0);
-    return nextWeek;
+    const target = new Date();
+    target.setDate(target.getDate() + 7);
+    target.setHours(jam, menit, 0, 0);
+    return target;
   }
 
-  // Jika tidak ada pola yang cocok
   return null;
 }
-// ▲▲▲ AKHIR DARI FUNGSI PERSEINDONESIA (UPGRADE) ▲▲▲
+// ▲▲▲ AKHIR DARI FUNGSI PARSER INDONESIA ▲▲▲
 
 
     // AWAL BROADCAST GEMPA
@@ -909,7 +909,7 @@ ATURAN MEMORI:
         const call = result.response.functionCalls()?.[0];
 
         if (call) {
-            console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
+            // console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
             let functionResponse;
 
             switch (call.name) {
