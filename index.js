@@ -159,10 +159,8 @@ const daftarPerintah = [
   { prefix: 'hapus file', deskripsi: 'Hapus file dari arsip' },
   { prefix: 'langganan gempa', deskripsi: 'Langganan notifikasi gempa' },
   { prefix: 'berhenti gempa', deskripsi: 'Stop langganan notifikasi gempa' },
-  { prefix: 'cari user', deskripsi: 'Cari data pegawai' },
-  { prefix: 'ingatkan', deskripsi: 'Buat pengingat pribadi' }
+  { prefix: 'cari user', deskripsi: 'Cari data pegawai' }
 ]
-
 
 // Fungsi helper untuk cek apakah pesan adalah perintah bot
 function isPerintahBot(msg) {
@@ -355,71 +353,87 @@ async function getGempa() {
 
 // ▲▲▲ AKHIR DARI FUNGSI GET BERITA ▲▲▲
 
+// AWAL ▼▼▼ TAMBAHKAN FUNGSI PERSE INDONESIA ▼▼▼
+// =================================================================
 // BLOK FUNGSI: PARSER WAKTU INDONESIA
 // =================================================================
 function parseWaktuIndonesia(teks) {
-  const sekarang = new Date();
-  const lower = teks.toLowerCase().trim();
+    const sekarang = new Date(); // Cukup ambil waktu saat ini.
+    teks = teks.toLowerCase();
 
-  // Pola: "dalam X menit/jam/hari"
-  let match = lower.match(/\bdalam\s+(\d+)\s*(menit|menitan|jam|jamm?|hari|harian)\b/);
-  if (match) {
-    const jumlah = parseInt(match[1]);
-    const unit = match[2];
-    if (unit.startsWith('menit')) sekarang.setMinutes(sekarang.getMinutes() + jumlah);
-    else if (unit.startsWith('jam')) sekarang.setHours(sekarang.getHours() + jumlah);
-    else if (unit.startsWith('hari')) sekarang.setDate(sekarang.getDate() + jumlah);
-    return sekarang;
-  }
+    // Pola untuk "dalam X menit/jam"
+    let match = teks.match(/dalam (\d+) (menit|jam)/);
+    if (match) {
+        const jumlah = parseInt(match[1]);
+        const unit = match[2];
+        if (unit === 'menit') {
+            sekarang.setMinutes(sekarang.getMinutes() + jumlah);
+        } else if (unit === 'jam') {
+            sekarang.setHours(sekarang.getHours() + jumlah);
+        }
+        return sekarang;
+    }
 
-  // Pola: "hari ini jam X"
-  match = lower.match(/hari ini (?:jam|pukul)\s+(\d{1,2})(?:[:.](\d{1,2}))?/);
-  if (match) {
-    const jam = parseInt(match[1]);
-    const menit = match[2] ? parseInt(match[2]) : 0;
-    const target = new Date();
-    target.setHours(jam, menit, 0, 0);
-    if (target < sekarang) target.setDate(target.getDate() + 1);
-    return target;
-  }
+    // Pola untuk "besok jam X"
+    match = teks.match(/besok (?:jam|pukul) (\d+)/);
+    if (match) {
+        const jam = parseInt(match[1]);
+        const besok = new Date(); // Ambil tanggal hari ini
+        besok.setDate(besok.getDate() + 1); // Maju ke besok
+        
+        // Atur jam berdasarkan zona waktu Asia/Makassar
+        const targetWaktuString = `${besok.getFullYear()}-${besok.getMonth()+1}-${besok.getDate()} ${jam}:00:00`;
+        // Trik untuk memastikan tanggal dibuat dalam zona waktu yang benar
+        return new Date(new Date(targetWaktuString).toLocaleString("en-US", {timeZone: "Asia/Makassar"}));
+    }
 
-  // Pola: "besok jam X"
-  match = lower.match(/besok (?:jam|pukul)\s+(\d{1,2})(?:[:.](\d{1,2}))?/);
-  if (match) {
-    const jam = parseInt(match[1]);
-    const menit = match[2] ? parseInt(match[2]) : 0;
-    const target = new Date();
-    target.setDate(target.getDate() + 1);
-    target.setHours(jam, menit, 0, 0);
-    return target;
-  }
-
-  // Pola: "lusa jam X"
-  match = lower.match(/lusa (?:jam|pukul)\s+(\d{1,2})(?:[:.](\d{1,2}))?/);
-  if (match) {
-    const jam = parseInt(match[1]);
-    const menit = match[2] ? parseInt(match[2]) : 0;
-    const target = new Date();
-    target.setDate(target.getDate() + 2);
-    target.setHours(jam, menit, 0, 0);
-    return target;
-  }
-
-  // Pola: "minggu depan jam X"
-  match = lower.match(/minggu depan (?:jam|pukul)\s+(\d{1,2})(?:[:.](\d{1,2}))?/);
-  if (match) {
-    const jam = parseInt(match[1]);
-    const menit = match[2] ? parseInt(match[2]) : 0;
-    const target = new Date();
-    target.setDate(target.getDate() + 7);
-    target.setHours(jam, menit, 0, 0);
-    return target;
-  }
-
-  return null;
+    // Jika tidak ada pola yang cocok
+    return null;
 }
-// ▲▲▲ AKHIR DARI FUNGSI PARSER INDONESIA ▲▲▲
 
+// ▲▲▲ AKHIR DARI FUNGSI PERSEINDONESIA ▲▲▲
+
+    // ▼▼▼ TAMBAHKAN FUNGSI ALARM ▼▼▼
+    /**
+     * Memeriksa Sanity untuk pengingat yang sudah jatuh tempo,
+     * mengirimkannya, lalu memperbarui statusnya.
+     */
+    async function checkAndSendReminders() {
+        try {
+            // 1. Cari pengingat yang statusnya 'menunggu' dan waktunya sudah lewat
+            const now = new Date().toISOString();
+            const query = `*[_type == "pengingat" && status == "menunggu" && waktuKirim <= $now]`;
+            const dueReminders = await clientSanity.fetch(query, { now });
+
+            if (dueReminders.length === 0) {
+                // Jika tidak ada pengingat, tidak melakukan apa-apa
+                return;
+            }
+
+            console.log(`[Pengingat] Ditemukan ${dueReminders.length} pengingat yang harus dikirim.`);
+
+            // 2. Kirim setiap pengingat satu per satu
+            for (const reminder of dueReminders) {
+                try {
+                    const messageBody = `🔔 *PENGINGAT* 🔔\n\n${reminder.pesan}`;
+                    await client.sendMessage(reminder.targetNomorHp, messageBody);
+
+                    // 3. Jika berhasil, update statusnya menjadi 'terkirim'
+                    await clientSanity.patch(reminder._id).set({ status: 'terkirim' }).commit();
+                    console.log(`[Pengingat] Berhasil mengirim pengingat ke ${reminder.targetNama}`);
+
+                } catch (sendError) {
+                    console.error(`[Pengingat] Gagal mengirim pengingat ke ${reminder.targetNama}:`, sendError);
+                    // Jika gagal, update statusnya menjadi 'gagal'
+                    await clientSanity.patch(reminder._id).set({ status: 'gagal' }).commit();
+                }
+            }
+        } catch (fetchError) {
+            console.error("[Pengingat] Gagal mengambil data pengingat dari Sanity:", fetchError);
+        }
+    }
+
+    // ▲▲▲ AKHIR DARI ALARM▲▲▲
 
     // AWAL BROADCAST GEMPA
             // Tambahkan setelah fungsi checkAndSendReminders()
@@ -864,11 +878,6 @@ ATURAN GAMBAR: Jika input berisi GAMBAR:
 5. Jika media berupa video atau audio → fokus pada teks yang diberikan user, jangan berusaha menganalisis media tersebut.
 6. Jika ada gambar + teks, SELALU prioritaskan teks user sebagai instruksi utama, gunakan gambar hanya sebagai konteks tambahan.
 
-ATURAN PENGINGAT:
-- Jika pengguna meminta "ingatkan saya ..." → jangan jawab langsung.
-- Selalu arahkan ke handler pengingat bot dengan format perintah: "ingatkan saya <waktu> <pesan>".
-
-
 ATURAN TEKS (jika tidak ada gambar):
 - Jika pengguna tanya tentang *berita* → gunakan getLatestNews.
 - Jika tanya tentang *gempa* → gunakan getGempa.
@@ -909,7 +918,7 @@ ATURAN MEMORI:
         const call = result.response.functionCalls()?.[0];
 
         if (call) {
-            // console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
+            console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
             let functionResponse;
 
             switch (call.name) {
@@ -1638,104 +1647,83 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
     // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
-// AWAL BLOK: MEMBUAT PENGINGAT PRIBADI (FLEKSIBEL)
-// =================================================
-if (userMessageLower.startsWith('ingatkan')) {
-  const contact = await message.getContact();
-  const authorId = contact.id._serialized;
+    // AWAL BLOK: MEMBUAT PENGINGAT PRIBADI (HANYA ADMIN)
+    if (userMessageLower.startsWith('ingatkan')) {
+      // Dapatkan info kontak pengirim untuk mendapatkan ID asli (selalu 628...@c.us)
+      const contact = await message.getContact()
+      const authorId = contact.id._serialized
 
-  // Ambil teks setelah kata "ingatkan"
-  const argsString = userMessage.substring('ingatkan'.length).trim();
+      const isUserAdmin = await isAdmin(authorId)
+      if (!isUserAdmin) {
+        message.reply('🔒 Maaf, hanya admin yang dapat menggunakan perintah ini.')
+        return
+      }
 
-  // Pola fleksibel: "ingatkan saya <waktu> <pesan>"
-  // Contoh: "ingatkan saya dalam 1 menit harus mandi"
-  const match = argsString.match(/^saya\s+(.+?)\s+(.+)$/i);
-  if (!match) {
-    message.reply(
-      'Format salah. Gunakan:\n' +
-        '`ingatkan saya <Waktu> <Pesan>`\n\n' +
-        '*Contoh:*\n' +
-        '`ingatkan saya dalam 5 menit minum obat`\n' +
-        '`ingatkan saya besok jam 9 rapat evaluasi`\n'
-    );
-    return;
-  }
+      const argsString = userMessage.substring('ingatkan'.length).trim()
+      // const reminderRegex = /^(.*?)\s(.*?)\stentang\s"(.*?)"$/i;
+      const reminderRegex = /^(.+?)\s(.+?)\stentang\s"(.+)"$/i
+      const match = argsString.match(reminderRegex)
 
-  const waktuString = match[1].trim();
-  const pesan = match[2].trim();
-  const waktuKirim = parseWaktuIndonesia(waktuString);
+      if (!match) {
+        message.reply(
+          'Format salah. Gunakan:\n`ingatkan <Nama> <Waktu> tentang "<Pesan>"`\n\n' +
+            '*Contoh:*\n`ingatkan Budi besok jam 9 tentang "Rapat evaluasi"`',
+        )
+        return
+      }
 
-  if (!waktuKirim) {
-    message.reply(
-      `Maaf, saya tidak mengerti format waktu "${waktuString}".\n` +
-        'Gunakan format seperti "dalam 5 menit", "hari ini jam 7", atau "besok jam 10".'
-    );
-    return;
-  }
+      const [, namaTarget, waktuString, pesan] = match.map((s) => s.trim())
+      message.reply(`⏳ Mencari pegawai dengan nama *${namaTarget}*...`)
 
-  try {
-    const newPengingat = {
-      _type: 'pengingat',
-      pesan,
-      targetNomorHp: authorId,
-      targetNama: contact.pushname || contact.number,
-      waktuKirim: waktuKirim.toISOString(),
-      status: 'menunggu',
-    };
-    await clientSanity.create(newPengingat);
-
-    const waktuLokal = waktuKirim.toLocaleString('id-ID', {
-      timeZone: 'Asia/Makassar',
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    message.reply(
-      `✅ Pengingat berhasil dibuat!\n\n` +
-        `*Pesan:* ${pesan}\n` +
-        `*Waktu:* ${waktuLokal}`
-    );
-  } catch (error) {
-    console.error('Gagal membuat pengingat:', error);
-    message.reply('Maaf, terjadi kesalahan di server saat mencoba membuat pengingat.');
-  }
-  return;
-}
-// ▲▲▲ AKHIR DARI BLOK PENGINGAT (FLEKSIBEL) ▲▲▲
-
-    // ▼▼▼ AWAL BLOK: SCHEDULER PENGINGAT (TAMBAHAN BARU) ▼▼▼
-const SCHEDULER_INTERVAL_MS = 60_000; // cek tiap 1 menit
-let schedulerRunning = false;
-
-async function prosesPengingatDue() {
-  if (schedulerRunning) return; // hindari overlap
-  schedulerRunning = true;
-
-  const nowISO = new Date().toISOString();
-
-  try {
-    // Ambil pengingat yang sudah jatuh tempo & masih menunggu
-    const dueList = await clientSanity.fetch(
-      `*[_type == "pengingat" && status == "menunggu" && dateTime(waktuKirim) <= dateTime(now())]
-       | order(dateTime(waktuKirim) asc)[0...50]{
-         _id, _rev, targetNomorHp, targetNama, pesan, waktuKirim
-       }`
-    );
-
-    for (const item of dueList) {
       try {
-        // Lock dokumen agar tidak diproses ganda (optimistic concurrency)
-        await clientSanity
-          .patch(item._id)
-          .ifRevisionId(item._rev)
-          .set({ status: 'proses', diprosesPada: nowISO })
-          .commit();
+        const query = `*[_type == "pegawai" && lower(nama) match lower($namaTarget)]`
+        let pegawaiDitemukan = await clientSanity.fetch(query, {namaTarget})
 
-        const waktuLocal = new Date(item.waktuKirim).toLocaleString('id-ID', {
+        if (pegawaiDitemukan.length === 0 && namaTarget.toLowerCase() === 'saya') {
+          // --- PERBAIKAN UTAMA: Menggunakan Parameterized Query ---
+          const idToSearch = authorId.replace('@c.us', '-c-us')
+          const selfQuery = `*[_type == "pegawai" && _id == $idToSearch][0]`
+          const selfData = await clientSanity.fetch(selfQuery, {idToSearch: idToSearch})
+
+          if (selfData) {
+            pegawaiDitemukan = [selfData]
+          }
+        }
+
+        if (pegawaiDitemukan.length === 0) {
+          message.reply(`Maaf, pegawai dengan nama "${namaTarget}" tidak ditemukan.`)
+          return
+        }
+        if (pegawaiDitemukan.length > 1) {
+          message.reply(
+            `Ditemukan ${pegawaiDitemukan.length} pegawai dengan nama mirip "${namaTarget}". Mohon gunakan nama yang lebih spesifik.`,
+          )
+          return
+        }
+
+        const target = pegawaiDitemukan[0]
+        const targetNomorHp = target._id.replace('-c-us', '@c.us')
+        const targetNama = target.nama
+        const waktuKirim = parseWaktuIndonesia(waktuString)
+
+        if (!waktuKirim) {
+          message.reply(
+            `Maaf, saya tidak mengerti format waktu "${waktuString}".\nGunakan format seperti "besok jam 10" atau "dalam 5 menit".`,
+          )
+          return
+        }
+
+        const newPengingat = {
+          _type: 'pengingat',
+          pesan,
+          targetNomorHp,
+          targetNama,
+          waktuKirim: waktuKirim.toISOString(),
+          status: 'menunggu',
+        }
+        await clientSanity.create(newPengingat)
+
+        const waktuLokal = waktuKirim.toLocaleString('id-ID', {
           timeZone: 'Asia/Makassar',
           weekday: 'long',
           year: 'numeric',
@@ -1743,43 +1731,18 @@ async function prosesPengingatDue() {
           day: 'numeric',
           hour: '2-digit',
           minute: '2-digit',
-        });
-
-        const text = [
-          '⏰ *Pengingat*',
-          '',
-          `*Untuk:* ${item.targetNama}`,
-          `*Pesan:* ${item.pesan}`,
-          `*Waktu:* ${waktuLocal}`,
-          '',
-          '(Dikirim otomatis oleh sistem)',
-        ].join('\n');
-
-        await client.sendMessage(item.targetNomorHp, text);
-
-        await clientSanity
-          .patch(item._id)
-          .set({ status: 'terkirim', terkirimPada: new Date().toISOString() })
-          .commit();
-      } catch (err) {
-        console.error('Gagal memproses pengingat:', item._id, err?.message || err);
-        // Kembalikan ke menunggu agar dicoba lagi nanti
-        try {
-          await clientSanity.patch(item._id).set({ status: 'menunggu' }).commit();
-        } catch (_) {}
+        })
+        message.reply(
+          `✅ Pengingat berhasil dibuat!\n\n*Untuk:* ${targetNama}\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`,
+        )
+      } catch (error) {
+        console.error('Gagal membuat pengingat:', error)
+        message.reply('Maaf, terjadi kesalahan di server saat mencoba membuat pengingat.')
       }
+      return
     }
-  } catch (e) {
-    console.error('Scheduler pengingat error:', e?.message || e);
-  } finally {
-    schedulerRunning = false;
-  }
-}
 
-// Mulai scheduler
-setInterval(prosesPengingatDue, SCHEDULER_INTERVAL_MS);
-// ▲▲▲ AKHIR DARI BLOK: SCHEDULER PENGINGAT ▲▲▲
-
+    // ▲▲▲ AKHIR DARI BLOK PENGINGAT ▲▲▲
 
     // AWAL BLOK  MENU BANTUAN (HELP)
     if (userMessageLower === 'help' || userMessageLower === 'bantuan') {
