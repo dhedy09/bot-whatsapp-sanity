@@ -1063,16 +1063,7 @@ client.on('message', async (message) => {
   const doaRegex = /doa (.*)/i;
   const doaMatch = userMessageLower.match(doaRegex);
 
-    if (userLastState && userLastState.type === 'ai_mode') {
-      const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
-      if (exitCommands.includes(userMessageLower)) {
-        delete userState[message.from]
-        message.reply('Sesi AI telah berakhir. Anda kembali ke mode normal.')
-        await showMainMenu(message)
-        return
-      }
-
-            // === AWAL CEK MODE AI ===
+      // === AWAL CEK MODE AI ===
       if (userState[message.from]?.type === 'ai_mode') {
         const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
         if (exitCommands.includes(userMessageLower)) {
@@ -1090,8 +1081,7 @@ client.on('message', async (message) => {
           'hapus file',
           'langganan gempa',
           'berhenti gempa',
-          'cari user',
-          'help'
+          'cari user'
         ]
         if (perintahBot.some(cmd => userMessageLower.startsWith(cmd))) {
           return message.reply(
