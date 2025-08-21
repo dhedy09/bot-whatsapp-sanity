@@ -965,21 +965,19 @@ ATURAN TEKS (jika tidak ada gambar):
         Jika ada gambar makanan/minuman + user meminta resep → buat resep lengkap (bahan + langkah).
         Gunakan teks user sebagai perintah utama, gambar hanya sebagai konteks.
         `;
-        const messageParts = [
-          {
-            text: multimodalInstruction + "\n\n" + finalPrompt
-          }
-        ];
+const messageParts = [
+  { text: multimodalInstruction + "\n\n" + finalPrompt }
+];
 
-        if (media && media.data) {
-          console.log(`[Media] Mengirim gambar dengan tipe: ${media.mimetype}`);
-          messageParts.push({
-            inlineData: {
-              data: media.data.toString("base64"), // pastikan base64 string
-              mimeType: media.mimetype
-            }
-          });
-        }
+if (media && media.data) {
+  console.log(`[Media] Mengirim gambar dengan tipe: ${media.mimetype}`);
+  messageParts.push({
+    inlineData: {
+      data: Buffer.from(media.data).toString("base64"), // konversi buffer ke base64 string
+      mimeType: media.mimetype
+    }
+  });
+}
 
         const result = await chat.sendMessage(messageParts);
         const call = result.response.functionCalls()?.[0];
