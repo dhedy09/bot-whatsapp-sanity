@@ -830,53 +830,27 @@ async function showPustakaMenu(message, categoryId) {
 // BLOK FUNGSI: RESPON GEMINI AI
 // =================================================================
 async function getGeminiResponse(prompt, history, userId, media = null) {
-    try {
-        let finalPrompt = prompt;
+try {
+let finalPrompt = prompt;
 
-        // === Tambahan: sisipkan memori dari Sanity ===
-//         let memoryText = "";
-//         try {
-//             const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
-//             const memoryDoc = await clientSanity.fetch(
-//                 `*[_type == "memoriPengguna" && _id == $id][0]`,
-//                 { id: sanitizedId }
-//             );
 
-//             if (memoryDoc?.daftarMemori?.length > 0) {
-//                 memoryText = `
-// 📌 CATATAN PENTING:
-// Informasi berikut adalah memori resmi tentang pengguna.
-// Gunakan ini SETIAP KALI menjawab pertanyaan, terutama jika berkaitan dengan identitas atau preferensi pengguna.
+const triggerKeywords = [
+'berita', 'gempa', 'cuaca', 'siapa', 'apa', 'kapan', 'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berapa'
+];
+const isToolQuery = triggerKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
 
-// ${memoryDoc.daftarMemori.map(f => `- ${f}`).join("\n")}
-// `;
-//                 finalPrompt = `${memoryText}\n\n${finalPrompt}`;
-//             }
-//         } catch (err) {
-//             console.error("Gagal memuat memori dari Sanity:", err);
-//         }
 
-        // === Cek apakah pertanyaan butuh tools eksternal ===
-        const triggerKeywords = [
-            'berita', 'gempa', 'cuaca', 'siapa', 'apa', 'kapan',
-            'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berapa'
-        ];
-        const isToolQuery = triggerKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
-
-        if (isToolQuery) {
-            console.log("[Mode] AI: pertanyaan mungkin butuh tools eksternal.");
-            const instruction = `
+if (isToolQuery) {
+console.log("[Mode] AI: pertanyaan mungkin butuh tools eksternal.");
+const instruction = `
 Kamu adalah asisten AI yang cerdas dan multimodal.
-Kamu harus seperti AI lain seperti chatGPT, Gemini, dan DeepSeek.
 ATURAN UTAMA: Analisis semua input yang diberikan, baik teks maupun gambar.
 
 ATURAN GAMBAR: Jika input berisi GAMBAR:
 1.  Pertama, identifikasi objek atau subjek utama di dalam gambar.
 2.  Gunakan teks dari pengguna sebagai PERINTAH UTAMA tentang apa yang harus dilakukan dengan gambar tersebut.
-3.  Jika perintah itu membutuhkan informasi dari luar (seperti resep, sejarah, berita, atau data spesifik), SELALU gunakan 'googleSearch' lalu 'readWebPage' untuk mencari jawaban yang relevan.
+3.  Jika perintah itu membutuhkan informasi dari luar (seperti resep, sejarah, berita, atau data spesifik), kamu DIZINKAN dan DIDORONG untuk menggunakan alat seperti 'googleSearch' dan 'readWebPage' untuk menemukan jawaban.
 4.  Jika pengguna hanya mengirim gambar tanpa teks, tugasmu adalah mendeskripsikannya secara detail.
-5. Jika media berupa video atau audio → fokus pada teks yang diberikan user, jangan berusaha menganalisis media tersebut.
-6. Jika ada gambar + teks, SELALU prioritaskan teks user sebagai instruksi utama, gunakan gambar hanya sebagai konteks tambahan.
 
 ATURAN TEKS (jika tidak ada gambar):
 - Jika pengguna tanya tentang *berita* → gunakan getLatestNews.
@@ -886,86 +860,91 @@ ATURAN TEKS (jika tidak ada gambar):
 - Jika pertanyaan ringan (fakta umum, definisi singkat) → jawab langsung tanpa tools.
 - Jika ragu, boleh jawab langsung lalu tambahkan hasil tools untuk mendukung jawabanmu.
 `;
-            // 🔑 Memori tetap disuntikkan bersama instruction
-            finalPrompt = `${memoryText}\n\n${instruction}\n\nPertanyaan Pengguna: "${prompt}"`;
-        } else {
-            console.log("[Mode] AI: ngobrol santai (tanpa tools khusus).");
+finalPrompt = `${instruction}\n\nPertanyaan Pengguna: "${prompt}"`;
+} else {
+console.log("[Mode] AI: ngobrol santai (tanpa tools khusus).");
+}
+
+
+const chat = model.startChat({
+history: history,
+tools: tools,
+});
+
+
+/* const result = await chat.sendMessage(finalPrompt);*/
+const messageParts = [finalPrompt];
+if (media && media.data) {
+    console.log(`[Media] Mengirim gambar dengan tipe: ${media.mimetype}`);
+    messageParts.push({
+        inlineData: {
+            data: media.data,
+            mimeType: media.mimetype
         }
+    });
+}
+const result = await chat.sendMessage(messageParts);
+const call = result.response.functionCalls()?.[0];
 
-        // === Mulai chat dengan Gemini ===
-        const chat = model.startChat({
-            history: history,
-            tools: tools,
-        });
 
-        const messageParts = [finalPrompt];
-        if (media && media.data) {
-            console.log(`[Media] Mengirim gambar dengan tipe: ${media.mimetype}`);
-            messageParts.push({
-                inlineData: {
-                    data: media.data,
-                    mimeType: media.mimetype
-                }
-            });
-        }
+if (call) {
+console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
+let functionResponse;
 
-        const result = await chat.sendMessage(messageParts);
-        const call = result.response.functionCalls()?.[0];
 
-        if (call) {
-            console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
-            let functionResponse;
+switch (call.name) {
+case 'readWebPage':
+functionResponse = await readWebPage(call.args.url);
+break;
+case 'googleSearch':
+functionResponse = await googleSearch(call.args.query);
+break;
+case 'getCurrentWeather':
+functionResponse = await getCurrentWeather(call.args.location);
+break;
+case 'getLatestNews':
+functionResponse = await getLatestNews(call.args.query);
+break;
+case 'getGempa':
+functionResponse = await getGempa();
+break;
+case 'calculate':
+functionResponse = { result: evaluateMathExpression(call.args.expression) };
+break;
+default:
+functionResponse = { error: `Fungsi ${call.name} tidak ada.` };
+break;
+}
 
-            switch (call.name) {
-                case 'readWebPage':
-                    functionResponse = await readWebPage(call.args.url);
-                    break;
-                case 'googleSearch':
-                    functionResponse = await googleSearch(call.args.query);
-                    break;
-                case 'getCurrentWeather':
-                    functionResponse = await getCurrentWeather(call.args.location);
-                    break;
-                case 'getLatestNews':
-                    functionResponse = await getLatestNews(call.args.query);
-                    break;
-                case 'getGempa':
-                    functionResponse = await getGempa();
-                    break;
-                case 'calculate':
-                    functionResponse = { result: evaluateMathExpression(call.args.expression) };
-                    break;
-                default:
-                    functionResponse = { error: `Fungsi ${call.name} tidak ada.` };
-                    break;
-            }
 
-            const result2 = await chat.sendMessage([
-                { functionResponse: { name: call.name, response: functionResponse } }
-            ]);
+const result2 = await chat.sendMessage([
+{ functionResponse: { name: call.name, response: functionResponse } }
+]);
 
-            const finalResponse = result2.response;
-            if (finalResponse.candidates?.[0]?.content?.parts) {
-                return finalResponse.candidates[0].content.parts.map(part => part.text).join('');
-            } else {
-                return "Maaf, saya menerima respons yang tidak valid dari AI.";
-            }
 
-        } else {
-            const finalResponse = result.response;
-            if (finalResponse.candidates?.[0]?.content?.parts) {
-                return finalResponse.candidates[0].content.parts.map(part => part.text).join('');
-            } else {
-                return "Maaf, saya menerima respons yang tidak valid dari AI.";
-            }
-        }
-    } catch (error) {
-        console.error(`Error saat memanggil API Gemini:`, error);
-        if (error.message?.includes('response was blocked')) {
-            return "Maaf, respons saya diblokir karena kebijakan keamanan.";
-        }
-        return "Maaf, Asisten AI sedang mengalami gangguan. Coba lagi.";
-    }
+const finalResponse = result2.response;
+if (finalResponse.candidates?.[0]?.content?.parts) {
+return finalResponse.candidates[0].content.parts.map(part => part.text).join('');
+} else {
+return "Maaf, saya menerima respons yang tidak valid dari AI.";
+}
+
+
+} else {
+const finalResponse = result.response;
+if (finalResponse.candidates?.[0]?.content?.parts) {
+return finalResponse.candidates[0].content.parts.map(part => part.text).join('');
+} else {
+return "Maaf, saya menerima respons yang tidak valid dari AI.";
+}
+}
+} catch (error) {
+console.error(`Error saat memanggil API Gemini:`, error);
+if (error.message?.includes('response was blocked')) {
+return "Maaf, respons saya diblokir karena kebijakan keamanan.";
+}
+return "Maaf, Asisten AI sedang mengalami gangguan. Coba lagi.";
+}
 }
 // =================================================================
 // AKHIR BLOK RESPON GEMINI AI
