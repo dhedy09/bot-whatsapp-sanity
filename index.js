@@ -357,60 +357,38 @@ async function getGempa() {
 // =================================================================
 // BLOK FUNGSI: PARSER WAKTU INDONESIA
 // =================================================================
-function parseWaktuIndonesia(teks) { // <-- NAMA SUDAH DIPERBAIKI DI SINI
-  let teksNormal = teks.toLowerCase()
-    .replace(/\./g, ':') // Ganti titik jadi titik dua (10.30 -> 10:30)
-    .replace(/ ham /g, ' jam '); // Koreksi typo umum
+function parseWaktuIndonesia(teks) {
+    const sekarang = new Date(); // Cukup ambil waktu saat ini.
+    teks = teks.toLowerCase();
 
-  const sekarang = new Date();
-  let targetWaktu = new Date(); // Salin waktu saat ini sebagai dasar
-
-  // 1. Pola untuk waktu relatif: "dalam X menit/jam"
-  let match = teksNormal.match(/dalam (\d+) (menit|jam)/);
-  if (match) {
-    const jumlah = parseInt(match[1]);
-    const unit = match[2];
-    if (unit === 'menit') {
-      targetWaktu.setMinutes(targetWaktu.getMinutes() + jumlah);
-    } else if (unit === 'jam') {
-      targetWaktu.setHours(targetWaktu.getHours() + jumlah);
-    }
-    return targetWaktu;
-  }
-
-  // 2. Tentukan hari: hari ini, besok, atau lusa
-  if (teksNormal.includes('besok')) {
-    targetWaktu.setDate(targetWaktu.getDate() + 1);
-  } else if (teksNormal.includes('lusa')) {
-    targetWaktu.setDate(targetWaktu.getDate() + 2);
-  }
-  // Jika tidak ada kata "besok" atau "lusa", maka diasumsikan "hari ini"
-
-  // 3. Pola untuk jam dan menit: "jam/pukul HH:mm" atau "jam/pukul HH"
-  match = teksNormal.match(/(?:jam|pukul) (\d{1,2})(?::(\d{1,2}))?/);
-  if (match) {
-    const jam = parseInt(match[1]);
-    const menit = match[2] ? parseInt(match[2]) : 0; // Jika menit tidak ada, anggap 0
-
-    // Cek apakah jam dan menit valid
-    if (jam >= 0 && jam < 24 && menit >= 0 && menit < 60) {
-      targetWaktu.setHours(jam);
-      targetWaktu.setMinutes(menit);
-      targetWaktu.setSeconds(0); // Set detik ke 0 agar pas
-
-      // Logika cerdas untuk waktu yang sudah lewat
-      if (targetWaktu < sekarang && !teksNormal.includes('besok') && !teksNormal.includes('lusa')) {
-        if (!teksNormal.includes('hari ini')) {
-           targetWaktu.setDate(targetWaktu.getDate() + 1);
+    // Pola untuk "dalam X menit/jam"
+    let match = teks.match(/dalam (\d+) (menit|jam)/);
+    if (match) {
+        const jumlah = parseInt(match[1]);
+        const unit = match[2];
+        if (unit === 'menit') {
+            sekarang.setMinutes(sekarang.getMinutes() + jumlah);
+        } else if (unit === 'jam') {
+            sekarang.setHours(sekarang.getHours() + jumlah);
         }
-      }
-      
-      return targetWaktu;
+        return sekarang;
     }
-  }
 
-  // Jika tidak ada pola yang cocok sama sekali
-  return null;
+    // Pola untuk "besok jam X"
+    match = teks.match(/besok (?:jam|pukul) (\d+)/);
+    if (match) {
+        const jam = parseInt(match[1]);
+        const besok = new Date(); // Ambil tanggal hari ini
+        besok.setDate(besok.getDate() + 1); // Maju ke besok
+        
+        // Atur jam berdasarkan zona waktu Asia/Makassar
+        const targetWaktuString = `${besok.getFullYear()}-${besok.getMonth()+1}-${besok.getDate()} ${jam}:00:00`;
+        // Trik untuk memastikan tanggal dibuat dalam zona waktu yang benar
+        return new Date(new Date(targetWaktuString).toLocaleString("en-US", {timeZone: "Asia/Makassar"}));
+    }
+
+    // Jika tidak ada pola yang cocok
+    return null;
 }
 
 // ▲▲▲ AKHIR DARI FUNGSI PERSEINDONESIA ▲▲▲
@@ -889,13 +867,13 @@ ${memoryDoc.daftarMemori.map(f => `- ${f}`).join("\n")}
             console.log("[Mode] AI: pertanyaan mungkin butuh tools eksternal.");
             const instruction = `
 Kamu adalah asisten AI yang cerdas dan multimodal.
+Kamu harus seperti AI lain seperti chatGPT, Gemini, dan DeepSeek.
 ATURAN UTAMA: Analisis semua input yang diberikan, baik teks maupun gambar.
 
 ATURAN GAMBAR: Jika input berisi GAMBAR:
 1.  Pertama, identifikasi objek atau subjek utama di dalam gambar.
 2.  Gunakan teks dari pengguna sebagai PERINTAH UTAMA tentang apa yang harus dilakukan dengan gambar tersebut.
 3.  Jika perintah itu membutuhkan informasi dari luar (seperti resep, sejarah, berita, atau data spesifik), SELALU gunakan 'googleSearch' lalu 'readWebPage' untuk mencari jawaban yang relevan.
-   3.1.  Jika objek gambar adalah makanan/minuman (contoh: kue, roti, nasi, kopi), SELALU carikan resep lengkap cara membuatnya, bukan hanya deskripsi.
 4.  Jika pengguna hanya mengirim gambar tanpa teks, tugasmu adalah mendeskripsikannya secara detail.
 5. Jika media berupa video atau audio → fokus pada teks yang diberikan user, jangan berusaha menganalisis media tersebut.
 6. Jika ada gambar + teks, SELALU prioritaskan teks user sebagai instruksi utama, gunakan gambar hanya sebagai konteks tambahan.
@@ -1664,6 +1642,71 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
     // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
+// ▼▼▼ AWAL BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▼▼▼
+if (userMessageLower.startsWith('ingatkan')) {
+  const contact = await message.getContact();
+  const authorId = contact.id._serialized;
+
+  const argsString = userMessage.substring('ingatkan'.length).trim();
+  const reminderRegex = /^(.+?)\s(.+?)\stentang\s(.+)$/i;
+  const match = argsString.match(reminderRegex);
+
+  if (!match) {
+    message.reply(
+      '❌ Format salah.\n' +
+      'Gunakan:\n`ingatkan saya dalam 5 menit tentang mandi`\n' +
+      '*Contoh:* `ingatkan saya besok jam 9 tentang rapat`'
+    );
+    return;
+  }
+
+  const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
+
+  // Selalu arahkan ke pembuat
+  const targetNomorHp = authorId;
+  const targetNama = contact.pushname || namaTarget || "Pengguna";
+
+  const waktuKirim = parseWaktuIndonesia(waktuString);
+  if (!waktuKirim) {
+    message.reply(
+      `❌ Maaf, saya tidak mengerti format waktu "${waktuString}".\n` +
+      `Gunakan format seperti "dalam 5 menit", "hari ini jam 7", atau "besok jam 10".`
+    );
+    return;
+  }
+
+  try {
+    const newPengingat = {
+      _type: 'pengingat',
+      pesan,
+      targetNomorHp,
+      targetNama,
+      waktuKirim: waktuKirim.toISOString(),
+      status: 'menunggu',
+    };
+    await clientSanity.create(newPengingat);
+
+    const waktuLokal = waktuKirim.toLocaleString('id-ID', {
+      timeZone: 'Asia/Makassar',
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    message.reply(
+      `✅ Pengingat berhasil dibuat!\n\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`
+    );
+  } catch (error) {
+    console.error('Gagal membuat pengingat:', error);
+    message.reply('❌ Maaf, terjadi kesalahan di server saat membuat pengingat.');
+  }
+  return;
+}
+// ▲▲▲ AKHIR BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▲▲▲
+
 
     // AWAL BLOK  MENU BANTUAN (HELP)
     if (userMessageLower === 'help' || userMessageLower === 'bantuan') {
@@ -1984,76 +2027,6 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
         return
       }
     }
-
-// ▼▼▼ AWAL BLOK: PENGINGAT BEBAS UNTUK SEMUA USER (VERSI FINAL) ▼▼▼
-if (userMessageLower.startsWith('ingatkan')) {
-  const contact = await message.getContact();
-  const authorId = contact.id._serialized;
-
-  const argsString = userMessage.substring('ingatkan'.length).trim();
-  
-  // Regex yang sudah fleksibel (tidak wajib pakai 'tentang')
-  const reminderRegex = /^(.+?)\s(dalam .+?|hari ini .+?|besok .+?|lusa .+?)\s(?:tentang\s)?(.+)$/i;
-  const match = argsString.match(reminderRegex);
-
-  if (!match) {
-    message.reply(
-      '❌ Format salah.\n' +
-      'Gunakan:\n`ingatkan saya dalam 5 menit tentang mandi`\n' +
-      'Atau:\n`ingatkan saya besok jam 9 rapat penting`'
-    );
-    return; // <-- Return untuk menghentikan jika format salah
-  }
-
-  const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
-
-  // Selalu arahkan ke pembuat pesan
-  const targetNomorHp = authorId;
-  const targetNama = contact.pushname || namaTarget || "Pengguna";
-
-  // Memanggil fungsi parser waktu yang benar
-  const waktuKirim = parseWaktuIndonesia(waktuString);
-  if (!waktuKirim) {
-    message.reply(
-      `❌ Maaf, saya tidak mengerti format waktu "${waktuString}".\n` +
-      `Gunakan format seperti "dalam 5 menit", "hari ini jam 7", atau "besok jam 10".`
-    );
-    return; // <-- Return untuk menghentikan jika waktu salah
-  }
-
-  try {
-    const newPengingat = {
-      _type: 'pengingat',
-      pesan,
-      targetNomorHp,
-      targetNama,
-      waktuKirim: waktuKirim.toISOString(),
-      status: 'menunggu',
-    };
-    await clientSanity.create(newPengingat);
-
-    const waktuLokal = waktuKirim.toLocaleString('id-ID', {
-      timeZone: 'Asia/Makassar',
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    message.reply(
-      `✅ Pengingat berhasil dibuat!\n\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`
-    );
-  } catch (error) {
-    console.error('Gagal membuat pengingat:', error);
-    message.reply('❌ Maaf, terjadi kesalahan di server saat membuat pengingat.');
-  }
-  
-  // INI ADALAH RETURN YANG PALING PENTING
-  return; // <-- Pastikan ini ada untuk mencegah kode "bocor" ke blok AI
-}
-// ▲▲▲ AKHIR BLOK: PENGINGAT BEBAS UNTUK SEMUA USER (VERSI FINAL) ▲▲▲
 
     // JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
     // ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
