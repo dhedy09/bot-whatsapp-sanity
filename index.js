@@ -833,6 +833,10 @@ async function getGeminiResponse(prompt, history, userId, media = null) {
     try {
         let finalPrompt = prompt;
 
+        // === AWAL: CEK APAKAH ADA MEDIA GAMBAR ===
+        const isImageQuery = media && media.mimetype.startsWith('image/');
+        console.log(`[Gemini Debug] Media: ${media ? media.mimetype : 'none'}, Prompt: "${prompt}"`);
+
         // === Tambahan: sisipkan memori dari Sanity ===
         let memoryText = "";
         try {
