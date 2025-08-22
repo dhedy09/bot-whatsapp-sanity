@@ -1082,68 +1082,58 @@ client.on('ready', () => {
 // BLOK HANDLER PESAN UTAMA
 // =================================================================
 client.on('message', async (message) => {
-  const chat = await message.getChat();
-  // ✅ DEBUG PALING AWAL - PASTIKAN INI MUNCUL
-  console.log(`[MSG START] From: ${message.from}, Body: "${message.body}", HasMedia: ${message.hasMedia}`);
-  
+  const chat = await message.getChat()
   try {
-    const userMessage = message.body.trim();
-    const userMessageLower = userMessage.toLowerCase();
-    const userLastState = userState[message.from] || userState[message.author];
-    
-    // ✅ DEBUG SETELAH STATE
-    console.log(`[MSG DEBUG] UserLastState: ${userLastState ? userLastState.type : 'none'}, HasMedia: ${message.hasMedia}`);
+    const userMessage = message.body.trim()
+    const userMessageLower = userMessage.toLowerCase()
+    const userLastState = userState[message.from] || userState[message.author] // BLOK 1: MENANGANI "MODE AI"
 
-    const doaRegex = /doa (.*)/i;
-    const doaMatch = userMessageLower.match(doaRegex);
+  const doaRegex = /doa (.*)/i;
+  const doaMatch = userMessageLower.match(doaRegex);
 
-    // === BLOK AI MODE YANG SUDAH DIPERBAIKI ===
-    if (userLastState && userLastState.type === 'ai_mode') {
-      const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
-      
-      // Handle exit commands
-      if (exitCommands.includes(userMessageLower)) {
+if (userLastState && userLastState.type === 'ai_mode') {
+    const exitCommands = ['selesai', 'stop', 'exit', 'keluar'];
+    if (exitCommands.includes(userMessageLower)) {
         delete userState[message.from];
         await message.reply('✅ Sesi AI dihentikan. Anda kembali ke menu utama.');
         await showMainMenu(message);
         return;
-      }
+    }
 
-      // Handle bot commands dalam AI mode
-      if (isPerintahBot(userMessageLower)) {
+    // Handle bot commands dalam AI mode
+    if (isPerintahBot(userMessageLower)) {
         return message.reply(
-          '⚠️ Anda masih dalam sesi AI.\n\nKetik *selesai* dulu untuk keluar dari AI Mode agar bisa memakai perintah bot.'
+            '⚠️ Anda masih dalam sesi AI.\n\nKetik *selesai* dulu untuk keluar dari AI Mode agar bisa memakai perintah bot.'
         );
-      }
+    }
 
-      // ✅ PERBAIKAN UTAMA: TANGANI MEDIA DALAM AI MODE!
-      if (message.hasMedia) {
+    // ✅ PERBAIKAN: TANGANI MEDIA DALAM AI MODE!
+    if (message.hasMedia) {
         console.log("[AI MODE] 🖼️ Media detected in AI mode");
         try {
-          const media = await message.downloadMedia();
-          console.log(`[AI MODE] 📥 Media downloaded: ${media.mimetype}, data: ${media.data ? 'exists' : 'null'}`);
-          
-          if (media && media.data && media.mimetype.startsWith('image/')) {
-            console.log("[AI MODE] 🔍 Processing image in AI mode");
-            await message.reply("🖼️ Sedang menganalisis gambar...");
-            const response = await getGeminiResponse(userMessage, userState[message.from].history, message.from, media);
-            return message.reply(response);
-          } else {
-            console.log("[AI MODE] 📹 Media is not an image");
-            await message.reply("📹 Media bukan gambar, memproses teks saja...");
-          }
+            const media = await message.downloadMedia();
+            console.log(`[AI MODE] 📥 Media downloaded: ${media.mimetype}, data: ${media.data ? 'exists' : 'null'}`);
+            
+            if (media && media.data && media.mimetype.startsWith('image/')) {
+                console.log("[AI MODE] 🔍 Processing image in AI mode");
+                await message.reply("🖼️ Sedang menganalisis gambar...");
+                const response = await getGeminiResponse(userMessage, userState[message.from].history, message.from, media);
+                return message.reply(response);
+            } else {
+                console.log("[AI MODE] 📹 Media is not an image");
+                await message.reply("📹 Media bukan gambar, memproses teks saja...");
+            }
         } catch (mediaError) {
-          console.error("[AI MODE Media Error]", mediaError);
-          await message.reply("❌ Gagal memproses gambar. Coba lagi.");
+            console.error("[AI MODE Media Error]", mediaError);
+            await message.reply("❌ Gagal memproses gambar. Coba lagi.");
         }
-      }
-
-      // Kalau bukan perintah bot dan bukan media → lempar ke AI biasa
-      console.log("[AI MODE] 📝 Processing text in AI mode");
-      const response = await getGeminiResponse(userMessage, userState[message.from].history, message.from, null);
-      return message.reply(response);
     }
-    // === AKHIR BLOK AI MODE ===
+
+    // Kalau bukan perintah bot → lempar ke AI
+    const response = await getGeminiResponse(userMessage, userState[message.from].history, message.from, null);
+    return message.reply(response);
+}
+      // AKHIR CEK MODE AI
 
       if (doaMatch) {
         await chat.sendStateTyping();
