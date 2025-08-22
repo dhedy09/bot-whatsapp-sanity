@@ -1204,8 +1204,7 @@ client.on('message', async (message) => {
     }
     return;
         }
-
-    } // BLOK 2: MENANGANI PERINTAH TEKS
+ // BLOK 2: MENANGANI PERINTAH TEKS
 
     if (userMessageLower === 'halo panda') {
       await showMainMenu(message)
