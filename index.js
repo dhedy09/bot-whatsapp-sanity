@@ -1202,42 +1202,50 @@ if (match) {
 
 
         // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
-        try {
-        await chat.sendStateTyping();
-        let geminiResponse;
+// === 3. Jika bukan perintah khusus, kirim ke Gemini ===
+try {
+    await chat.sendStateTyping();
+    let geminiResponse;
 
-        // Cek apakah pesan berisi media (gambar, video, dll)
-        if (message.hasMedia) {
-            const media = await message.downloadMedia();
-            // Pastikan media adalah gambar dan datanya ada
-            if (media && media.mimetype.startsWith('image/')) {
-                console.log("[Pesan] Pesan berisi gambar, memproses secara multimodal...");
-                // Kirim teks (caption dari 'message.body') dan gambar ke Gemini
-                geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, media);
-            } else {
-                // Jika media bukan gambar (misal: stiker, video), proses teksnya saja
-                console.log("[Pesan] Media bukan gambar, hanya memproses teks.");
-                geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
-            }
+    // Cek apakah pesan berisi media (gambar, video, dll)
+    if (message.hasMedia) {
+        console.log("[DEBUG] Pesan mengandung media");
+        const media = await message.downloadMedia();
+        console.log(`[DEBUG] Media downloaded - Type: ${media.mimetype}, Data: ${media.data ? 'exists' : 'null'}`);
+        
+        // Pastikan media adalah gambar dan datanya ada
+        if (media && media.mimetype.startsWith('image/') && media.data) {
+            console.log("[Pesan] Pesan berisi gambar, memproses secara multimodal...");
+            // Beri tahu user bahwa gambar sedang diproses
+            await message.reply("🖼️ Sedang menganalisis gambar...");
+            
+            // Kirim teks (caption dari 'message.body') dan gambar ke Gemini
+            geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, media);
         } else {
-            // Jika tidak ada media, proses teks seperti biasa
+            // Jika media bukan gambar (misal: stiker, video), proses teksnya saja
+            console.log("[Pesan] Media bukan gambar atau data kosong, hanya memproses teks.");
             geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
         }
-
-        message.reply(geminiResponse);
-        
-        // Manajemen history (logika Anda yang sudah ada kita pertahankan)
-        userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
-        userState[message.from].history.push({ role: 'model', parts: [{ text: geminiResponse }] });
-
-        if (userState[message.from].history.length > 10) {
-            userState[message.from].history = userState[message.from].history.slice(-10);
-        }
-    } catch (e) {
-        console.error("[AI] Gagal merespons:", e);
-        message.reply("Maaf, terjadi kesalahan dari AI.");
+    } else {
+        // Jika tidak ada media, proses teks seperti biasa
+        console.log("[DEBUG] Pesan tidak mengandung media");
+        geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
     }
-    return;
+
+    message.reply(geminiResponse);
+    
+    // Manajemen history (logika Anda yang sudah ada kita pertahankan)
+    userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
+    userState[message.from].history.push({ role: 'model', parts: [{ text: geminiResponse }] });
+
+    if (userState[message.from].history.length > 10) {
+        userState[message.from].history = userState[message.from].history.slice(-10);
+    }
+} catch (e) {
+    console.error("[AI] Gagal merespons:", e);
+    message.reply("Maaf, terjadi kesalahan dari AI.");
+}
+return;
     }
         
     // BLOK 2: MENANGANI PERINTAH TEKS
