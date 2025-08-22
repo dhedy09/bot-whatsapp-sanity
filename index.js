@@ -1065,6 +1065,7 @@ client.on('message', async (message) => {
   try {
     const userMessage = message.body.trim()
     const userMessageLower = userMessage.toLowerCase()
+    const userId = message.from;
     const userLastState = userState[message.from] || userState[message.author] // BLOK 1: MENANGANI "MODE AI"
 
   const doaRegex = /doa (.*)/i;
@@ -1127,7 +1128,7 @@ if (match) {
     }
 
     try {
-        const userId = message.from;
+
         const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
         const contact = await message.getContact();
         const userName = contact.pushname || userId;
