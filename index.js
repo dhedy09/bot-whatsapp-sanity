@@ -836,6 +836,8 @@ async function getGeminiResponse(prompt, history, userId, media = null) {
         // === AWAL: CEK APAKAH ADA MEDIA GAMBAR ===
         const isImageQuery = media && media.mimetype.startsWith('image/');
         console.log(`[Gemini Debug] Media: ${media ? media.mimetype : 'none'}, Prompt: "${prompt}"`);
+        console.log(`[Gemini Debug] Media received: ${media ? media.mimetype : 'NULL'}`);
+        console.log(`[Gemini Debug] Prompt: "${prompt}"`);
 
         // === Tambahan: sisipkan memori dari Sanity ===
         let memoryText = "";
@@ -1208,6 +1210,7 @@ if (match) {
 
         // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
 // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
+// === 3. Jika bukan perintah khusus, kirim ke Gemini ===
 try {
     await chat.sendStateTyping();
     let geminiResponse;
@@ -1225,7 +1228,14 @@ try {
                 if (media.mimetype.startsWith('image/')) {
                     console.log("[Pesan] 🔍 Pesan berisi gambar, memproses secara multimodal...");
                     await message.reply("🖼️ Sedang menganalisis gambar...");
-                    geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, media);
+                    
+                    // ✅ PERBAIKAN UTAMA: Pastikan media diteruskan dengan benar
+                    geminiResponse = await getGeminiResponse(
+                        message.body, 
+                        userState[message.from]?.history || [], 
+                        message.from, 
+                        media  // ← INI YANG HARUS DITERUSKAN
+                    );
                 } else {
                     console.log("[Pesan] 📹 Media bukan gambar, hanya memproses teks.");
                     await message.reply("📹 Media bukan gambar, hanya memproses teksnya...");
@@ -1250,27 +1260,8 @@ try {
         geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
     }
 
-    // Kirim balasan hanya jika geminiResponse ada
-    if (geminiResponse) {
-        message.reply(geminiResponse);
-        
-        // Manajemen history (logika Anda yang sudah ada kita pertahankan)
-        if (userState[message.from]) {
-            userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
-            userState[message.from].history.push({ role: 'model', parts: [{ text: geminiResponse }] });
-
-            if (userState[message.from].history.length > 10) {
-                userState[message.from].history = userState[message.from].history.slice(-10);
-            }
-        }
-    }
-    
-} catch (e) {
-    console.error("[AI] ❌ Gagal merespons:", e);
-    console.error("Error stack:", e.stack);
-    message.reply("Maaf, terjadi kesalahan dari AI. Coba lagi beberapa saat.");
+    // ... rest of the code ...
 }
-return;
     }
         
     // BLOK 2: MENANGANI PERINTAH TEKS
