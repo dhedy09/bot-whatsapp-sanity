@@ -210,6 +210,24 @@ function isPerintahBot(msg) {
 }
 // AKHIR PERINTAH BOT
 
+// --- INSTRUKSI UTAMA UNTUK AI ---
+const instruction = `
+PERINTAH UTAMA: Tugasmu adalah menjadi asisten pribadi serbaguna yang cerdas dan personal.
+
+ATURAN MEMORI: Di awal setiap percakapan, kamu WAJIB selalu menggunakan alat 'bacaMemori' untuk memeriksa apakah ada catatan tentang pengguna. Gunakan informasi dari memori untuk membuat jawabanmu lebih personal. Jika pengguna meminta untuk 'mengingat sesuatu', gunakan alat 'simpanMemori'. Jika pengguna meminta untuk diingatkan tentang sesuatu di masa depan, gunakan alat 'buatPengingat'.
+
+ATURAN GAMBAR: Jika input berisi GAMBAR, fokus utamamu adalah menganalisis gambar itu. Gunakan teks dari pengguna sebagai perintah utama tentang apa yang harus dilakukan dengan gambar tersebut. Jika perintah itu butuh riset (seperti mencari resep), kamu diizinkan menggunakan 'googleSearch' lalu 'readWebPage' untuk mencari informasi yang relevan. Jika pengguna hanya mengirim gambar tanpa teks, tugasmu adalah mendeskripsikannya secara detail. Jika ada gambar + teks, SELALU prioritaskan teks user sebagai instruksi utama, gunakan gambar hanya sebagai konteks tambahan.
+
+ATURAN PENELITIAN: Gunakan alat yang sesuai ('getLatestNews', 'getGempa', 'getCurrentWeather', 'googleSearch','readWebPage','calculate'') jika pertanyaan pengguna membutuhkan data eksternal.
+`;
+
+// --- INISIALISASI MODEL DENGAN INSTRUKSI SISTEM ---
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash-latest",
+  systemInstruction: instruction, // Instruksi sekarang menjadi bagian dari model
+});
+// --- AKHIR INISIALISASI MODEL ---
+
 // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
 // =================================================================
@@ -811,91 +829,25 @@ async function showPustakaMenu(message, categoryId) {
 // BLOK FUNGSI: RESPON GEMINI AI
 // =================================================================
 async function getGeminiResponse(prompt, history, userId, media = null) {
-    try {
-        let finalPrompt = prompt;
+  try {
+    const chat = model.startChat({
+      history: history,
+      tools: tools,
+    });
 
-        // === Tambahan: sisipkan memori dari Sanity ===
-        let memoryText = "";
-        try {
-            const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
-            const memoryDoc = await clientSanity.fetch(
-                `*[_type == "memoriPengguna" && _id == $id][0]`,
-                { id: sanitizedId }
-            );
+    const messageParts = [prompt]; // Langsung gunakan prompt dari pengguna
+    if (media && media.data) {
+      console.log(`[Media] Mengirim gambar dengan tipe: ${media.mimetype}`);
+      messageParts.push({
+        inlineData: { data: media.data, mimeType: media.mimetype }
+      });
+    }
+    
+    // Kirim pesan langsung tanpa instruksi tambahan
+    const result = await chat.sendMessage(messageParts); 
+    const call = result.response.functionCalls()?.[0];
 
-            if (memoryDoc?.daftarMemori?.length > 0) {
-                memoryText = `
-📌 CATATAN PENTING:
-Informasi berikut adalah memori resmi tentang pengguna.
-Gunakan ini SETIAP KALI menjawab pertanyaan, terutama jika berkaitan dengan identitas atau preferensi pengguna.
-
-${memoryDoc.daftarMemori.map(f => `- ${f}`).join("\n")}
-`;
-                finalPrompt = `${memoryText}\n\n${finalPrompt}`;
-            }
-        } catch (err) {
-            console.error("Gagal memuat memori dari Sanity:", err);
-        }
-
-        // === Cek apakah pertanyaan butuh tools eksternal ===
-        const triggerKeywords = [
-            'berita', 'gempa', 'cuaca', 'siapa', 'apa', 'kapan',
-            'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berapa'
-        ];
-        const isToolQuery = triggerKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
-
-        if (isToolQuery) {
-            console.log("[Mode] AI: pertanyaan mungkin butuh tools eksternal.");
-            const instruction = `
-Kamu adalah asisten AI yang cerdas dan multimodal.
-Kamu harus seperti AI lain seperti chatGPT, Gemini, dan DeepSeek.
-ATURAN UTAMA: Analisis semua input yang diberikan, baik teks maupun gambar.
-
-ATURAN PENGINGAT: Jika pengguna meminta untuk diingatkan tentang sesuatu (cth: 'ingatkan saya', 'buat reminder'), gunakan alat 'buatPengingat'.
-
-ATURAN GAMBAR: Jika input berisi GAMBAR:
-1.  Pertama, identifikasi objek atau subjek utama di dalam gambar.
-2.  Gunakan teks dari pengguna sebagai PERINTAH UTAMA tentang apa yang harus dilakukan dengan gambar tersebut.
-3.  Jika perintah itu membutuhkan informasi dari luar (seperti resep, sejarah, berita, atau data spesifik), SELALU gunakan 'googleSearch' lalu 'readWebPage' untuk mencari jawaban yang relevan.
-4.  Jika pengguna hanya mengirim gambar tanpa teks, tugasmu adalah mendeskripsikannya secara detail.
-5. Jika media berupa video atau audio → fokus pada teks yang diberikan user, jangan berusaha menganalisis media tersebut.
-6. Jika ada gambar + teks, SELALU prioritaskan teks user sebagai instruksi utama, gunakan gambar hanya sebagai konteks tambahan.
-
-ATURAN TEKS (jika tidak ada gambar):
-- Jika pengguna tanya tentang *berita* → gunakan getLatestNews.
-- Jika tanya tentang *gempa* → gunakan getGempa.
-- Jika tanya tentang *cuaca* → gunakan getCurrentWeather.
-- Jika pertanyaan umum/faktual detail → gunakan googleSearch lalu readWebPage.
-- Jika pertanyaan ringan (fakta umum, definisi singkat) → jawab langsung tanpa tools.
-- Jika ragu, boleh jawab langsung lalu tambahkan hasil tools untuk mendukung jawabanmu.
-`;
-            // 🔑 Memori tetap disuntikkan bersama instruction
-            finalPrompt = `${memoryText}\n\n${instruction}\n\nPertanyaan Pengguna: "${prompt}"`;
-        } else {
-            console.log("[Mode] AI: ngobrol santai (tanpa tools khusus).");
-        }
-
-        // === Mulai chat dengan Gemini ===
-        const chat = model.startChat({
-            history: history,
-            tools: tools,
-        });
-
-        const messageParts = [finalPrompt];
-        if (media && media.data) {
-            console.log(`[Media] Mengirim gambar dengan tipe: ${media.mimetype}`);
-            messageParts.push({
-                inlineData: {
-                    data: media.data,
-                    mimeType: media.mimetype
-                }
-            });
-        }
-
-        const result = await chat.sendMessage(messageParts);
-        const call = result.response.functionCalls()?.[0];
-
-        if (call) {
+    if (call) {
             console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
             let functionResponse;
 
