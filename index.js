@@ -1084,12 +1084,6 @@ client.on('message', async (message) => {
   const doaRegex = /doa (.*)/i;
   const doaMatch = userMessageLower.match(doaRegex);
 
-    if (isPerintahBot(userMessageLower)) {
-    return message.reply(
-      '⚠️ Anda masih dalam sesi AI.\n\nKetik *selesai* dulu untuk keluar dari AI Mode agar bisa memakai perintah bot.'
-    )
-  }
-
     if (userLastState && userLastState.type === 'ai_mode') {
       const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
       if (exitCommands.includes(userMessageLower)) {
@@ -1108,6 +1102,12 @@ client.on('message', async (message) => {
           await showMainMenu(message) // 🔑 kembali tampilkan menu utama
           return
         }
+
+            if (isPerintahBot(userMessageLower)) {
+        return message.reply(
+          '⚠️ Anda masih dalam sesi AI.\n\nKetik *selesai* dulu untuk keluar dari AI Mode agar bisa memakai perintah bot.'
+        )
+      }
 
       // AKHIR CEK MODE AI
 
