@@ -1265,8 +1265,7 @@ client.on('message', async (message) => {
     // Jika ada error, kirim pesan kesalahan ke pengguna
     message.reply("Maaf, terjadi kesalahan saat memproses pesan Anda. Silakan coba lagi.");
   }
-});// Akhir kode message
-
+}
     // === [PERBAIKAN] CATATAN: kurung kurawal penutup ekstra di sini telah dihapus agar 'catch' utama di bagian akhir valid ===
 
     // BLOK 2: MENANGANI PERINTAH TEKS
