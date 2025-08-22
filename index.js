@@ -845,9 +845,10 @@ async function getGeminiResponse(prompt, history, userId, media = null) {
             if (memoryDoc?.daftarMemori?.length > 0) {
                 memoryText = `
 📌 CATATAN PENTING:
-Informasi berikut adalah memori resmi tentang pengguna.
-Gunakan ini SETIAP KALI menjawab pertanyaan, terutama jika berkaitan dengan identitas atau preferensi pengguna.
-
+1. Informasi berikut adalah memori resmi tentang pengguna.
+2. Gunakan ini SETIAP KALI menjawab pertanyaan, terutama jika berkaitan dengan identitas atau preferensi pengguna.
+3. Jika tidak ada memori, abaikan bagian ini.
+4. Jika ada pertanyaan yang mengandung gambar, langsung masuk ke ATURAN GAMBAR.
 ${memoryDoc.daftarMemori.map(f => `- ${f}`).join("\n")}
 `;
                 finalPrompt = `${memoryText}\n\n${finalPrompt}`;
@@ -859,7 +860,7 @@ ${memoryDoc.daftarMemori.map(f => `- ${f}`).join("\n")}
         // === Cek apakah pertanyaan butuh tools eksternal ===
         const triggerKeywords = [
             'berita', 'gempa', 'cuaca', 'siapa', 'apa', 'kapan',
-            'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berapa'
+            'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berapa','gambar'
         ];
         const isToolQuery = triggerKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
 
