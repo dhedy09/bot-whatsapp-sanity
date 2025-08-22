@@ -1,71 +1,29 @@
-// schemas/pengingat.ts
-import {defineField, defineType} from 'sanity'
-
-export default defineType({
+// file: schemas/pengingat.js
+export default {
   name: 'pengingat',
-  title: 'Jadwal Pengingat',
+  title: 'Data Pengingat Pengguna',
   type: 'document',
   fields: [
-    defineField({
+    {
+      name: 'userId',
+      title: 'User ID (WhatsApp)',
+      type: 'string',
+    },
+    {
       name: 'pesan',
-      title: 'Isi Pesan Pengingat',
-      type: 'text',
-      validation: Rule => Rule.required(),
-    }),
-    defineField({
-      name: 'targetNomorHp',
-      title: 'Nomor HP Target',
+      title: 'Pesan Pengingat',
       type: 'string',
-      description: 'Nomor HP pengguna yang akan dikirimi pengingat (format: 628...-c-us).',
-      validation: Rule => Rule.required(),
-    }),
-    defineField({
-      name: 'targetNama',
-      title: 'Nama Target',
-      type: 'string',
-      description: 'Nama pengguna yang akan dikirimi pengingat.',
-    }),
-    defineField({
-      name: 'waktuKirim',
-      title: 'Waktu Kirim',
-      type: 'datetime',
-      description: 'Tanggal dan waktu pengingat akan dikirim.',
-      validation: Rule => Rule.required(),
-    }),
-    defineField({
-      name: 'status',
-      title: 'Status',
-      type: 'string',
-      options: {
-        list: [
-          {title: 'Menunggu', value: 'menunggu'},
-          {title: 'Terkirim', value: 'terkirim'},
-          {title: 'Gagal', value: 'gagal'},
-        ],
-        layout: 'radio',
-      },
-      initialValue: 'menunggu',
-      validation: Rule => Rule.required(),
-    }),
+    },
+    {
+      name: 'waktuJatuhTempo',
+      title: 'Waktu Jatuh Tempo',
+      type: 'datetime', // Tipe datetime untuk menyimpan tanggal dan waktu
+    },
+    {
+      name: 'sudahDikirim',
+      title: 'Status Terkirim?',
+      type: 'boolean',
+      initialValue: false, // Defaultnya belum terkirim
+    },
   ],
-  preview: {
-    select: {
-      title: 'pesan',
-      subtitle: 'targetNama',
-      waktu: 'waktuKirim',
-      status: 'status',
-    },
-    prepare({title, subtitle, waktu, status}) {
-      const waktuLokal = new Date(waktu).toLocaleString('id-ID', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      })
-      // ▼▼▼ BAGIAN INI SUDAH DIPERBAIKI ▼▼▼
-      return {
-        title: title,
-        subtitle: `Untuk: ${subtitle || 'Tidak Diketahui'} | ${waktuLokal} | Status: ${status}`,
-        // Baris 'media' yang menyebabkan error sudah dihapus
-      }
-    },
-  },
-})
+}
