@@ -1664,71 +1664,6 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
     // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
-// ▼▼▼ AWAL BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▼▼▼
-if (userMessageLower.startsWith('ingatkan')) {
-  const contact = await message.getContact();
-  const authorId = contact.id._serialized;
-
-  const argsString = userMessage.substring('ingatkan'.length).trim();
-  const reminderRegex = /^(.+?)\s(dalam .+?|hari ini .+?|besok .+?|lusa .+?)\s(?:tentang\s)?(.+)$/i;
-  const match = argsString.match(reminderRegex);
-
-  if (!match) {
-    message.reply(
-      '❌ Format salah.\n' +
-      'Gunakan:\n`ingatkan saya dalam 5 menit tentang mandi`\n' +
-      '*Contoh:* `ingatkan saya besok jam 9 tentang rapat`'
-    );
-    return;
-  }
-
-  const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
-
-  // Selalu arahkan ke pembuat
-  const targetNomorHp = authorId;
-  const targetNama = contact.pushname || namaTarget || "Pengguna";
-
-  const waktuKirim = parseWaktuIndonesia(waktuString);
-  if (!waktuKirim) {
-    message.reply(
-      `❌ Maaf, saya tidak mengerti format waktu "${waktuString}".\n` +
-      `Gunakan format seperti "dalam 5 menit", "hari ini jam 7", atau "besok jam 10".`
-    );
-    return;
-  }
-
-  try {
-    const newPengingat = {
-      _type: 'pengingat',
-      pesan,
-      targetNomorHp,
-      targetNama,
-      waktuKirim: waktuKirim.toISOString(),
-      status: 'menunggu',
-    };
-    await clientSanity.create(newPengingat);
-
-    const waktuLokal = waktuKirim.toLocaleString('id-ID', {
-      timeZone: 'Asia/Makassar',
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    message.reply(
-      `✅ Pengingat berhasil dibuat!\n\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`
-    );
-  } catch (error) {
-    console.error('Gagal membuat pengingat:', error);
-    message.reply('❌ Maaf, terjadi kesalahan di server saat membuat pengingat.');
-  }
-  return;
-}
-// ▲▲▲ AKHIR BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▲▲▲
-
 
     // AWAL BLOK  MENU BANTUAN (HELP)
     if (userMessageLower === 'help' || userMessageLower === 'bantuan') {
@@ -2049,6 +1984,71 @@ if (userMessageLower.startsWith('ingatkan')) {
         return
       }
     }
+
+    // ▼▼▼ AWAL BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▼▼▼
+if (userMessageLower.startsWith('ingatkan')) {
+  const contact = await message.getContact();
+  const authorId = contact.id._serialized;
+
+  const argsString = userMessage.substring('ingatkan'.length).trim();
+  const reminderRegex = /^(.+?)\s(dalam .+?|hari ini .+?|besok .+?|lusa .+?)\s(?:tentang\s)?(.+)$/i;
+  const match = argsString.match(reminderRegex);
+
+  if (!match) {
+    message.reply(
+      '❌ Format salah.\n' +
+      'Gunakan:\n`ingatkan saya dalam 5 menit tentang mandi`\n' +
+      '*Contoh:* `ingatkan saya besok jam 9 tentang rapat`'
+    );
+    return;
+  }
+
+  const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
+
+  // Selalu arahkan ke pembuat
+  const targetNomorHp = authorId;
+  const targetNama = contact.pushname || namaTarget || "Pengguna";
+
+  const waktuKirim = parseWaktuIndonesia(waktuString);
+  if (!waktuKirim) {
+    message.reply(
+      `❌ Maaf, saya tidak mengerti format waktu "${waktuString}".\n` +
+      `Gunakan format seperti "dalam 5 menit", "hari ini jam 7", atau "besok jam 10".`
+    );
+    return;
+  }
+
+  try {
+    const newPengingat = {
+      _type: 'pengingat',
+      pesan,
+      targetNomorHp,
+      targetNama,
+      waktuKirim: waktuKirim.toISOString(),
+      status: 'menunggu',
+    };
+    await clientSanity.create(newPengingat);
+
+    const waktuLokal = waktuKirim.toLocaleString('id-ID', {
+      timeZone: 'Asia/Makassar',
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    message.reply(
+      `✅ Pengingat berhasil dibuat!\n\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`
+    );
+  } catch (error) {
+    console.error('Gagal membuat pengingat:', error);
+    message.reply('❌ Maaf, terjadi kesalahan di server saat membuat pengingat.');
+  }
+  return;
+}
+// ▲▲▲ AKHIR BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▲▲▲
 
     // JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
     // ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
