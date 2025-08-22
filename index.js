@@ -889,7 +889,7 @@ async function showPustakaMenu(message, categoryId) {
 // =================================================================
 // BLOK FUNGSI: RESPON GEMINI AI
 // =================================================================
-async function getGeminiResponse(prompt, history, userId, media = null) {
+async function getGeminiResponse(message, prompt, history, userId, media = null) {
     try {
         let finalPrompt = prompt;
 
@@ -1272,37 +1272,31 @@ if (match) {
         // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
 // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
 try {
-    await chat.sendStateTyping();
-    let geminiResponse;
-
-    // Cek apakah pesan berisi media (gambar, video, dll)
     if (message.hasMedia) {
         console.log("[DEBUG] Pesan mengandung media");
         const media = await message.downloadMedia();
         console.log(`[DEBUG] Media downloaded - Type: ${media.mimetype}, Data: ${media.data ? 'exists' : 'null'}`);
         
-        // Pastikan media adalah gambar dan datanya ada
         if (media && media.mimetype.startsWith('image/') && media.data) {
             console.log("[Pesan] Pesan berisi gambar, memproses secara multimodal...");
-            // Beri tahu user bahwa gambar sedang diproses
             await message.reply("🖼️ Sedang menganalisis gambar...");
             
-            // Kirim teks (caption dari 'message.body') dan gambar ke Gemini
-            geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, media);
+            // Perubahan 1 di sini ▼
+            geminiResponse = await getGeminiResponse(message, message.body, userState[message.from].history, message.from, media);
         } else {
-            // Jika media bukan gambar (misal: stiker, video), proses teksnya saja
             console.log("[Pesan] Media bukan gambar atau data kosong, hanya memproses teks.");
-            geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
+            // Perubahan 2 di sini ▼
+            geminiResponse = await getGeminiResponse(message, message.body, userState[message.from].history, message.from, null);
         }
     } else {
-        // Jika tidak ada media, proses teks seperti biasa
         console.log("[DEBUG] Pesan tidak mengandung media");
-        geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
+        // Perubahan 3 di sini ▼
+        geminiResponse = await getGeminiResponse(message, message.body, userState[message.from].history, message.from, null);
     }
 
+    // Bagian ini tidak perlu diubah
     message.reply(geminiResponse);
     
-    // Manajemen history (logika Anda yang sudah ada kita pertahankan)
     userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
     userState[message.from].history.push({ role: 'model', parts: [{ text: geminiResponse }] });
 
