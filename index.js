@@ -1985,12 +1985,14 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
       }
     }
 
-    // ▼▼▼ AWAL BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▼▼▼
+// ▼▼▼ AWAL BLOK: PENGINGAT BEBAS UNTUK SEMUA USER (VERSI FINAL) ▼▼▼
 if (userMessageLower.startsWith('ingatkan')) {
   const contact = await message.getContact();
   const authorId = contact.id._serialized;
 
   const argsString = userMessage.substring('ingatkan'.length).trim();
+  
+  // Regex yang sudah fleksibel (tidak wajib pakai 'tentang')
   const reminderRegex = /^(.+?)\s(dalam .+?|hari ini .+?|besok .+?|lusa .+?)\s(?:tentang\s)?(.+)$/i;
   const match = argsString.match(reminderRegex);
 
@@ -1998,24 +2000,25 @@ if (userMessageLower.startsWith('ingatkan')) {
     message.reply(
       '❌ Format salah.\n' +
       'Gunakan:\n`ingatkan saya dalam 5 menit tentang mandi`\n' +
-      '*Contoh:* `ingatkan saya besok jam 9 tentang rapat`'
+      'Atau:\n`ingatkan saya besok jam 9 rapat penting`'
     );
-    return;
+    return; // <-- Return untuk menghentikan jika format salah
   }
 
   const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
 
-  // Selalu arahkan ke pembuat
+  // Selalu arahkan ke pembuat pesan
   const targetNomorHp = authorId;
   const targetNama = contact.pushname || namaTarget || "Pengguna";
 
+  // Memanggil fungsi parser waktu yang benar
   const waktuKirim = parseWaktuIndonesia(waktuString);
   if (!waktuKirim) {
     message.reply(
       `❌ Maaf, saya tidak mengerti format waktu "${waktuString}".\n` +
       `Gunakan format seperti "dalam 5 menit", "hari ini jam 7", atau "besok jam 10".`
     );
-    return;
+    return; // <-- Return untuk menghentikan jika waktu salah
   }
 
   try {
@@ -2046,9 +2049,11 @@ if (userMessageLower.startsWith('ingatkan')) {
     console.error('Gagal membuat pengingat:', error);
     message.reply('❌ Maaf, terjadi kesalahan di server saat membuat pengingat.');
   }
-  return;
+  
+  // INI ADALAH RETURN YANG PALING PENTING
+  return; // <-- Pastikan ini ada untuk mencegah kode "bocor" ke blok AI
 }
-// ▲▲▲ AKHIR BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▲▲▲
+// ▲▲▲ AKHIR BLOK: PENGINGAT BEBAS UNTUK SEMUA USER (VERSI FINAL) ▲▲▲
 
     // JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
     // ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
