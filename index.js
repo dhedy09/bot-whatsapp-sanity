@@ -1114,7 +1114,7 @@ client.on('message', async (message) => {
         return;
       }
 
-        const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
+        const memoryRegex = /^(ingat\b( ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
         const lowerMsg = message.body.trim().toLowerCase();
         const match = message.body.match(memoryRegex);
 
