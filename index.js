@@ -151,6 +151,24 @@ const client = new Client({
 const userHistory = {};
 const userState = {};
 
+// AWAL PERINTAH BOT
+const daftarPerintah = [
+  { prefix: 'panda simpan', deskripsi: 'Simpan file arsip' },
+  { prefix: 'cari file', deskripsi: 'Cari file di arsip' },
+  { prefix: 'kirim file', deskripsi: 'Kirim file dari arsip' },
+  { prefix: 'hapus file', deskripsi: 'Hapus file dari arsip' },
+  { prefix: 'langganan gempa', deskripsi: 'Langganan notifikasi gempa' },
+  { prefix: 'berhenti gempa', deskripsi: 'Stop langganan notifikasi gempa' },
+  { prefix: 'cari user', deskripsi: 'Cari data pegawai' }
+]
+
+// Fungsi helper untuk cek apakah pesan adalah perintah bot
+function isPerintahBot(msg) {
+  const lower = msg.toLowerCase()
+  return daftarPerintah.some(p => lower.startsWith(p.prefix))
+}
+// AKHIR PERINTAH BOT
+
 // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
 // =================================================================
@@ -1047,6 +1065,8 @@ client.on('message', async (message) => {
   const doaRegex = /doa (.*)/i;
   const doaMatch = userMessageLower.match(doaRegex);
 
+  
+
     if (userLastState && userLastState.type === 'ai_mode') {
       const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
       if (exitCommands.includes(userMessageLower)) {
@@ -1087,6 +1107,18 @@ client.on('message', async (message) => {
         await showMainMenu(message);
         return;
         }
+
+                // perintah kode pindah ke atas
+        if (isPerintahBot(userMessageLower)) {
+          return message.reply(
+            '⚠️ Anda masih dalam sesi AI.\n\nKetik *selesai* dulu untuk keluar dari AI Mode agar bisa memakai perintah bot.'
+          )
+        }
+
+        // Kalau bukan perintah bot → lempar ke AI
+        const response = await getGeminiResponse(userMessage, [], message.from, null)
+        return message.reply(response)
+      }
 
 
         // === 2. Menyimpan memori jika cocok pola fleksibel ===
