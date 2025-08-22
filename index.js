@@ -23,7 +23,7 @@ const app = express();
 const path = require('path');
 const cheerio = require('cheerio');
 const apiKey = process.env.GEMINI_API_KEY;
-const { PredictionServiceClient } = require('@google-cloud/aiplatform').v1;
+
 
 // --- INISIALISASI KLIEN GOOGLE (DRIVE, SEARCH, DLL) ---
 const credentialsJsonString = process.env.GOOGLE_CREDENTIALS_JSON;
@@ -48,28 +48,10 @@ const drive = google.drive({ version: 'v3', auth });
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
-// --- KONFIGURASI KLIEN VERTEX AI (UNTUK BUAT GAMBAR) ---
-const project = 'bot-whatsapp-panda'; // Ganti dengan Project ID Anda
-const location = 'us-central1';
-const aiplatformClient = new PredictionServiceClient({
-    apiEndpoint: 'us-central1-aiplatform.googleapis.com'
-});
-
 
 // --- DEFINISI ALAT-ALAT UNTUK AI ---
 const tools = [{
     functionDeclarations: [
-          {
-            name: "buatGambar",
-            description: "Membuat atau menghasilkan sebuah gambar berdasarkan deskripsi teks dari pengguna. Gunakan alat ini jika pengguna meminta untuk 'membuat gambar', 'generate image', 'lukiskan', atau sejenisnya.",
-            parameters: {
-                type: "OBJECT",
-                properties: {
-                    prompt: { type: "STRING", description: "Deskripsi detail dari gambar yang ingin dibuat, sebaiknya dalam bahasa Inggris untuk hasil terbaik." }
-                },
-                required: ["prompt"]
-            }
-        },
         {
             name: "googleSearch",
             description: "Langkah pertama untuk menjawab pertanyaan tentang topik umum, fakta, orang, tempat, atau peristiwa. Selalu gunakan alat ini terlebih dahulu untuk menemukan URL yang relevan.",
@@ -193,98 +175,6 @@ function isPerintahBot(msg) {
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
-
-// AWAL FUNGSI BUAT GAMBAR
-// ▼▼▼ GANTI FUNGSI LAMA ANDA DENGAN VERSI BARU UNTUK DEBUGGING INI ▼▼▼
-async function buatGambar(prompt) {
-  console.log(`[Tool] Mencoba membuat gambar dengan prompt: "${prompt}"`);
-  try {
-    const aiplatform = require('@google-cloud/aiplatform');
-    const {helpers} = aiplatform.v1;
-    const endpoint = `projects/${project}/locations/${location}/publishers/google/models/imagegeneration@006`;
-
-    const instanceObj = { prompt: prompt };
-    const parametersObj = { sampleCount: 1 };
-    const instances = [helpers.toValue(instanceObj)];
-    const parameters = helpers.toValue(parametersObj);
-
-    const request = { endpoint, instances, parameters };
-
-    console.log("[Debug] Mengirim permintaan ke Vertex AI...");
-    const [response] = await aiplatformClient.predict(request);
-    console.log("[Debug] Menerima respons dari Vertex AI.");
-
-    if (response.predictions && response.predictions[0]?.structValue?.fields?.bytesBase64Encoded) {
-      const base64Data = response.predictions[0].structValue.fields.bytesBase64Encoded.stringValue;
-      return { success: true, data: base64Data };
-    } else {
-      throw new Error("API tidak mengembalikan data gambar yang valid.");
-    }
-  } catch (error) {
-    console.error("!!! ERROR KRITIS DI FUNGSI BUAT GAMBAR !!!", error);
-    return { success: false, data: `Maaf, terjadi kesalahan saat menghubungi layanan gambar: ${error.message}` };
-  }
-}
-// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
-### Langkah 2: Ganti Total Fungsi getGeminiResponse
-Fungsi ini akan kita buat lebih sederhana dalam menangani hasil dari buatGambar.
-
-POSISI: Cari fungsi async function getGeminiResponse(...).
-
-AKSI: Ganti seluruh isinya dengan kode di bawah ini.
-
-JavaScript
-
-// ▼▼▼ GANTI FUNGSI LAMA ANDA DENGAN VERSI FINAL INI ▼▼▼
-async function getGeminiResponse(message, prompt, history, userId, media = null) {
-  try {
-    const validHistory = history.filter(item => item.role === 'user' || item.role === 'model');
-    const chatSession = model.startChat({ history: validHistory, tools: tools });
-    const messageParts = [prompt];
-    if (media && media.data) {
-      messageParts.push({ inlineData: { data: media.data, mimeType: media.mimetype } });
-    }
-
-    const result = await chatSession.sendMessage(messageParts);
-    const response = result.response;
-    const call = response.functionCalls()?.[0];
-
-    if (call) {
-      let functionResponse;
-      switch (call.name) {
-        // ... (case untuk tool Anda yang lain seperti bacaMemori, dll.)
-
-        case 'buatGambar': {
-          await message.reply(`🎨 Oke, saya coba buatkan gambar "${call.args.prompt}"... Ini mungkin butuh waktu.`);
-          const resultGambar = await buatGambar(call.args.prompt);
-
-          if (resultGambar.success) {
-            const media = new MessageMedia('image/png', resultGambar.data);
-            await client.sendMessage(message.from, media, { caption: `Ini dia gambar untukmu: "${call.args.prompt}"` });
-            // Setelah mengirim gambar, kita tidak perlu balasan teks lagi.
-            return; // Langsung hentikan fungsi di sini.
-          } else {
-            // Jika gagal, kembalikan pesan errornya untuk ditampilkan.
-            return resultGambar.data;
-          }
-        }
-        // ... (case untuk tool Anda yang lain)
-      }
-      
-      // Logika untuk menangani tool lain yang butuh balasan teks dari AI
-      if (functionResponse) {
-          const result2 = await chatSession.sendMessage([{ functionResponse: { name: call.name, response: functionResponse } }]);
-          return result2.response.text();
-      }
-    } else {
-      return response.text();
-    }
-  } catch (error) {
-    console.error("Error saat memanggil API Gemini:", error);
-    return "Maaf, terjadi sedikit gangguan pada AI. Coba lagi nanti.";
-  }
-}
-// AKHIR FUNGSI BUAT GAMBAR
 
 // AWAL BACA PAGES WEB
 
@@ -939,18 +829,9 @@ async function showPustakaMenu(message, categoryId) {
 // =================================================================
 // BLOK FUNGSI: RESPON GEMINI AI
 // =================================================================
-async function getGeminiResponse(message, prompt, history, userId, media = null) {
+async function getGeminiResponse(prompt, history, userId, media = null) {
     try {
         let finalPrompt = prompt;
-
-            // ▼▼▼ TAMBAHKAN SATU BARIS INI ▼▼▼
-    const validHistory = history.filter(item => item.role === 'user' || item.role === 'model');
-    // ▲▲▲ AKHIR DARI BARIS BARU ▲▲▲
-
-        const chat = model.startChat({
-      history: validHistory, // Gunakan riwayat yang sudah bersih
-      tools: tools,
-    });
 
         // === Tambahan: sisipkan memori dari Sanity ===
         let memoryText = "";
@@ -996,7 +877,6 @@ ATURAN GAMBAR: Jika input berisi GAMBAR:
 4.  Jika pengguna hanya mengirim gambar tanpa teks, tugasmu adalah mendeskripsikannya secara detail.
 5. Jika media berupa video atau audio → fokus pada teks yang diberikan user, jangan berusaha menganalisis media tersebut.
 6. Jika ada gambar + teks, SELALU prioritaskan teks user sebagai instruksi utama, gunakan gambar hanya sebagai konteks tambahan.
-7. Jika pengguna meminta untuk MEMBUAT gambar, gunakan alat 'buatGambar'.
 
 ATURAN TEKS (jika tidak ada gambar):
 - Jika pengguna tanya tentang *berita* → gunakan getLatestNews.
@@ -1013,10 +893,10 @@ ATURAN TEKS (jika tidak ada gambar):
         }
 
         // === Mulai chat dengan Gemini ===
-        // const chat = model.startChat({
-        //     history: history,
-        //     tools: tools,
-        // });
+        const chat = model.startChat({
+            history: history,
+            tools: tools,
+        });
 
         const messageParts = [finalPrompt];
         if (media && media.data) {
@@ -1037,18 +917,6 @@ ATURAN TEKS (jika tidak ada gambar):
             let functionResponse;
 
             switch (call.name) {
-                  case 'buatGambar': {
-                    message.reply(`🎨 Oke, saya coba buatkan gambar "${call.args.prompt}"... Ini mungkin butuh waktu sejenak.`);
-                    const result = await buatGambar(call.args.prompt);
-                    if (result.success) {
-                        const media = new MessageMedia('image/png', result.data);
-                        await client.sendMessage(message.from, media, { caption: `Ini dia gambar untukmu: "${call.args.prompt}"` });
-                        functionResponse = { status: "Gambar berhasil dibuat dan dikirim." };
-                    } else {
-                        functionResponse = { status: result.data };
-                    }
-                    break;
-                }
                 case 'readWebPage':
                     functionResponse = await readWebPage(call.args.url);
                     break;
@@ -1331,31 +1199,37 @@ if (match) {
         // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
 // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
 try {
+    await chat.sendStateTyping();
+    let geminiResponse;
+
+    // Cek apakah pesan berisi media (gambar, video, dll)
     if (message.hasMedia) {
         console.log("[DEBUG] Pesan mengandung media");
         const media = await message.downloadMedia();
         console.log(`[DEBUG] Media downloaded - Type: ${media.mimetype}, Data: ${media.data ? 'exists' : 'null'}`);
         
+        // Pastikan media adalah gambar dan datanya ada
         if (media && media.mimetype.startsWith('image/') && media.data) {
             console.log("[Pesan] Pesan berisi gambar, memproses secara multimodal...");
+            // Beri tahu user bahwa gambar sedang diproses
             await message.reply("🖼️ Sedang menganalisis gambar...");
             
-            // Perubahan 1 di sini ▼
-            geminiResponse = await getGeminiResponse(message, message.body, userState[message.from].history, message.from, media);
+            // Kirim teks (caption dari 'message.body') dan gambar ke Gemini
+            geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, media);
         } else {
+            // Jika media bukan gambar (misal: stiker, video), proses teksnya saja
             console.log("[Pesan] Media bukan gambar atau data kosong, hanya memproses teks.");
-            // Perubahan 2 di sini ▼
-            geminiResponse = await getGeminiResponse(message, message.body, userState[message.from].history, message.from, null);
+            geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
         }
     } else {
+        // Jika tidak ada media, proses teks seperti biasa
         console.log("[DEBUG] Pesan tidak mengandung media");
-        // Perubahan 3 di sini ▼
-        geminiResponse = await getGeminiResponse(message, message.body, userState[message.from].history, message.from, null);
+        geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
     }
 
-    // Bagian ini tidak perlu diubah
     message.reply(geminiResponse);
     
+    // Manajemen history (logika Anda yang sudah ada kita pertahankan)
     userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
     userState[message.from].history.push({ role: 'model', parts: [{ text: geminiResponse }] });
 
