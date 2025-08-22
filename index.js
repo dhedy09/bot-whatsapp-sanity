@@ -968,10 +968,10 @@ ATURAN TEKS (jika tidak ada gambar):
         }
 
         // === Mulai chat dengan Gemini ===
-        const chat = model.startChat({
-            history: history,
-            tools: tools,
-        });
+        // const chat = model.startChat({
+        //     history: history,
+        //     tools: tools,
+        // });==
 
         const messageParts = [finalPrompt];
         if (media && media.data) {
