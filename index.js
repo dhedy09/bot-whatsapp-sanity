@@ -1103,17 +1103,6 @@ client.on('message', async (message) => {
           return
         }
 
-        // perintah kode pindah ke atas
-        if (isPerintahBot(userMessageLower)) {
-          return message.reply(
-            '⚠️ Anda masih dalam sesi AI.\n\nKetik *selesai* dulu untuk keluar dari AI Mode agar bisa memakai perintah bot.'
-          )
-        }
-
-        // Kalau bukan perintah bot → lempar ke AI
-        // const response = await getGeminiResponse(userMessage, [], message.from, null)
-        return message.reply(response)
-      }
       // AKHIR CEK MODE AI
 
       if (doaMatch) {
@@ -1247,6 +1236,7 @@ try {
 }
 return;
     }
+  }
         
     // BLOK 2: MENANGANI PERINTAH TEKS
 
