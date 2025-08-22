@@ -848,7 +848,7 @@ async function getGeminiResponse(prompt, history, userId, media = null) {
 1. Informasi berikut adalah memori resmi tentang pengguna.
 2. Gunakan ini SETIAP KALI menjawab pertanyaan, terutama jika berkaitan dengan identitas atau preferensi pengguna.
 3. Jika tidak ada memori, abaikan bagian ini.
-4. Jika ada pertanyaan yang mengandung gambar, langsung masuk ke ATURAN GAMBAR.
+4. Jika ada pertanyaan atau perintah yang mengandung kata gambar, langsung masuk ke ATURAN GAMBAR.
 ${memoryDoc.daftarMemori.map(f => `- ${f}`).join("\n")}
 `;
                 finalPrompt = `${memoryText}\n\n${finalPrompt}`;
