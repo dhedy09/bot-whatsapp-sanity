@@ -1074,10 +1074,6 @@ client.on('ready', () => {
 // =================================================================
 // BLOK HANDLER PESAN UTAMA
 // =================================================================
-// awal kode message
-// =================================================================
-// BLOK HANDLER PESAN UTAMA
-// =================================================================
 client.on('message', async (message) => {
   const chat = await message.getChat()
   try {
@@ -1085,65 +1081,63 @@ client.on('message', async (message) => {
     const userMessageLower = userMessage.toLowerCase()
     const userLastState = userState[message.from] || userState[message.author] // BLOK 1: MENANGANI "MODE AI"
 
-    const doaRegex = /doa (.*)/i;
-    const doaMatch = userMessageLower.match(doaRegex);
+  const doaRegex = /doa (.*)/i;
+  const doaMatch = userMessageLower.match(doaRegex);
+  const isAiMode = userState[message.from]?.type === 'ai_mode' 
+              || (userLastState && userLastState.type === 'ai_mode')
 
-    // === CEK MODE AI ===
-    const isAiMode = userState[message.from]?.type === 'ai_mode' 
-                  || (userLastState && userLastState.type === 'ai_mode')
+if (isAiMode) {
+  const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
+  if (exitCommands.includes(userMessageLower)) {
+    delete userState[message.from]
+    await message.reply('✅ Sesi AI dihentikan. Anda kembali ke menu utama.')
+    await showMainMenu(message)
+    return
+  }
 
-    if (isAiMode) {
-      const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
-      if (exitCommands.includes(userMessageLower)) {
-        delete userState[message.from]
-        await message.reply('✅ Sesi AI dihentikan. Anda kembali ke menu utama.')
-        await showMainMenu(message)
-        return
+        // perintah kode pindah ke atas
+        if (isPerintahBot(userMessageLower)) {
+          return message.reply(
+            '⚠️ Anda masih dalam sesi AI.\n\nKetik *selesai* dulu untuk keluar dari AI Mode agar bisa memakai perintah bot.'
+          )
+        }
+
+        // Kalau bukan perintah bot → lempar ke AI
+        const response = await getGeminiResponse(userMessage, [], message.from, null)
+        return message.reply(response)
       }
+      // AKHIR CEK MODE AI
 
-      // perintah kode pindah ke atas
-      if (isPerintahBot(userMessageLower)) {
-        return message.reply(
-          '⚠️ Anda masih dalam sesi AI.\n\nKetik *selesai* dulu untuk keluar dari AI Mode agar bisa memakai perintah bot.'
-        )
-      }
+      if (doaMatch) {
+        await chat.sendStateTyping();
 
-      // Kalau bukan perintah bot → lempar ke AI
-      const response = await getGeminiResponse(userMessage, [], message.from, null)
-      return message.reply(response)
-    }
-    // AKHIR CEK MODE AI
+        const permintaanDoa = doaMatch[1];
+        const promptDoa = `Buatkan teks doa dalam bahasa Arab dan terjemahannya ke bahasa Indonesia untuk permintaan ini: "${permintaanDoa}". Tambahkan tanda baca dan harakat.`;
 
-    if (doaMatch) {
-      await chat.sendStateTyping();
+        try {
+          const doaResponse = await getGeminiResponse(promptDoa, []);
+          message.reply(doaResponse);
+        } catch (err) {
+          console.error("Gagal membuat doa:", err);
+          message.reply("Maaf, terjadi kesalahan saat membuat doa.");
+        }
 
-      const permintaanDoa = doaMatch[1];
-      const promptDoa = `Buatkan teks doa dalam bahasa Arab dan terjemahannya ke bahasa Indonesia untuk permintaan ini: "${permintaanDoa}". Tambahkan tanda baca dan harakat.`;
-
-      try {
-        const doaResponse = await getGeminiResponse(promptDoa, []);
-        message.reply(doaResponse);
-      } catch (err) {
-        console.error("Gagal membuat doa:", err);
-        message.reply("Maaf, terjadi kesalahan saat membuat doa.");
-      }
-
-      return;
-    }
-
-    const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
-    const lowerMsg = message.body.trim().toLowerCase();
-    const match = message.body.match(memoryRegex);
-
-    // === 2. Menyimpan memori jika cocok pola fleksibel ===
-    if (match) {
-      const memoryToSave = message.body.replace(memoryRegex, '').trim();
-      if (!memoryToSave) {
-        message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
         return;
       }
 
-      try {
+        const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
+        const lowerMsg = message.body.trim().toLowerCase();
+        const match = message.body.match(memoryRegex);
+
+        // === 2. Menyimpan memori jika cocok pola fleksibel ===
+if (match) {
+    const memoryToSave = message.body.replace(memoryRegex, '').trim();
+    if (!memoryToSave) {
+        message.reply("Silakan berikan informasi yang ingin saya ingat.\nContoh: `ingat ini: saya suka kopi hitam`");
+        return;
+    }
+
+    try {
         const userId = message.from;
         const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
         const contact = await message.getContact();
@@ -1151,123 +1145,102 @@ client.on('message', async (message) => {
 
         // 1. Pastikan dokumen memori ada
         await clientSanity.createIfNotExists({
-          _id: sanitizedId,
-          _type: 'memoriPengguna',
-          userId: userId,
-          namaPanggilan: userName,
-          daftarMemori: []
+            _id: sanitizedId,
+            _type: 'memoriPengguna',
+            userId: userId,
+            namaPanggilan: userName,
+            daftarMemori: []
         });
 
         // 2. Tambah memori baru ke Sanity
         await clientSanity
-          .patch(sanitizedId)
-          .append('daftarMemori', [memoryToSave])
-          .commit({ autoGenerateArrayKeys: true });
+            .patch(sanitizedId)
+            .append('daftarMemori', [memoryToSave])
+            .commit({ autoGenerateArrayKeys: true });
 
         // 3. Fetch ulang semua memori dari Sanity
         const updatedDoc = await clientSanity.fetch(
-          `*[_type == "memoriPengguna" && _id == $id][0]`,
-          { id: sanitizedId }
+            `*[_type == "memoriPengguna" && _id == $id][0]`,
+            { id: sanitizedId }
         );
 
         if (updatedDoc && updatedDoc.daftarMemori.length > 0) {
-          // Ambil memori terbaru
-          const latestFact = memoryToSave;
+            // Ambil memori terbaru
+            const latestFact = memoryToSave;
 
-          // 4. Update history AI di sesi aktif sebagai "system"
-          if (userState[message.from]) {
-            userState[message.from].history.push({
-              role: 'system',
-              parts: [{ text: `Fakta baru tentang user: ${latestFact}` }]
-            });
+            // 4. Update history AI di sesi aktif sebagai "system"
+            if (userState[message.from]) {
+                userState[message.from].history.push({
+                    role: 'system',
+                    parts: [{ text: `Fakta baru tentang user: ${latestFact}` }]
+                });
 
-            // Batasi panjang history agar tidak membengkak
-            if (userState[message.from].history.length > 12) {
-              userState[message.from].history = userState[message.from].history.slice(-12);
+                // Batasi panjang history agar tidak membengkak
+                if (userState[message.from].history.length > 12) {
+                    userState[message.from].history = userState[message.from].history.slice(-12);
+                }
             }
-          }
         }
 
         message.reply("Baik, saya sudah menyimpannya ke memori dan akan mengingatnya.");
         console.log(`Memori baru disimpan & diperbarui untuk ${userId}: ${memoryToSave}`);
-      } catch (err) {
+    } catch (err) {
         console.error("Gagal menyimpan memori:", err);
         message.reply("Maaf, terjadi kesalahan saat menyimpan informasi ini.");
-      }
-
-      return; // Stop agar tidak dilempar ke AI
     }
 
+    return; // Stop agar tidak dilempar ke AI
+}
 
-    // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
-    // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
-    try {
-      await chat.sendStateTyping();
-      let geminiResponse;
 
-      // === [PERBAIKAN] AWAL: inisialisasi aman userState/history ===
-      if (!userState[message.from]) userState[message.from] = { history: [] };
-      if (!Array.isArray(userState[message.from].history)) userState[message.from].history = [];
-      const safeHistory = userState[message.from].history;
-      // === [PERBAIKAN] AKHIR ===
+        // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
+// === 3. Jika bukan perintah khusus, kirim ke Gemini ===
+try {
+    await chat.sendStateTyping();
+    let geminiResponse;
 
-      // Cek apakah pesan berisi media (gambar, video, dll)
-      if (message.hasMedia) {
+    // Cek apakah pesan berisi media (gambar, video, dll)
+    if (message.hasMedia) {
         console.log("[DEBUG] Pesan mengandung media");
         const media = await message.downloadMedia();
         console.log(`[DEBUG] Media downloaded - Type: ${media.mimetype}, Data: ${media.data ? 'exists' : 'null'}`);
         
         // Pastikan media adalah gambar dan datanya ada
         if (media && media.mimetype.startsWith('image/') && media.data) {
-          console.log("[Pesan] Pesan berisi gambar, memproses secara multimodal...");
-          // Beri tahu user bahwa gambar sedang diproses
-          await message.reply("🖼️ Sedang menganalisis gambar...");
-          
-          // === [PERBAIKAN] AWAL: pakai safeHistory agar tidak error saat undefined ===
-          geminiResponse = await getGeminiResponse(message.body, safeHistory, message.from, media);
-          // === [PERBAIKAN] AKHIR ===
+            console.log("[Pesan] Pesan berisi gambar, memproses secara multimodal...");
+            // Beri tahu user bahwa gambar sedang diproses
+            await message.reply("🖼️ Sedang menganalisis gambar...");
+            
+            // Kirim teks (caption dari 'message.body') dan gambar ke Gemini
+            geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, media);
         } else {
-          // Jika media bukan gambar (misal: stiker, video), proses teksnya saja
-          console.log("[Pesan] Media bukan gambar atau data kosong, hanya memproses teks.");
-          // === [PERBAIKAN] AWAL: pakai safeHistory ===
-          geminiResponse = await getGeminiResponse(message.body, safeHistory, message.from, null);
-          // === [PERBAIKAN] AKHIR ===
+            // Jika media bukan gambar (misal: stiker, video), proses teksnya saja
+            console.log("[Pesan] Media bukan gambar atau data kosong, hanya memproses teks.");
+            geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
         }
-      } else {
+    } else {
         // Jika tidak ada media, proses teks seperti biasa
         console.log("[DEBUG] Pesan tidak mengandung media");
-        // === [PERBAIKAN] AWAL: pakai safeHistory ===
-        geminiResponse = await getGeminiResponse(message.body, safeHistory, message.from, null);
-        // === [PERBAIKAN] AKHIR ===
-      }
-
-      message.reply(geminiResponse);
-      
-      // === [PERBAIKAN] AWAL: guard sebelum push ke history ===
-      if (!userState[message.from]) userState[message.from] = { history: [] };
-      if (!Array.isArray(userState[message.from].history)) userState[message.from].history = [];
-      // === [PERBAIKAN] AKHIR ===
-
-      // Manajemen history (logika Anda yang sudah ada kita pertahankan)
-      userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
-      userState[message.from].history.push({ role: 'model', parts: [{ text: geminiResponse }] });
-
-      if (userState[message.from].history.length > 10) {
-        userState[message.from].history = userState[message.from].history.slice(-10);
-      }
-    } catch (e) {
-      console.error("[AI] Gagal merespons:", e);
-      message.reply("Maaf, terjadi kesalahan dari AI.");
+        geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
     }
-    return;
-  } catch (error) {
-    console.error("Error di blok utama handler pesan:", error);
-    // Jika ada error, kirim pesan kesalahan ke pengguna
-    message.reply("Maaf, terjadi kesalahan saat memproses pesan Anda. Silakan coba lagi.");
-  }
-}
-    // === [PERBAIKAN] CATATAN: kurung kurawal penutup ekstra di sini telah dihapus agar 'catch' utama di bagian akhir valid ===
 
+    message.reply(geminiResponse);
+    
+    // Manajemen history (logika Anda yang sudah ada kita pertahankan)
+    userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
+    userState[message.from].history.push({ role: 'model', parts: [{ text: geminiResponse }] });
+
+    if (userState[message.from].history.length > 10) {
+        userState[message.from].history = userState[message.from].history.slice(-10);
+    }
+} catch (e) {
+    console.error("[AI] Gagal merespons:", e);
+    message.reply("Maaf, terjadi kesalahan dari AI.");
+}
+return;
+    }
+  }
+        
     // BLOK 2: MENANGANI PERINTAH TEKS
 
     if (userMessageLower === 'halo panda') {
@@ -1619,50 +1592,50 @@ client.on('message', async (message) => {
       'halo, saya ingin memulai sesi ai', // Pastikan ini diketik bersih
     ]
     // GANTI BLOK aiTriggerCommands ANDA DENGAN YANG INI SECARA KESELURUHAN
-    if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
-      await chat.sendStateTyping()
+if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
+  await chat.sendStateTyping()
 
-      const userId = message.from
-      const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`
-      let initialHistory = []
+  const userId = message.from
+  const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`
+  let initialHistory = []
 
-      try {
-        const memoryDoc = await clientSanity.fetch(`*[_type == "memoriPengguna" && _id == $id][0]`, {
-          id: sanitizedId,
-        })
+  try {
+    const memoryDoc = await clientSanity.fetch(`*[_type == "memoriPengguna" && _id == $id][0]`, {
+      id: sanitizedId,
+    })
 
-        if (memoryDoc && memoryDoc.daftarMemori && memoryDoc.daftarMemori.length > 0) {
-          const longTermMemories = memoryDoc.daftarMemori
+    if (memoryDoc && memoryDoc.daftarMemori && memoryDoc.daftarMemori.length > 0) {
+      const longTermMemories = memoryDoc.daftarMemori
 
-          let memoryContext =
-            'Ini adalah beberapa fakta penting tentang saya (pengguna) yang harus kamu ingat di sepanjang percakapan ini:\n'
-          longTermMemories.forEach((fact) => {
-            memoryContext += `- ${fact}\n`
-          })
+      let memoryContext =
+        'Ini adalah beberapa fakta penting tentang saya (pengguna) yang harus kamu ingat di sepanjang percakapan ini:\n'
+      longTermMemories.forEach((fact) => {
+        memoryContext += `- ${fact}\n`
+      })
 
-          // Tambahkan ke history AI sebagai pesan awal
-          initialHistory.push({role: 'user', parts: [{text: memoryContext}]})
-          initialHistory.push({
-            role: 'model',
-            parts: [{text: 'Baik, saya telah menerima dan mengingat semua fakta tersebut.'}],
-          })
+      // Tambahkan ke history AI sebagai pesan awal
+      initialHistory.push({role: 'user', parts: [{text: memoryContext}]})
+      initialHistory.push({
+        role: 'model',
+        parts: [{text: 'Baik, saya telah menerima dan mengingat semua fakta tersebut.'}],
+      })
 
-          console.log(`Memuat ${longTermMemories.length} memori untuk ${userId}`)
-        }
-      } catch (e) {
-        console.error('Gagal memuat memori:', e)
-      }
-
-      // Simpan state AI
-      userState[message.from] = {type: 'ai_mode', history: initialHistory}
-
-      const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`)
-      const welcomeMessage = result
-        ? result.jawaban
-        : "Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti."
-      message.reply(welcomeMessage)
-      return
+      console.log(`Memuat ${longTermMemories.length} memori untuk ${userId}`)
     }
+  } catch (e) {
+    console.error('Gagal memuat memori:', e)
+  }
+
+  // Simpan state AI
+  userState[message.from] = {type: 'ai_mode', history: initialHistory}
+
+  const result = await clientSanity.fetch(`*[_type == "botReply" && keyword == "salam_sesi_ai"][0]`)
+  const welcomeMessage = result
+    ? result.jawaban
+    : "Sesi AI dimulai. Silakan bertanya. Ketik 'selesai' untuk berhenti."
+  message.reply(welcomeMessage)
+  return
+}
 
 
     // BLOK 3: MENANGANI PILIHAN MENU NUMERIK
@@ -1670,70 +1643,70 @@ client.on('message', async (message) => {
 
     // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
-    // ▼▼▼ AWAL BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▼▼▼
-    if (userMessageLower.startsWith('ingatkan')) {
-      const contact = await message.getContact();
-      const authorId = contact.id._serialized;
+// ▼▼▼ AWAL BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▼▼▼
+if (userMessageLower.startsWith('ingatkan')) {
+  const contact = await message.getContact();
+  const authorId = contact.id._serialized;
 
-      const argsString = userMessage.substring('ingatkan'.length).trim();
-      const reminderRegex = /^(.+?)\s(.+?)\stentang\s(.+)$/i;
-      const match = argsString.match(reminderRegex);
+  const argsString = userMessage.substring('ingatkan'.length).trim();
+  const reminderRegex = /^(.+?)\s(.+?)\stentang\s(.+)$/i;
+  const match = argsString.match(reminderRegex);
 
-      if (!match) {
-        message.reply(
-          '❌ Format salah.\n' +
-          'Gunakan:\n`ingatkan saya dalam 5 menit tentang mandi`\n' +
-          '*Contoh:* `ingatkan saya besok jam 9 tentang rapat`'
-        );
-        return;
-      }
+  if (!match) {
+    message.reply(
+      '❌ Format salah.\n' +
+      'Gunakan:\n`ingatkan saya dalam 5 menit tentang mandi`\n' +
+      '*Contoh:* `ingatkan saya besok jam 9 tentang rapat`'
+    );
+    return;
+  }
 
-      const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
+  const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
 
-      // Selalu arahkan ke pembuat
-      const targetNomorHp = authorId;
-      const targetNama = contact.pushname || namaTarget || "Pengguna";
+  // Selalu arahkan ke pembuat
+  const targetNomorHp = authorId;
+  const targetNama = contact.pushname || namaTarget || "Pengguna";
 
-      const waktuKirim = parseWaktuIndonesia(waktuString);
-      if (!waktuKirim) {
-        message.reply(
-          `❌ Maaf, saya tidak mengerti format waktu "${waktuString}".\n` +
-          `Gunakan format seperti "dalam 5 menit", "hari ini jam 7", atau "besok jam 10".`
-        );
-        return;
-      }
+  const waktuKirim = parseWaktuIndonesia(waktuString);
+  if (!waktuKirim) {
+    message.reply(
+      `❌ Maaf, saya tidak mengerti format waktu "${waktuString}".\n` +
+      `Gunakan format seperti "dalam 5 menit", "hari ini jam 7", atau "besok jam 10".`
+    );
+    return;
+  }
 
-      try {
-        const newPengingat = {
-          _type: 'pengingat',
-          pesan,
-          targetNomorHp,
-          targetNama,
-          waktuKirim: waktuKirim.toISOString(),
-          status: 'menunggu',
-        };
-        await clientSanity.create(newPengingat);
+  try {
+    const newPengingat = {
+      _type: 'pengingat',
+      pesan,
+      targetNomorHp,
+      targetNama,
+      waktuKirim: waktuKirim.toISOString(),
+      status: 'menunggu',
+    };
+    await clientSanity.create(newPengingat);
 
-        const waktuLokal = waktuKirim.toLocaleString('id-ID', {
-          timeZone: 'Asia/Makassar',
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        });
+    const waktuLokal = waktuKirim.toLocaleString('id-ID', {
+      timeZone: 'Asia/Makassar',
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
-        message.reply(
-          `✅ Pengingat berhasil dibuat!\n\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`
-        );
-      } catch (error) {
-        console.error('Gagal membuat pengingat:', error);
-        message.reply('❌ Maaf, terjadi kesalahan di server saat membuat pengingat.');
-      }
-      return;
-    }
-    // ▲▲▲ AKHIR BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▲▲▲
+    message.reply(
+      `✅ Pengingat berhasil dibuat!\n\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`
+    );
+  } catch (error) {
+    console.error('Gagal membuat pengingat:', error);
+    message.reply('❌ Maaf, terjadi kesalahan di server saat membuat pengingat.');
+  }
+  return;
+}
+// ▲▲▲ AKHIR BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▲▲▲
 
 
     // AWAL BLOK  MENU BANTUAN (HELP)
