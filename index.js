@@ -357,7 +357,7 @@ async function getGempa() {
 // =================================================================
 // BLOK FUNGSI: PARSER WAKTU INDONESIA
 // =================================================================
-function parseWoduIndonesia(teks) {
+function parseWaktuIndonesia(teks) { // <-- NAMA SUDAH DIPERBAIKI DI SINI
   let teksNormal = teks.toLowerCase()
     .replace(/\./g, ':') // Ganti titik jadi titik dua (10.30 -> 10:30)
     .replace(/ ham /g, ' jam '); // Koreksi typo umum
@@ -398,16 +398,11 @@ function parseWoduIndonesia(teks) {
       targetWaktu.setMinutes(menit);
       targetWaktu.setSeconds(0); // Set detik ke 0 agar pas
 
-      // Jika waktu yang ditentukan sudah lewat untuk hari ini,
-      // dan tidak ada kata "besok" atau "lusa", maka otomatis atur ke besok.
-      // Contoh: Sekarang jam 3 sore, user set pengingat "jam 10 pagi".
+      // Logika cerdas untuk waktu yang sudah lewat
       if (targetWaktu < sekarang && !teksNormal.includes('besok') && !teksNormal.includes('lusa')) {
-         // Cek apakah user memang bermaksud hari ini tapi sudah lewat
-         // Jika ya, mungkin lebih baik ditolak atau dikonfirmasi
-         // Untuk saat ini, kita anggap itu untuk besok jika sudah lewat
-         if (!teksNormal.includes('hari ini')) {
-            targetWaktu.setDate(targetWaktu.getDate() + 1);
-         }
+        if (!teksNormal.includes('hari ini')) {
+           targetWaktu.setDate(targetWaktu.getDate() + 1);
+        }
       }
       
       return targetWaktu;
