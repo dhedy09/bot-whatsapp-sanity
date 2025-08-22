@@ -1210,41 +1210,61 @@ try {
 
     // Cek apakah pesan berisi media (gambar, video, dll)
     if (message.hasMedia) {
-        console.log("[DEBUG] Pesan mengandung media");
-        const media = await message.downloadMedia();
-        console.log(`[DEBUG] Media downloaded - Type: ${media.mimetype}, Data: ${media.data ? 'exists' : 'null'}`);
+        console.log("[DEBUG] 🖼️ Pesan mengandung media - mulai download");
         
-        // Pastikan media adalah gambar dan datanya ada
-        if (media && media.mimetype.startsWith('image/') && media.data) {
-            console.log("[Pesan] Pesan berisi gambar, memproses secara multimodal...");
-            // Beri tahu user bahwa gambar sedang diproses
-            await message.reply("🖼️ Sedang menganalisis gambar...");
+        try {
+            const media = await message.downloadMedia();
+            console.log(`[DEBUG] 📥 Media berhasil didownload - Type: ${media.mimetype}, Data: ${media.data ? 'EXISTS' : 'NULL!'}`);
             
-            // Kirim teks (caption dari 'message.body') dan gambar ke Gemini
-            geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, media);
-        } else {
-            // Jika media bukan gambar (misal: stiker, video), proses teksnya saja
-            console.log("[Pesan] Media bukan gambar atau data kosong, hanya memproses teks.");
-            geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
+            if (media && media.data) {
+                // Pastikan media adalah gambar
+                if (media.mimetype.startsWith('image/')) {
+                    console.log("[Pesan] 🔍 Pesan berisi gambar, memproses secara multimodal...");
+                    await message.reply("🖼️ Sedang menganalisis gambar...");
+                    geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, media);
+                } else {
+                    console.log("[Pesan] 📹 Media bukan gambar, hanya memproses teks.");
+                    await message.reply("📹 Media bukan gambar, hanya memproses teksnya...");
+                    geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
+                }
+            } else {
+                console.log("[ERROR] ❌ Media didownload tapi data NULL!");
+                await message.reply("❌ Gagal memproses gambar. Data tidak terbaca. Coba kirim ulang gambar.");
+                return;
+            }
+            
+        } catch (downloadError) {
+            console.error("[DOWNLOAD ERROR] ❌", downloadError);
+            console.error("Error details:", downloadError.message);
+            await message.reply("❌ Gagal mendownload gambar. Pastikan koneksi stabil dan coba lagi.");
+            return;
         }
+        
     } else {
         // Jika tidak ada media, proses teks seperti biasa
-        console.log("[DEBUG] Pesan tidak mengandung media");
+        console.log("[DEBUG] 📝 Pesan tidak mengandung media");
         geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
     }
 
-    message.reply(geminiResponse);
-    
-    // Manajemen history (logika Anda yang sudah ada kita pertahankan)
-    userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
-    userState[message.from].history.push({ role: 'model', parts: [{ text: geminiResponse }] });
+    // Kirim balasan hanya jika geminiResponse ada
+    if (geminiResponse) {
+        message.reply(geminiResponse);
+        
+        // Manajemen history (logika Anda yang sudah ada kita pertahankan)
+        if (userState[message.from]) {
+            userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
+            userState[message.from].history.push({ role: 'model', parts: [{ text: geminiResponse }] });
 
-    if (userState[message.from].history.length > 10) {
-        userState[message.from].history = userState[message.from].history.slice(-10);
+            if (userState[message.from].history.length > 10) {
+                userState[message.from].history = userState[message.from].history.slice(-10);
+            }
+        }
     }
+    
 } catch (e) {
-    console.error("[AI] Gagal merespons:", e);
-    message.reply("Maaf, terjadi kesalahan dari AI.");
+    console.error("[AI] ❌ Gagal merespons:", e);
+    console.error("Error stack:", e.stack);
+    message.reply("Maaf, terjadi kesalahan dari AI. Coba lagi beberapa saat.");
 }
 return;
     }
