@@ -1210,11 +1210,10 @@ if (match) {
 
         // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
 // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
-// === 3. Jika bukan perintah khusus, kirim ke Gemini ===
-// === 3. Jika bukan perintah khusus, kirim ke Gemini ===
 try {
     await chat.sendStateTyping();
     let geminiResponse;
+    let mediaForGemini = null; // ← VARIABLE BARU UNTUK TRACK MEDIA
 
     // Cek apakah pesan berisi media (gambar, video, dll)
     if (message.hasMedia) {
@@ -1222,25 +1221,22 @@ try {
         
         try {
             const media = await message.downloadMedia();
-            console.log(`[DEBUG] 📥 Media berhasil didownload - Type: ${media.mimetype}, Data: ${media.data ? 'EXISTS' : 'NULL!'}`);
+            console.log(`[DEBUG] 📥 Download result:`, {
+                success: !!media,
+                hasData: media && !!media.data,
+                dataLength: media && media.data ? media.data.length : 0,
+                mimetype: media ? media.mimetype : 'null'
+            });
             
             if (media && media.data) {
                 // Pastikan media adalah gambar
                 if (media.mimetype.startsWith('image/')) {
                     console.log("[Pesan] 🔍 Pesan berisi gambar, memproses secara multimodal...");
                     await message.reply("🖼️ Sedang menganalisis gambar...");
-                    
-                    // ✅ PERBAIKAN UTAMA: Pastikan media diteruskan dengan benar
-                    geminiResponse = await getGeminiResponse(
-                        message.body, 
-                        userState[message.from]?.history || [], 
-                        message.from, 
-                        media  // ← INI YANG HARUS DITERUSKAN
-                    );
+                    mediaForGemini = media; // ← SIMPAN MEDIA UNTUK DIKIRIM
                 } else {
                     console.log("[Pesan] 📹 Media bukan gambar, hanya memproses teks.");
                     await message.reply("📹 Media bukan gambar, hanya memproses teksnya...");
-                    geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
                 }
             } else {
                 console.log("[ERROR] ❌ Media didownload tapi data NULL!");
@@ -1258,14 +1254,21 @@ try {
     } else {
         // Jika tidak ada media, proses teks seperti biasa
         console.log("[DEBUG] 📝 Pesan tidak mengandung media");
-        geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
     }
 
-    // Kirim balasan hanya jika geminiResponse ada
+    // ✅ PASTIKAN MEDIA DIKIRIM KE GEMINI
+    console.log(`[DEBUG] 🚀 Sending to Gemini - Media: ${mediaForGemini ? mediaForGemini.mimetype : 'NULL'}`);
+    geminiResponse = await getGeminiResponse(
+        message.body, 
+        userState[message.from]?.history || [], 
+        message.from, 
+        mediaForGemini  // ← INI YANG DIKIRIM
+    );
+
     if (geminiResponse) {
         message.reply(geminiResponse);
         
-        // Manajemen history (logika Anda yang sudah ada kita pertahankan)
+        // Manajemen history
         if (userState[message.from]) {
             userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
             userState[message.from].history.push({ role: 'model', parts: [{ text: geminiResponse }] });
