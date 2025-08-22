@@ -195,28 +195,45 @@ function isPerintahBot(msg) {
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
 
 // AWAL FUNGSI BUAT GAMBAR
+// ▼▼▼ GANTI FUNGSI LAMA ANDA DENGAN VERSI BARU UNTUK DEBUGGING INI ▼▼▼
 async function buatGambar(prompt) {
   console.log(`[Tool] Mencoba membuat gambar dengan prompt: "${prompt}"`);
   try {
     const endpoint = `projects/${project}/locations/${location}/publishers/google/models/imagegeneration@006`;
+    
+    // Konversi prompt ke format instance yang dibutuhkan oleh API
+    const {instance} = require('@google-cloud/aiplatform/build/src/helpers');
     const parameters = { "sampleCount": 1 };
-    const instance = { "prompt": prompt };
-    const request = { endpoint, instances: [ { structValue: instance } ], parameters: { structValue: parameters } };
+    const instanceValue = instance({ "prompt": prompt });
+    
+    const request = { 
+      endpoint, 
+      instances: [ instanceValue ], 
+      parameters: instanceValue.fromObject(parameters) 
+    };
 
+    console.log("[Debug] Mengirim permintaan ke Vertex AI...");
     const [response] = await aiplatformClient.predict(request);
+    console.log("[Debug] Menerima respons dari Vertex AI.");
 
     if (response.predictions && response.predictions.length > 0) {
-        const base64Data = response.predictions[0].structValue.fields.bytesBase64Encoded.stringValue;
-        console.log("[Tool] Berhasil mendapatkan data base64 gambar.");
-        return { success: true, data: base64Data };
+      const base64Data = response.predictions[0].structValue.fields.bytesBase64Encoded.stringValue;
+      console.log("[Debug] Berhasil mendapatkan data base64 gambar.");
+      return { success: true, data: base64Data };
     } else {
-        throw new Error("API tidak mengembalikan gambar.");
+      console.log("[Debug] Respons dari Vertex AI tidak berisi gambar.", response);
+      throw new Error("API tidak mengembalikan prediksi gambar.");
     }
   } catch (error) {
-    console.error("Error saat membuat gambar:", error);
-    return { success: false, data: "Maaf, terjadi kesalahan saat mencoba membuat gambar." };
+    console.error("=========================================");
+    console.error("!!! ERROR DI DALAM FUNGSI BUAT GAMBAR !!!");
+    console.error("Pesan Error:", error.message);
+    console.error("Detail Error:", JSON.stringify(error, null, 2));
+    console.error("=========================================");
+    return { success: false, data: "Maaf, terjadi kesalahan saat mencoba membuat gambar. Silakan cek log." };
   }
 }
+// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 // AKHIR FUNGSI BUAT GAMBAR
 
 // AWAL BACA PAGES WEB
@@ -961,6 +978,18 @@ ATURAN TEKS (jika tidak ada gambar):
             let functionResponse;
 
             switch (call.name) {
+                  case 'buatGambar': {
+                    message.reply(`🎨 Oke, saya coba buatkan gambar "${call.args.prompt}"... Ini mungkin butuh waktu sejenak.`);
+                    const result = await buatGambar(call.args.prompt);
+                    if (result.success) {
+                        const media = new MessageMedia('image/png', result.data);
+                        await client.sendMessage(message.from, media, { caption: `Ini dia gambar untukmu: "${call.args.prompt}"` });
+                        functionResponse = { status: "Gambar berhasil dibuat dan dikirim." };
+                    } else {
+                        functionResponse = { status: result.data };
+                    }
+                    break;
+                }
                 case 'readWebPage':
                     functionResponse = await readWebPage(call.args.url);
                     break;
