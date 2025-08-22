@@ -1211,6 +1211,7 @@ if (match) {
         // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
 // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
 // === 3. Jika bukan perintah khusus, kirim ke Gemini ===
+// === 3. Jika bukan perintah khusus, kirim ke Gemini ===
 try {
     await chat.sendStateTyping();
     let geminiResponse;
@@ -1260,9 +1261,28 @@ try {
         geminiResponse = await getGeminiResponse(message.body, userState[message.from].history, message.from, null);
     }
 
-    // ... rest of the code ...
-}
+    // Kirim balasan hanya jika geminiResponse ada
+    if (geminiResponse) {
+        message.reply(geminiResponse);
+        
+        // Manajemen history (logika Anda yang sudah ada kita pertahankan)
+        if (userState[message.from]) {
+            userState[message.from].history.push({ role: 'user', parts: [{ text: message.body }] });
+            userState[message.from].history.push({ role: 'model', parts: [{ text: geminiResponse }] });
+
+            if (userState[message.from].history.length > 10) {
+                userState[message.from].history = userState[message.from].history.slice(-10);
+            }
+        }
     }
+    
+} catch (e) {
+    console.error("[AI] ❌ Gagal merespons:", e);
+    console.error("Error stack:", e.stack);
+    message.reply("Maaf, terjadi kesalahan dari AI. Coba lagi beberapa saat.");
+}
+return;
+  }
         
     // BLOK 2: MENANGANI PERINTAH TEKS
 
