@@ -357,38 +357,65 @@ async function getGempa() {
 // =================================================================
 // BLOK FUNGSI: PARSER WAKTU INDONESIA
 // =================================================================
-function parseWaktuIndonesia(teks) {
-    const sekarang = new Date(); // Cukup ambil waktu saat ini.
-    teks = teks.toLowerCase();
+function parseWoduIndonesia(teks) {
+  let teksNormal = teks.toLowerCase()
+    .replace(/\./g, ':') // Ganti titik jadi titik dua (10.30 -> 10:30)
+    .replace(/ ham /g, ' jam '); // Koreksi typo umum
 
-    // Pola untuk "dalam X menit/jam"
-    let match = teks.match(/dalam (\d+) (menit|jam)/);
-    if (match) {
-        const jumlah = parseInt(match[1]);
-        const unit = match[2];
-        if (unit === 'menit') {
-            sekarang.setMinutes(sekarang.getMinutes() + jumlah);
-        } else if (unit === 'jam') {
-            sekarang.setHours(sekarang.getHours() + jumlah);
-        }
-        return sekarang;
+  const sekarang = new Date();
+  let targetWaktu = new Date(); // Salin waktu saat ini sebagai dasar
+
+  // 1. Pola untuk waktu relatif: "dalam X menit/jam"
+  let match = teksNormal.match(/dalam (\d+) (menit|jam)/);
+  if (match) {
+    const jumlah = parseInt(match[1]);
+    const unit = match[2];
+    if (unit === 'menit') {
+      targetWaktu.setMinutes(targetWaktu.getMinutes() + jumlah);
+    } else if (unit === 'jam') {
+      targetWaktu.setHours(targetWaktu.getHours() + jumlah);
     }
+    return targetWaktu;
+  }
 
-    // Pola untuk "besok jam X"
-    match = teks.match(/besok (?:jam|pukul) (\d+)/);
-    if (match) {
-        const jam = parseInt(match[1]);
-        const besok = new Date(); // Ambil tanggal hari ini
-        besok.setDate(besok.getDate() + 1); // Maju ke besok
-        
-        // Atur jam berdasarkan zona waktu Asia/Makassar
-        const targetWaktuString = `${besok.getFullYear()}-${besok.getMonth()+1}-${besok.getDate()} ${jam}:00:00`;
-        // Trik untuk memastikan tanggal dibuat dalam zona waktu yang benar
-        return new Date(new Date(targetWaktuString).toLocaleString("en-US", {timeZone: "Asia/Makassar"}));
+  // 2. Tentukan hari: hari ini, besok, atau lusa
+  if (teksNormal.includes('besok')) {
+    targetWaktu.setDate(targetWaktu.getDate() + 1);
+  } else if (teksNormal.includes('lusa')) {
+    targetWaktu.setDate(targetWaktu.getDate() + 2);
+  }
+  // Jika tidak ada kata "besok" atau "lusa", maka diasumsikan "hari ini"
+
+  // 3. Pola untuk jam dan menit: "jam/pukul HH:mm" atau "jam/pukul HH"
+  match = teksNormal.match(/(?:jam|pukul) (\d{1,2})(?::(\d{1,2}))?/);
+  if (match) {
+    const jam = parseInt(match[1]);
+    const menit = match[2] ? parseInt(match[2]) : 0; // Jika menit tidak ada, anggap 0
+
+    // Cek apakah jam dan menit valid
+    if (jam >= 0 && jam < 24 && menit >= 0 && menit < 60) {
+      targetWaktu.setHours(jam);
+      targetWaktu.setMinutes(menit);
+      targetWaktu.setSeconds(0); // Set detik ke 0 agar pas
+
+      // Jika waktu yang ditentukan sudah lewat untuk hari ini,
+      // dan tidak ada kata "besok" atau "lusa", maka otomatis atur ke besok.
+      // Contoh: Sekarang jam 3 sore, user set pengingat "jam 10 pagi".
+      if (targetWaktu < sekarang && !teksNormal.includes('besok') && !teksNormal.includes('lusa')) {
+         // Cek apakah user memang bermaksud hari ini tapi sudah lewat
+         // Jika ya, mungkin lebih baik ditolak atau dikonfirmasi
+         // Untuk saat ini, kita anggap itu untuk besok jika sudah lewat
+         if (!teksNormal.includes('hari ini')) {
+            targetWaktu.setDate(targetWaktu.getDate() + 1);
+         }
+      }
+      
+      return targetWaktu;
     }
+  }
 
-    // Jika tidak ada pola yang cocok
-    return null;
+  // Jika tidak ada pola yang cocok sama sekali
+  return null;
 }
 
 // ▲▲▲ AKHIR DARI FUNGSI PERSEINDONESIA ▲▲▲
@@ -1648,7 +1675,7 @@ if (userMessageLower.startsWith('ingatkan')) {
   const authorId = contact.id._serialized;
 
   const argsString = userMessage.substring('ingatkan'.length).trim();
-  const reminderRegex = /^(.+?)\s(.+?)\stentang\s(.+)$/i;
+  const reminderRegex = /^(.+?)\s(dalam .+?|hari ini .+?|besok .+?|lusa .+?)\s(?:tentang\s)?(.+)$/i;
   const match = argsString.match(reminderRegex);
 
   if (!match) {
