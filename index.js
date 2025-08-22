@@ -859,7 +859,7 @@ ${memoryDoc.daftarMemori.map(f => `- ${f}`).join("\n")}
         // === Cek apakah pertanyaan butuh tools eksternal ===
         const triggerKeywords = [
             'berita', 'gempa', 'cuaca', 'siapa', 'apa', 'kapan',
-            'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berapa'
+            'di mana', 'mengapa', 'bagaimana', 'jelaskan', 'berapa','gambar'
         ];
         const isToolQuery = triggerKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
 
@@ -1083,17 +1083,25 @@ client.on('message', async (message) => {
 
   const doaRegex = /doa (.*)/i;
   const doaMatch = userMessageLower.match(doaRegex);
-  const isAiMode = userState[message.from]?.type === 'ai_mode' 
-              || (userLastState && userLastState.type === 'ai_mode')
 
-if (isAiMode) {
-  const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
-  if (exitCommands.includes(userMessageLower)) {
-    delete userState[message.from]
-    await message.reply('✅ Sesi AI dihentikan. Anda kembali ke menu utama.')
-    await showMainMenu(message)
-    return
-  }
+    if (userLastState && userLastState.type === 'ai_mode') {
+      const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
+      if (exitCommands.includes(userMessageLower)) {
+        delete userState[message.from]
+        message.reply('Sesi AI telah berakhir. Anda kembali ke mode normal.')
+        await showMainMenu(message)
+        return
+      }
+
+            // === AWAL CEK MODE AI ===
+      if (userState[message.from]?.type === 'ai_mode') {
+        const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
+        if (exitCommands.includes(userMessageLower)) {
+          delete userState[message.from]
+          await message.reply('✅ Sesi AI dihentikan. Anda kembali ke menu utama.')
+          await showMainMenu(message) // 🔑 kembali tampilkan menu utama
+          return
+        }
 
         // perintah kode pindah ke atas
         if (isPerintahBot(userMessageLower)) {
@@ -1239,7 +1247,6 @@ try {
 }
 return;
     }
-  }
         
     // BLOK 2: MENANGANI PERINTAH TEKS
 
