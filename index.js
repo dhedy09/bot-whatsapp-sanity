@@ -845,6 +845,7 @@ async function getGeminiResponse(prompt, history, userId, media = null) {
             if (memoryDoc?.daftarMemori?.length > 0) {
                 memoryText = `
 📌 CATATAN PENTING:
+lewati memoryText jika berhubungan dengan gambar.
 Informasi berikut adalah memori resmi tentang pengguna.
 Gunakan ini SETIAP KALI menjawab pertanyaan, terutama jika berkaitan dengan identitas atau preferensi pengguna.
 
@@ -868,7 +869,10 @@ ${memoryDoc.daftarMemori.map(f => `- ${f}`).join("\n")}
             const instruction = `
 Kamu adalah asisten AI yang cerdas dan multimodal.
 Kamu harus seperti AI lain seperti chatGPT, Gemini, dan DeepSeek.
-ATURAN UTAMA: Analisis semua input yang diberikan, baik teks maupun gambar.
+
+ATURAN UTAMA: 
+lewati memoryText jika berhubungan dengan gambar.
+Analisis semua input yang diberikan, baik teks maupun gambar.
 
 ATURAN GAMBAR: Jika input berisi GAMBAR:
 1.  Pertama, identifikasi objek atau subjek utama di dalam gambar.
