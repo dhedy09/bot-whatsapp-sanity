@@ -16,6 +16,7 @@
     "sanity"
   ],
   "dependencies": {
+    "@google-cloud/aiplatform": "^5.6.0",
     "@google/generative-ai": "^0.24.1",
     "@sanity/client": "^7.8.2",
     "@sanity/vision": "^4.5.0",

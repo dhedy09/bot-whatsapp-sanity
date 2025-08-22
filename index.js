@@ -23,7 +23,7 @@ const app = express();
 const path = require('path');
 const cheerio = require('cheerio');
 const apiKey = process.env.GEMINI_API_KEY;
-
+const { PredictionServiceClient } = require('@google-cloud/aiplatform').v1;
 
 // --- INISIALISASI KLIEN GOOGLE (DRIVE, SEARCH, DLL) ---
 const credentialsJsonString = process.env.GOOGLE_CREDENTIALS_JSON;
@@ -48,10 +48,28 @@ const drive = google.drive({ version: 'v3', auth });
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
+// --- KONFIGURASI KLIEN VERTEX AI (UNTUK BUAT GAMBAR) ---
+const project = 'bot-whatsapp-panda'; // Ganti dengan Project ID Anda
+const location = 'us-central1';
+const aiplatformClient = new PredictionServiceClient({
+    apiEndpoint: 'us-central1-aiplatform.googleapis.com'
+});
+
 
 // --- DEFINISI ALAT-ALAT UNTUK AI ---
 const tools = [{
     functionDeclarations: [
+          {
+            name: "buatGambar",
+            description: "Membuat atau menghasilkan sebuah gambar berdasarkan deskripsi teks dari pengguna. Gunakan alat ini jika pengguna meminta untuk 'membuat gambar', 'generate image', 'lukiskan', atau sejenisnya.",
+            parameters: {
+                type: "OBJECT",
+                properties: {
+                    prompt: { type: "STRING", description: "Deskripsi detail dari gambar yang ingin dibuat, sebaiknya dalam bahasa Inggris untuk hasil terbaik." }
+                },
+                required: ["prompt"]
+            }
+        },
         {
             name: "googleSearch",
             description: "Langkah pertama untuk menjawab pertanyaan tentang topik umum, fakta, orang, tempat, atau peristiwa. Selalu gunakan alat ini terlebih dahulu untuk menemukan URL yang relevan.",
@@ -175,6 +193,31 @@ function isPerintahBot(msg) {
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
+
+// AWAL FUNGSI BUAT GAMBAR
+async function buatGambar(prompt) {
+  console.log(`[Tool] Mencoba membuat gambar dengan prompt: "${prompt}"`);
+  try {
+    const endpoint = `projects/${project}/locations/${location}/publishers/google/models/imagegeneration@006`;
+    const parameters = { "sampleCount": 1 };
+    const instance = { "prompt": prompt };
+    const request = { endpoint, instances: [ { structValue: instance } ], parameters: { structValue: parameters } };
+
+    const [response] = await aiplatformClient.predict(request);
+
+    if (response.predictions && response.predictions.length > 0) {
+        const base64Data = response.predictions[0].structValue.fields.bytesBase64Encoded.stringValue;
+        console.log("[Tool] Berhasil mendapatkan data base64 gambar.");
+        return { success: true, data: base64Data };
+    } else {
+        throw new Error("API tidak mengembalikan gambar.");
+    }
+  } catch (error) {
+    console.error("Error saat membuat gambar:", error);
+    return { success: false, data: "Maaf, terjadi kesalahan saat mencoba membuat gambar." };
+  }
+}
+// AKHIR FUNGSI BUAT GAMBAR
 
 // AWAL BACA PAGES WEB
 
@@ -877,6 +920,7 @@ ATURAN GAMBAR: Jika input berisi GAMBAR:
 4.  Jika pengguna hanya mengirim gambar tanpa teks, tugasmu adalah mendeskripsikannya secara detail.
 5. Jika media berupa video atau audio → fokus pada teks yang diberikan user, jangan berusaha menganalisis media tersebut.
 6. Jika ada gambar + teks, SELALU prioritaskan teks user sebagai instruksi utama, gunakan gambar hanya sebagai konteks tambahan.
+7. Jika pengguna meminta untuk MEMBUAT gambar, gunakan alat 'buatGambar'.
 
 ATURAN TEKS (jika tidak ada gambar):
 - Jika pengguna tanya tentang *berita* → gunakan getLatestNews.
