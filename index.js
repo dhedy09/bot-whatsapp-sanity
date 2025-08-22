@@ -199,41 +199,46 @@ function isPerintahBot(msg) {
 async function buatGambar(prompt) {
   console.log(`[Tool] Mencoba membuat gambar dengan prompt: "${prompt}"`);
   try {
+    // Impor helper resmi dari library
+    const aiplatform = require('@google-cloud/aiplatform');
+    const {helpers} = aiplatform.v1;
+
     const endpoint = `projects/${project}/locations/${location}/publishers/google/models/imagegeneration@006`;
-    
-    // Konversi prompt ke format instance yang dibutuhkan oleh API
-    const {instance} = require('@google-cloud/aiplatform/build/src/helpers');
-    const parameters = { "sampleCount": 1 };
-    const instanceValue = instance({ "prompt": prompt });
-    
-    const request = { 
-      endpoint, 
-      instances: [ instanceValue ], 
-      parameters: instanceValue.fromObject(parameters) 
+
+    // Siapkan instance dan parameter sebagai objek JavaScript biasa
+    const instanceObj = { prompt: prompt };
+    const parametersObj = { sampleCount: 1 };
+
+    // Gunakan helper resmi untuk mengonversi objek menjadi format yang benar
+    const instances = [helpers.toValue(instanceObj)];
+    const parameters = helpers.toValue(parametersObj);
+
+    const request = {
+      endpoint,
+      instances,
+      parameters,
     };
 
     console.log("[Debug] Mengirim permintaan ke Vertex AI...");
     const [response] = await aiplatformClient.predict(request);
     console.log("[Debug] Menerima respons dari Vertex AI.");
 
-    if (response.predictions && response.predictions.length > 0) {
+    if (response.predictions && response.predictions.length > 0 && response.predictions[0].structValue.fields.bytesBase64Encoded) {
       const base64Data = response.predictions[0].structValue.fields.bytesBase64Encoded.stringValue;
       console.log("[Debug] Berhasil mendapatkan data base64 gambar.");
       return { success: true, data: base64Data };
     } else {
-      console.log("[Debug] Respons dari Vertex AI tidak berisi gambar.", response);
-      throw new Error("API tidak mengembalikan prediksi gambar.");
+      console.log("[Debug] Respons dari Vertex AI tidak berisi gambar.", JSON.stringify(response, null, 2));
+      throw new Error("API tidak mengembalikan prediksi gambar yang valid.");
     }
   } catch (error) {
     console.error("=========================================");
     console.error("!!! ERROR DI DALAM FUNGSI BUAT GAMBAR !!!");
     console.error("Pesan Error:", error.message);
-    console.error("Detail Error:", JSON.stringify(error, null, 2));
     console.error("=========================================");
     return { success: false, data: "Maaf, terjadi kesalahan saat mencoba membuat gambar. Silakan cek log." };
   }
 }
-// ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 // AKHIR FUNGSI BUAT GAMBAR
 
 // AWAL BACA PAGES WEB
@@ -892,6 +897,15 @@ async function showPustakaMenu(message, categoryId) {
 async function getGeminiResponse(message, prompt, history, userId, media = null) {
     try {
         let finalPrompt = prompt;
+
+            // ▼▼▼ TAMBAHKAN SATU BARIS INI ▼▼▼
+    const validHistory = history.filter(item => item.role === 'user' || item.role === 'model');
+    // ▲▲▲ AKHIR DARI BARIS BARU ▲▲▲
+
+        const chat = model.startChat({
+      history: validHistory, // Gunakan riwayat yang sudah bersih
+      tools: tools,
+    });
 
         // === Tambahan: sisipkan memori dari Sanity ===
         let memoryText = "";
