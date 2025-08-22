@@ -48,7 +48,7 @@ const drive = google.drive({ version: 'v3', auth });
 
 // --- INISIALISASI KLIEN GEMINI AI ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+// const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });======
 
 
 // --- DEFINISI ALAT-ALAT UNTUK AI ---
