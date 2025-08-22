@@ -1955,10 +1955,12 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
     // JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
     // ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
-    if (!chat.isGroup) {
-      const responseText = await getGeminiResponse(userMessage, userHistory[message.from] || [])
-      message.reply(responseText)
-    }
+if (!chat.isGroup) {
+    // Pastikan variabel 'userId' sudah ada. Biasanya didefinisikan di atas.
+    const history = userHistory[userId] || [];
+    const responseText = await getGeminiResponse(userMessage, history, userId); // userId ditambahkan di sini
+    message.reply(responseText);
+}
     // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
   } catch (error) {
     console.error('Terjadi error fatal di event message:', error)
