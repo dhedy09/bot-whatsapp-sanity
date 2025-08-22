@@ -1084,6 +1084,12 @@ client.on('message', async (message) => {
   const doaRegex = /doa (.*)/i;
   const doaMatch = userMessageLower.match(doaRegex);
 
+    if (isPerintahBot(userMessageLower)) {
+    return message.reply(
+      '⚠️ Anda masih dalam sesi AI.\n\nKetik *selesai* dulu untuk keluar dari AI Mode agar bisa memakai perintah bot.'
+    )
+  }
+
     if (userLastState && userLastState.type === 'ai_mode') {
       const exitCommands = ['selesai', 'stop', 'exit', 'keluar']
       if (exitCommands.includes(userMessageLower)) {
@@ -1236,12 +1242,6 @@ try {
 }
 return;
     }
-  }
-
-  if (isPerintahBot(userMessageLower)) {
-    return message.reply(
-      '⚠️ Anda masih dalam sesi AI.\n\nKetik *selesai* dulu untuk keluar dari AI Mode agar bisa memakai perintah bot.'
-    )
   }
         
     // BLOK 2: MENANGANI PERINTAH TEKS
