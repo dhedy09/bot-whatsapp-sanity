@@ -23,6 +23,8 @@ const app = express();
 const path = require('path');
 const cheerio = require('cheerio');
 const apiKey = process.env.GEMINI_API_KEY;
+const cron = require('node-cron');
+const chrono = require('chrono-node');
 
 
 // --- INISIALISASI KLIEN GOOGLE (DRIVE, SEARCH, DLL) ---
@@ -46,12 +48,23 @@ const drive = google.drive({ version: 'v3', auth });
 
 // --- INISIALISASI KLIEN GEMINI AI ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+// const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });======
 
 
 // --- DEFINISI ALAT-ALAT UNTUK AI ---
 const tools = [{
     functionDeclarations: [
+        {
+            name: "buatPengingat",
+            description: "Membuat pengingat untuk pengguna. Teks input harus berisi pesan DAN waktu (contoh: 'ingatkan saya untuk rapat besok jam 10 pagi').",
+            parameters: {
+                type: "OBJECT",
+                properties: {
+                    teksPengingat: { type: "STRING", description: "Teks lengkap dari permintaan pengguna, cth: 'ingatkan saya untuk menelepon ibu dalam 30 menit'." }
+                },
+                required: ["teksPengingat"]
+            }
+        },
         {
             name: "googleSearch",
             description: "Langkah pertama untuk menjawab pertanyaan tentang topik umum, fakta, orang, tempat, atau peristiwa. Selalu gunakan alat ini terlebih dahulu untuk menemukan URL yang relevan.",
@@ -106,6 +119,34 @@ app.get('/', (req, res) => {
         res.send('<h1 style="font-family: Arial, sans-serif; text-align:center; padding-top: 40px;">Bot WhatsApp is alive!</h1><p style="font-family: Arial, sans-serif; text-align:center;">Sudah terhubung dan siap menerima pesan.</p>');
     }
 });
+
+// ▼▼▼ TAMBAHKAN BLOK INI SEBELUM app.listen ▼▼▼
+// --- PENJADWAL PENGINGAT (CRON JOB) ---
+// Berjalan setiap menit untuk memeriksa pengingat yang jatuh tempo
+cron.schedule('* * * * *', async () => {
+  console.log('[Cron] Menjalankan pemeriksa pengingat...');
+  try {
+    const waktuSekarang = new Date().toISOString();
+    const query = `*[_type == "pengingat" && waktuJatuhTempo <= $waktuSekarang && sudahDikirim == false]`;
+    const pengingatJatuhTempo = await clientSanity.fetch(query, { waktuSekarang });
+
+    if (pengingatJatuhTempo.length > 0) {
+      console.log(`[Cron] Ditemukan ${pengingatJatuhTempo.length} pengingat yang jatuh tempo.`);
+      for (const p of pengingatJatuhTempo) {
+        // Kirim pesan pengingat ke pengguna
+        await client.sendMessage(p.userId, `🔔 *PENGINGAT:*\n\n${p.pesan}`);
+
+        // Tandai sebagai sudah terkirim di Sanity
+        await clientSanity.patch(p._id).set({ sudahDikirim: true }).commit();
+        console.log(`[Cron] Pengingat untuk ${p.userId} telah dikirim.`);
+      }
+    }
+  } catch (error) {
+    console.error('[Cron] Gagal memeriksa pengingat:', error);
+  }
+});
+// --- AKHIR DARI PENJADWAL ---
+// ▲▲▲ AKHIR DARI BLOK BARU ▲▲▲
 
 app.listen(port, () => console.log(`Server web berjalan di port ${port}`));
 
@@ -169,12 +210,66 @@ function isPerintahBot(msg) {
 }
 // AKHIR PERINTAH BOT
 
+// --- INSTRUKSI UTAMA UNTUK AI ---
+const instruction = `
+PERINTAH UTAMA: Tugasmu adalah menjadi asisten pribadi serbaguna yang cerdas dan personal.
+
+ATURAN MEMORI: Di awal setiap percakapan, kamu WAJIB selalu menggunakan alat 'bacaMemori' untuk memeriksa apakah ada catatan tentang pengguna. Gunakan informasi dari memori untuk membuat jawabanmu lebih personal. Jika pengguna meminta untuk 'mengingat sesuatu', gunakan alat 'simpanMemori'. Jika pengguna meminta untuk diingatkan tentang sesuatu di masa depan, gunakan alat 'buatPengingat'.
+
+ATURAN GAMBAR: Jika input berisi GAMBAR, fokus utamamu adalah menganalisis gambar itu. Gunakan teks dari pengguna sebagai perintah utama tentang apa yang harus dilakukan dengan gambar tersebut. Jika perintah itu butuh riset (seperti mencari resep), kamu diizinkan menggunakan 'googleSearch' lalu 'readWebPage' untuk mencari informasi yang relevan. Jika pengguna hanya mengirim gambar tanpa teks, tugasmu adalah mendeskripsikannya secara detail. Jika ada gambar + teks, SELALU prioritaskan teks user sebagai instruksi utama, gunakan gambar hanya sebagai konteks tambahan.
+
+ATURAN PENELITIAN: Gunakan alat yang sesuai ('getLatestNews', 'getGempa', 'getCurrentWeather', 'googleSearch','readWebPage','calculate'') jika pertanyaan pengguna membutuhkan data eksternal.
+`;
+
+// --- INISIALISASI MODEL DENGAN INSTRUKSI SISTEM ---
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash-latest",
+  systemInstruction: instruction, // Instruksi sekarang menjadi bagian dari model
+});
+// --- AKHIR INISIALISASI MODEL ---
+
 // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
 
 // =================================================================
 // BAGIAN 3: FUNGSI-FUNGSI PEMBANTU (HELPER FUNCTIONS)
 // =================================================================
 // ▼▼▼ TAMBAHKAN FUNGSI BARU INI ▼▼▼
+
+// AWAL FUNGSI PENGINGAT
+async function buatPengingat(userId, teksPengingat) {
+  console.log(`[Tool] Mencoba membuat pengingat untuk ${userId}: "${teksPengingat}"`);
+  try {
+    const results = chrono.parse(teksPengingat, new Date(), { forwardDate: true });
+    if (results.length === 0) {
+      return { status: "Gagal, waktu tidak terdeteksi. Minta pengguna untuk lebih spesifik." };
+    }
+
+    const waktuJatuhTempo = results[0].start.date();
+    const pesan = teksPengingat.replace(results[0].text, '').trim(); // Hapus bagian waktu dari pesan
+
+    if (!pesan) {
+        return { status: "Gagal, pesan pengingat kosong. Minta pengguna untuk menyebutkan apa yang harus diingat." };
+    }
+
+    const pengingatBaru = {
+      _type: 'pengingat',
+      userId: userId,
+      pesan: pesan,
+      waktuJatuhTempo: waktuJatuhTempo.toISOString(),
+      sudahDikirim: false
+    };
+
+    await clientSanity.create(pengingatBaru);
+    const waktuFormatted = waktuJatuhTempo.toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' });
+
+    return { status: `Berhasil! Pengingat untuk "${pesan}" telah diatur pada ${waktuFormatted}.` };
+
+  } catch (error) {
+    console.error("Error saat membuat pengingat:", error);
+    return { status: "Gagal membuat pengingat karena kesalahan teknis." };
+  }
+}
+// AKHIR FUNGSI PENGINGAT
 
 // AWAL BACA PAGES WEB
 
@@ -340,103 +435,7 @@ async function getGempa() {
 
 // ▲▲▲ AKHIR DARI FUNGSI BARU gempa▲▲▲
 
-// Tambahkan ini bersama fungsi lainnya
-
-
-
-//AWAL FUNGSI GET BERITA
-/**
- * Mengambil berita terkini dari NewsAPI menggunakan endpoint yang fleksibel.
- * @param {string} query Kata kunci pencarian berita.
- * @returns {Promise<object>} Objek yang selalu berisi properti 'articles' (bisa berupa array kosong).
- */
-
-// ▲▲▲ AKHIR DARI FUNGSI GET BERITA ▲▲▲
-
-// AWAL ▼▼▼ TAMBAHKAN FUNGSI PERSE INDONESIA ▼▼▼
-// =================================================================
-// BLOK FUNGSI: PARSER WAKTU INDONESIA
-// =================================================================
-function parseWaktuIndonesia(teks) {
-    const sekarang = new Date(); // Cukup ambil waktu saat ini.
-    teks = teks.toLowerCase();
-
-    // Pola untuk "dalam X menit/jam"
-    let match = teks.match(/dalam (\d+) (menit|jam)/);
-    if (match) {
-        const jumlah = parseInt(match[1]);
-        const unit = match[2];
-        if (unit === 'menit') {
-            sekarang.setMinutes(sekarang.getMinutes() + jumlah);
-        } else if (unit === 'jam') {
-            sekarang.setHours(sekarang.getHours() + jumlah);
-        }
-        return sekarang;
-    }
-
-    // Pola untuk "besok jam X"
-    match = teks.match(/besok (?:jam|pukul) (\d+)/);
-    if (match) {
-        const jam = parseInt(match[1]);
-        const besok = new Date(); // Ambil tanggal hari ini
-        besok.setDate(besok.getDate() + 1); // Maju ke besok
-        
-        // Atur jam berdasarkan zona waktu Asia/Makassar
-        const targetWaktuString = `${besok.getFullYear()}-${besok.getMonth()+1}-${besok.getDate()} ${jam}:00:00`;
-        // Trik untuk memastikan tanggal dibuat dalam zona waktu yang benar
-        return new Date(new Date(targetWaktuString).toLocaleString("en-US", {timeZone: "Asia/Makassar"}));
-    }
-
-    // Jika tidak ada pola yang cocok
-    return null;
-}
-
-// ▲▲▲ AKHIR DARI FUNGSI PERSEINDONESIA ▲▲▲
-
-    // ▼▼▼ TAMBAHKAN FUNGSI ALARM ▼▼▼
-    /**
-     * Memeriksa Sanity untuk pengingat yang sudah jatuh tempo,
-     * mengirimkannya, lalu memperbarui statusnya.
-     */
-    async function checkAndSendReminders() {
-        try {
-            // 1. Cari pengingat yang statusnya 'menunggu' dan waktunya sudah lewat
-            const now = new Date().toISOString();
-            const query = `*[_type == "pengingat" && status == "menunggu" && waktuKirim <= $now]`;
-            const dueReminders = await clientSanity.fetch(query, { now });
-
-            if (dueReminders.length === 0) {
-                // Jika tidak ada pengingat, tidak melakukan apa-apa
-                return;
-            }
-
-            console.log(`[Pengingat] Ditemukan ${dueReminders.length} pengingat yang harus dikirim.`);
-
-            // 2. Kirim setiap pengingat satu per satu
-            for (const reminder of dueReminders) {
-                try {
-                    const messageBody = `🔔 *PENGINGAT* 🔔\n\n${reminder.pesan}`;
-                    await client.sendMessage(reminder.targetNomorHp, messageBody);
-
-                    // 3. Jika berhasil, update statusnya menjadi 'terkirim'
-                    await clientSanity.patch(reminder._id).set({ status: 'terkirim' }).commit();
-                    console.log(`[Pengingat] Berhasil mengirim pengingat ke ${reminder.targetNama}`);
-
-                } catch (sendError) {
-                    console.error(`[Pengingat] Gagal mengirim pengingat ke ${reminder.targetNama}:`, sendError);
-                    // Jika gagal, update statusnya menjadi 'gagal'
-                    await clientSanity.patch(reminder._id).set({ status: 'gagal' }).commit();
-                }
-            }
-        } catch (fetchError) {
-            console.error("[Pengingat] Gagal mengambil data pengingat dari Sanity:", fetchError);
-        }
-    }
-
-    // ▲▲▲ AKHIR DARI ALARM▲▲▲
-
     // AWAL BROADCAST GEMPA
-            // Tambahkan setelah fungsi checkAndSendReminders()
 
         /**
          * Mengecek gempa terbaru dari BMKG dan broadcast ke semua pelanggan aktif jika ada gempa baru.
@@ -831,97 +830,80 @@ async function showPustakaMenu(message, categoryId) {
 // =================================================================
 async function getGeminiResponse(prompt, history, userId, media = null) {
   try {
-    // Inisialisasi model yang sederhana di dalam fungsi untuk stabilitas
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-
-    // --- Langkah 1: Ambil Memori Jangka Panjang dari Sanity ---
-    let memoryText = "";
-    try {
-      const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
-      const memoryDoc = await clientSanity.fetch(
-        `*[_type == "memoriPengguna" && _id == $id][0]`,
-        { id: sanitizedId }
-      );
-
-      if (memoryDoc?.daftarMemori?.length > 0) {
-        memoryText = `
-📌 CATATAN PENTING TENTANG PENGGUNA INI:
-${memoryDoc.daftarMemori.map(f => `- ${f}`).join("\n")}
-Gunakan catatan ini sebagai konteks utama dalam memberikan jawaban.
-`;
-      }
-    } catch (err) {
-      console.error("Gagal memuat memori dari Sanity:", err);
-    }
-
-    // --- Langkah 2: Siapkan Instruksi Proaktif untuk AI ---
-    const instruction = `
-    PERINTAH PROAKTIF: Peran utamamu adalah menjadi asisten yang membantu. Setelah kamu berhasil menggunakan sebuah alat (seperti 'googleSearch' atau 'getCurrentWeather') dan memberikan jawaban kepada pengguna, tugasmu BELUM selesai. Pikirkan SATU pertanyaan atau saran lanjutan yang paling relevan dan bermanfaat bagi pengguna. Tawarkan saran tersebut sebagai pertanyaan di akhir jawabanmu.
-    CONTOH: Jika pengguna bertanya 'cuaca di Jakarta' dan kamu menjawabnya, tawarkan: "Apakah Anda mau saya carikan juga informasi lalu lintas terkini di Jakarta?".
-    JANGAN menjalankan alat baru secara otomatis, cukup tawarkan saja sebagai pertanyaan.
-    `;
-
-    // --- Langkah 3: Mulai Sesi Chat ---
     const chat = model.startChat({
       history: history,
       tools: tools,
     });
 
-    // --- Langkah 4: Gabungkan Semua Informasi (Memori, Instruksi, Prompt) ---
-    const finalPrompt = `${memoryText}\n\n${instruction}\n\nPertanyaan Pengguna: "${prompt}"`;
-
-    const messageParts = [finalPrompt];
+    const messageParts = [prompt]; // Langsung gunakan prompt dari pengguna
     if (media && media.data) {
+      console.log(`[Media] Mengirim gambar dengan tipe: ${media.mimetype}`);
       messageParts.push({
         inlineData: { data: media.data, mimeType: media.mimetype }
       });
     }
     
-    // --- Langkah 5: Kirim ke AI dan Proses Respons ---
-    const result = await chat.sendMessage(messageParts);
-    const response = result.response;
-    const call = response.functionCalls()?.[0];
+    // Kirim pesan langsung tanpa instruksi tambahan
+    const result = await chat.sendMessage(messageParts); 
+    const call = result.response.functionCalls()?.[0];
 
     if (call) {
-      console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
-      let functionResponse;
+            console.log("▶️ AI meminta pemanggilan fungsi:", JSON.stringify(call, null, 2));
+            let functionResponse;
 
-      switch (call.name) {
-        case 'readWebPage':
-          functionResponse = await readWebPage(call.args.url);
-          break;
-        case 'googleSearch':
-          functionResponse = await googleSearch(call.args.query);
-          break;
-        case 'getCurrentWeather':
-          functionResponse = await getCurrentWeather(call.args.location);
-          break;
-        case 'getLatestNews':
-          functionResponse = await getLatestNews(call.args.query);
-          break;
-        case 'getGempa':
-          functionResponse = await getGempa();
-          break;
-        case 'calculate':
-          functionResponse = { result: evaluateMathExpression(call.args.expression) };
-          break;
-        default:
-          functionResponse = { error: `Fungsi ${call.name} tidak ada.` };
-          break;
-      }
+            switch (call.name) {
+                case 'buatPengingat':
+                    functionResponse = await buatPengingat(userId, call.args.teksPengingat);
+                    break;
+                case 'readWebPage':
+                    functionResponse = await readWebPage(call.args.url);
+                    break;
+                case 'googleSearch':
+                    functionResponse = await googleSearch(call.args.query);
+                    break;
+                case 'getCurrentWeather':
+                    functionResponse = await getCurrentWeather(call.args.location);
+                    break;
+                case 'getLatestNews':
+                    functionResponse = await getLatestNews(call.args.query);
+                    break;
+                case 'getGempa':
+                    functionResponse = await getGempa();
+                    break;
+                case 'calculate':
+                    functionResponse = { result: evaluateMathExpression(call.args.expression) };
+                    break;
+                default:
+                    functionResponse = { error: `Fungsi ${call.name} tidak ada.` };
+                    break;
+            }
 
-      const result2 = await chat.sendMessage([{ functionResponse: { name: call.name, response: functionResponse } }]);
-      return result2.response.text();
-    } else {
-      return response.text();
+            const result2 = await chat.sendMessage([
+                { functionResponse: { name: call.name, response: functionResponse } }
+            ]);
+
+            const finalResponse = result2.response;
+            if (finalResponse.candidates?.[0]?.content?.parts) {
+                return finalResponse.candidates[0].content.parts.map(part => part.text).join('');
+            } else {
+                return "Maaf, saya menerima respons yang tidak valid dari AI.";
+            }
+
+        } else {
+            const finalResponse = result.response;
+            if (finalResponse.candidates?.[0]?.content?.parts) {
+                return finalResponse.candidates[0].content.parts.map(part => part.text).join('');
+            } else {
+                return "Maaf, saya menerima respons yang tidak valid dari AI.";
+            }
+        }
+    } catch (error) {
+        console.error(`Error saat memanggil API Gemini:`, error);
+        if (error.message?.includes('response was blocked')) {
+            return "Maaf, respons saya diblokir karena kebijakan keamanan.";
+        }
+        return "Maaf, Asisten AI sedang mengalami gangguan. Coba lagi.";
     }
-  } catch (error) {
-    console.error(`Error saat memanggil API Gemini:`, error);
-    if (error.message?.includes('response was blocked')) {
-      return "Maaf, respons saya diblokir karena kebijakan keamanan.";
-    }
-    return "Maaf, Asisten AI sedang mengalami gangguan. Coba lagi nanti.";
-  }
 }
 // =================================================================
 // AKHIR BLOK RESPON GEMINI AI
@@ -1035,6 +1017,7 @@ client.on('message', async (message) => {
   try {
     const userMessage = message.body.trim()
     const userMessageLower = userMessage.toLowerCase()
+    const userId = message.from;
     const userLastState = userState[message.from] || userState[message.author] // BLOK 1: MENANGANI "MODE AI"
 
   const doaRegex = /doa (.*)/i;
@@ -1084,7 +1067,7 @@ client.on('message', async (message) => {
         return;
       }
 
-        const memoryRegex = /^(ingat(?: ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
+        const memoryRegex = /^(ingat\b( ini| saya)?|simpan ini|tolong ingat|saya ingin kamu ingat|ingat kalau|ingat bahwa):?/i;
         const lowerMsg = message.body.trim().toLowerCase();
         const match = message.body.match(memoryRegex);
 
@@ -1097,7 +1080,7 @@ if (match) {
     }
 
     try {
-        const userId = message.from;
+
         const sanitizedId = `memori-${userId.replace(/[@.]/g, '-')}`;
         const contact = await message.getContact();
         const userName = contact.pushname || userId;
@@ -1602,71 +1585,6 @@ if (!chat.isGroup && aiTriggerCommands.includes(userMessageLower)) {
 
     // ▼▼▼ TAMBAHKAN BLOK BARU INI ▼▼▼
 
-// ▼▼▼ AWAL BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▼▼▼
-if (userMessageLower.startsWith('ingatkan')) {
-  const contact = await message.getContact();
-  const authorId = contact.id._serialized;
-
-  const argsString = userMessage.substring('ingatkan'.length).trim();
-  const reminderRegex = /^(.+?)\s(.+?)\stentang\s(.+)$/i;
-  const match = argsString.match(reminderRegex);
-
-  if (!match) {
-    message.reply(
-      '❌ Format salah.\n' +
-      'Gunakan:\n`ingatkan saya dalam 5 menit tentang mandi`\n' +
-      '*Contoh:* `ingatkan saya besok jam 9 tentang rapat`'
-    );
-    return;
-  }
-
-  const [, namaTarget, waktuString, pesan] = match.map(s => s.trim());
-
-  // Selalu arahkan ke pembuat
-  const targetNomorHp = authorId;
-  const targetNama = contact.pushname || namaTarget || "Pengguna";
-
-  const waktuKirim = parseWaktuIndonesia(waktuString);
-  if (!waktuKirim) {
-    message.reply(
-      `❌ Maaf, saya tidak mengerti format waktu "${waktuString}".\n` +
-      `Gunakan format seperti "dalam 5 menit", "hari ini jam 7", atau "besok jam 10".`
-    );
-    return;
-  }
-
-  try {
-    const newPengingat = {
-      _type: 'pengingat',
-      pesan,
-      targetNomorHp,
-      targetNama,
-      waktuKirim: waktuKirim.toISOString(),
-      status: 'menunggu',
-    };
-    await clientSanity.create(newPengingat);
-
-    const waktuLokal = waktuKirim.toLocaleString('id-ID', {
-      timeZone: 'Asia/Makassar',
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    message.reply(
-      `✅ Pengingat berhasil dibuat!\n\n*Pesan:* ${pesan}\n*Waktu:* ${waktuLokal}`
-    );
-  } catch (error) {
-    console.error('Gagal membuat pengingat:', error);
-    message.reply('❌ Maaf, terjadi kesalahan di server saat membuat pengingat.');
-  }
-  return;
-}
-// ▲▲▲ AKHIR BLOK: PENGINGAT BEBAS UNTUK SEMUA USER ▲▲▲
-
 
     // AWAL BLOK  MENU BANTUAN (HELP)
     if (userMessageLower === 'help' || userMessageLower === 'bantuan') {
@@ -1990,10 +1908,12 @@ if (userMessageLower.startsWith('ingatkan')) {
 
     // JIKA TIDAK ADA PERINTAH YANG COCOK, PANGGIL FUNGSI PUSAT KENDALI AI
     // ▼▼▼ GANTI BLOK AI LAMA DENGAN INI ▼▼▼
-    if (!chat.isGroup) {
-      const responseText = await getGeminiResponse(userMessage, userHistory[message.from] || [])
-      message.reply(responseText)
-    }
+if (!chat.isGroup) {
+    // Pastikan variabel 'userId' sudah ada. Biasanya didefinisikan di atas.
+    const history = userHistory[userId] || [];
+    const responseText = await getGeminiResponse(userMessage, history, userId); // userId ditambahkan di sini
+    message.reply(responseText);
+}
     // ▲▲▲ AKHIR DARI BLOK PENGGANTI ▲▲▲
   } catch (error) {
     console.error('Terjadi error fatal di event message:', error)
