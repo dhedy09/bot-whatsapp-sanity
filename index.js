@@ -9,7 +9,7 @@
 // BAGIAN 1: INISIALISASI & KONFIGURASI AWAL
 // =================================================================
 
-// require('dotenv').config();==
+require('dotenv').config();
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const express = require('express');
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js'); // MessageMedia ditambahkan
